@@ -111,7 +111,7 @@ const startSock = async() => {
 					}
 	
 					await sock.sendMessage('553185702237@s.whatsapp.net', buttonMessage)
-					await sock.sendMessage('556392484773@s.whatsapp.net', buttonMessage)
+					// await sock.sendMessage('556392484773@s.whatsapp.net', buttonMessage)
 				}
 				
 				if(connection === 'open' && sendWAMExample) {
