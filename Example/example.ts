@@ -31,7 +31,7 @@ const startSock = async() => {
 	console.log(`using WA v${version.join('.')}, isLatest: ${isLatest}`)
 
 	const sock = makeWASocket({
-		version,
+		version: [2, 3000, 1023680336],
 		logger,
 		printQRInTerminal: !usePairingCode,
 		auth: {
@@ -111,7 +111,7 @@ const startSock = async() => {
 					}
 	
 					await sock.sendMessage('553185702237@s.whatsapp.net', buttonMessage)
-					await sock.sendMessage('556392484773@s.whatsapp.net', buttonMessage)
+					// await sock.sendMessage('556392484773@s.whatsapp.net', buttonMessage)
 				}
 				
 				if(connection === 'open' && sendWAMExample) {
