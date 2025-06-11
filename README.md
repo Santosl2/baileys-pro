@@ -50,6 +50,36 @@ Here are some of the features and improvements I have added:
 
 More features and improvements will be added in the future.
 
+## Update
+
+1.  Adicione o repositório remoto extra:
+
+```bash
+git remote add advanced <URL_DO_REPO_AVANCADO>
+```
+
+2. Busque os dados dele:
+
+```bash
+git fetch advanced
+```
+
+3. Faça merge da branch desejada:
+
+```bash
+git merge advanced/<branch> --allow-unrelated-histories
+```
+
+> Use `--allow-unrelated-histories` se os repositórios não compartilham histórico.
+
+4. Resolva conflitos, se houver, e finalize com commit.
+
+5. (Opcional) Remova o remoto se não for mais necessário:
+
+```bash
+git remote remove advanced
+```
+
 ## Feature Examples
 
 ### NEWSLETTER
