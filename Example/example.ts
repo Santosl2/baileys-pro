@@ -32,6 +32,7 @@ const startSock = async() => {
 
 	const sock = makeWASocket({
 		version: [2, 3000, 1023680336],
+		// logger: P({level: 'silent'}),
 		logger,
 		printQRInTerminal: !usePairingCode,
 		auth: {
@@ -110,7 +111,7 @@ const startSock = async() => {
 							viewOnce: true
 					}
 	
-					await sock.sendMessage('553185702237@s.whatsapp.net', buttonMessage)
+					// await sock.sendMessage('553185702237@s.whatsapp.net', buttonMessage)
 					// await sock.sendMessage('556392484773@s.whatsapp.net', buttonMessage)
 				}
 				
@@ -136,7 +137,6 @@ const startSock = async() => {
 					console.log(result)
 				}
 
-				console.log('connection update', update)
 			}
 
 			// credentials updated -- save them
