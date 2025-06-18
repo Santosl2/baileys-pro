@@ -563,70 +563,70 @@ export const generateWAMessageContent = async (
 		}
 	}
 
-	// if ('sections' in message && !!message.sections) {
-	// 	const listMessage: proto.Message.IListMessage = {
-	// 		sections: message.sections,
-	// 		buttonText: message.buttonText,
-	// 		title: message.title,
-	// 		footerText: message.footer,
-	// 		description: message.text,
-	// 		listType: message.hasOwnProperty('listType') ? message.listType : proto.Message.ListMessage.ListType.PRODUCT_LIST
-	// 	}
+	if ('sections' in message && !!message.sections) {
+		const listMessage: proto.Message.IListMessage = {
+			sections: message.sections,
+			buttonText: message.buttonText,
+			title: message.title,
+			footerText: message.footer,
+			description: message.text,
+			listType: message.hasOwnProperty('listType') ? message.listType : proto.Message.ListMessage.ListType.PRODUCT_LIST
+		}
 
-	// 	m = { listMessage }
-	// }
+		m = { listMessage }
+	}
 
-	// if ('interactiveButtons' in message && !!message.interactiveButtons) {
-	// 	const interactiveMessage: proto.Message.IInteractiveMessage = {
-	// 		nativeFlowMessage: WAProto.Message.InteractiveMessage.NativeFlowMessage.fromObject({
-	// 			buttons: message.interactiveButtons
-	// 		})
-	// 	}
+	if ('interactiveButtons' in message && !!message.interactiveButtons) {
+		const interactiveMessage: proto.Message.IInteractiveMessage = {
+			nativeFlowMessage: WAProto.Message.InteractiveMessage.NativeFlowMessage.fromObject({
+				buttons: message.interactiveButtons
+			})
+		}
 
-	// 	if ('text' in message) {
-	// 		interactiveMessage.body = {
-	// 			text: message.text
-	// 		}
-	// 	} else if ('caption' in message) {
-	// 		interactiveMessage.body = {
-	// 			text: message.caption
-	// 		}
+		if ('text' in message) {
+			interactiveMessage.body = {
+				text: message.text
+			}
+		} else if ('caption' in message) {
+			interactiveMessage.body = {
+				text: message.caption
+			}
 
-	// 		interactiveMessage.header = {
-	// 			title: message.title,
-	// 			subtitle: message.subtitle,
-	// 			hasMediaAttachment: message?.media ?? false
-	// 		}
+			interactiveMessage.header = {
+				title: message.title,
+				subtitle: message.subtitle,
+				hasMediaAttachment: message?.media ?? false
+			}
 
-	// 		Object.assign(interactiveMessage.header, m)
-	// 	}
+			Object.assign(interactiveMessage.header, m)
+		}
 
-	// 	if ('footer' in message && !!message.footer) {
-	// 		interactiveMessage.footer = {
-	// 			text: message.footer
-	// 		}
-	// 	}
+		if ('footer' in message && !!message.footer) {
+			interactiveMessage.footer = {
+				text: message.footer
+			}
+		}
 
-	// 	if ('title' in message && !!message.title) {
-	// 		interactiveMessage.header = {
-	// 			title: message.title,
-	// 			subtitle: message.subtitle,
-	// 			hasMediaAttachment: message?.media ?? false
-	// 		}
+		if ('title' in message && !!message.title) {
+			interactiveMessage.header = {
+				title: message.title,
+				subtitle: message.subtitle,
+				hasMediaAttachment: message?.media ?? false
+			}
 
-	// 		Object.assign(interactiveMessage.header, m)
-	// 	}
+			Object.assign(interactiveMessage.header, m)
+		}
 
-	// 	if ('contextInfo' in message && !!message.contextInfo) {
-	// 		interactiveMessage.contextInfo = message.contextInfo
-	// 	}
+		if ('contextInfo' in message && !!message.contextInfo) {
+			interactiveMessage.contextInfo = message.contextInfo
+		}
 
-	// 	if ('mentions' in message && !!message.mentions) {
-	// 		interactiveMessage.contextInfo = { mentionedJid: message.mentions }
-	// 	}
+		if ('mentions' in message && !!message.mentions) {
+			interactiveMessage.contextInfo = { mentionedJid: message.mentions }
+		}
 
-	// 	m = { interactiveMessage }
-	// }
+		m = { interactiveMessage }
+	}
 
 	if ('viewOnce' in message && !!message.viewOnce) {
 		m = { viewOnceMessage: { message: m } }

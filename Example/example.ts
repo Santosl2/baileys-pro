@@ -23,6 +23,36 @@ const onDemandMap = new Map<string, string>()
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
 const question = (text: string) => new Promise<string>((resolve) => rl.question(text, resolve))
 
+function patchMessageBeforeSending(msg: proto.IMessage, jid: string[]): Promise<proto.IMessage> | proto.IMessage {
+	//console.log({ jid, msg: JSON.stringify(msg, null, 2) });
+	if (msg?.deviceSentMessage?.message?.listMessage) {
+			//msg.deviceSentMessage.message.listMessage.listType = proto.Message.ListMessage.ListType.SINGLE_SELECT;
+			console.log("ListType in deviceSentMessage is patched:", msg.deviceSentMessage.message.listMessage.listType);
+	};
+	
+	if (msg?.listMessage) {
+			//msg.listMessage.listType = proto.Message.ListMessage.ListType.SINGLE_SELECT;
+			console.log("ListType in listMessage is patched:", msg.listMessage.listType);
+	};
+	
+	const requiresPatch = !!(msg.buttonsMessage || msg.templateMessage || msg.listMessage);
+	if (requiresPatch) {
+			msg = {
+					viewOnceMessage: {
+							message: {
+									messageContextInfo: {
+											deviceListMetadata: {},
+											deviceListMetadataVersion: 2
+									},
+									...msg
+							}
+					}
+			};
+	};
+	
+	console.log(JSON.stringify(msg, null, 2));
+	return msg;
+};
 // start a connection
 const startSock = async() => {
 	const { state, saveCreds } = await useMultiFileAuthState('baileys_auth_info')
@@ -31,9 +61,12 @@ const startSock = async() => {
 	console.log(`using WA v${version.join('.')}, isLatest: ${isLatest}`)
 
 	const sock = makeWASocket({
-		version: [2, 3000, 1023680336],
+		// version,
+		version: [2, 3000, 1023979355],
+
 		// logger: P({level: 'silent'}),
 		logger,
+    // logger: P({ level: 'debug' }),
 		printQRInTerminal: !usePairingCode,
 		auth: {
 			creds: state.creds,
@@ -42,11 +75,12 @@ const startSock = async() => {
 		},
 		msgRetryCounterCache,
 		generateHighQualityLinkPreview: true,
+		patchMessageBeforeSending,
 		// ignore all broadcast messages -- to receive the same
 		// comment the line below out
 		// shouldIgnoreJid: jid => isJidBroadcast(jid),
 		// implement to handle retries & poll updates
-		getMessage,
+		// getMessage,
 	})
 
 	// Pairing code for Web clients
@@ -74,11 +108,14 @@ const startSock = async() => {
 	sock.ev.process(
 		// events is a map for event name => event data
 		async(events) => {
+			events['']
 			// something about the connection changed
 			// maybe it closed, or we received all offline message or connection opened
 			if(events['connection.update']) {
 				const update = events['connection.update']
-				const { connection, lastDisconnect } = update
+				const { connection, lastDisconnect, qr } = update
+
+				console.log('connection update', qr)
 				if(connection === 'close') {
 					// reconnect if not logged out
 					if((lastDisconnect?.error as Boom)?.output?.statusCode !== DisconnectReason.loggedOut) {
@@ -110,9 +147,49 @@ const startSock = async() => {
 							headerType: 1,
 							viewOnce: true
 					}
+
+					const interactiveButtons = [
+	{
+		name: 'quick_reply',
+		buttonParamsJson: JSON.stringify({
+			display_text: 'Quick Reply',
+			id: 'ID'
+		})
+	},
+	{
+		name: 'cta_url',
+		buttonParamsJson: JSON.stringify({
+			display_text: 'Tap Here!',
+			url: 'https://www.example.com/'
+		})
+	},
+	{
+		name: 'cta_copy',
+		buttonParamsJson: JSON.stringify({
+			display_text: 'Copy Code',
+			id: '12345',
+			copy_code: '12345'
+		})
+	}
+]
+
+await sock.sendMessage('553185702237@s.whatsapp.net', {
+	text: 'Hello World!',
+	title: 'this is the title',
+		buttonText: 'Click Me',
+	footer: 'this is the footer',
+	sections: [{
+		title: 'Section Title',
+		rows: [{
+			title: 'Row Title',
+			description: 'Row Description',
+			rowId: 'row_id_1',
+		}]
+	}]
+}	);
+
 	
-					// await sock.sendMessage('553185702237@s.whatsapp.net', buttonMessage)
-					// await sock.sendMessage('556392484773@s.whatsapp.net', buttonMessage)
+					await sock.sendMessage('553185702237@s.whatsapp.net', buttonMessage)
 				}
 				
 				if(connection === 'open' && sendWAMExample) {

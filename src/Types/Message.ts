@@ -72,6 +72,36 @@ type Buttonable = {
 	buttons?: proto.Message.ButtonsMessage.IButton[]
 }
 
+type Interactiveable = {
+	/** add buttons to the message  */
+	interactiveButtons?: proto.Message.InteractiveMessage.NativeFlowMessage.NativeFlowButton[]
+	title?: string
+	subtitle?: string
+	media?: boolean
+}
+
+type Shopable = {
+	shop?: proto.Message.InteractiveMessage.ShopMessage.Surface
+	id?: string
+	title?: string
+	subtitle?: string
+	media?: boolean
+}
+
+type Listable = {
+	/** Sections of the List */
+	sections?: proto.Message.ListMessage.ISection[]
+
+	/** Title of a List Message only */
+	title?: string
+
+	/** Text of the button on the list (required) */
+	buttonText?: string
+
+	/** ListType of a List Message only */
+	listType?: proto.Message.ListMessage.ListType
+}
+
 type Templatable = {
 	/** add buttons to the message (conflicts with normal buttons)*/
 	templateButtons?: proto.IHydratedTemplateButton[]
@@ -122,6 +152,8 @@ export type AnyMediaMessageContent = (
 			Contextable &
 			Buttonable &
 			Templatable &
+			Interactiveable &
+			Shopable &
 			WithDimensions)
 	| ({
 			video: WAMediaUpload
@@ -134,6 +166,8 @@ export type AnyMediaMessageContent = (
 			Contextable &
 			Buttonable &
 			Templatable &
+			Interactiveable &
+			Shopable &
 			WithDimensions)
 	| {
 			audio: WAMediaUpload
@@ -179,7 +213,10 @@ export type AnyRegularMessageContent = (
 	  } & Mentionable &
 			Buttonable &
 			Templatable &
+			Interactiveable &
+			Shopable &
 			Contextable &
+			Listable &
 			Editable)
 	| AnyMediaMessageContent
 	| ({
@@ -188,6 +225,8 @@ export type AnyRegularMessageContent = (
 			Contextable &
 			Buttonable &
 			Templatable &
+			Interactiveable &
+			Shopable &
 			Editable)
 	| {
 			contacts: {
