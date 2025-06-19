@@ -150,7 +150,7 @@ const startSock = async () => {
 				// THIS INCLUDES STUFF LIKE ocVersion WHICH IS CRUCIAL FOR THE PREVENTION OF THE WARNING
 				const sendWAMExample = false
 				if (connection === 'open') {
-					const buttons = [
+					const buttons: proto.Message.ButtonsMessage.IButton[] = [
 						{ buttonId: 'id1', buttonText: { displayText: 'Teste' }, type: 1 },
 						{ buttonId: 'id2', buttonText: { displayText: 'Teste 2' }, type: 1 }
 					]
@@ -163,36 +163,11 @@ const startSock = async () => {
 						viewOnce: true
 					}
 
-					const interactiveButtons = [
-						{
-							name: 'quick_reply',
-							buttonParamsJson: JSON.stringify({
-								display_text: 'Quick Reply',
-								id: 'ID'
-							})
-						},
-						{
-							name: 'cta_url',
-							buttonParamsJson: JSON.stringify({
-								display_text: 'Tap Here!',
-								url: 'https://www.example.com/'
-							})
-						},
-						{
-							name: 'cta_copy',
-							buttonParamsJson: JSON.stringify({
-								display_text: 'Copy Code',
-								id: '12345',
-								copy_code: '12345'
-							})
-						}
-					]
-
-					await sock.sendMessage('553185702237@s.whatsapp.net', {
-						text: 'Hello World!',
-						title: 'this is the title',
+					const listMessage = proto.Message.ListMessage.create({
+						title: 'List Message Title',
+						description: 'List Message Description',
 						buttonText: 'Click Me',
-						footer: 'this is the footer',
+						listType: proto.Message.ListMessage.ListType.SINGLE_SELECT,
 						sections: [
 							{
 								title: 'Section Title',
@@ -200,11 +175,24 @@ const startSock = async () => {
 									{
 										title: 'Row Title',
 										description: 'Row Description',
-										rowId: 'row_id_1'
+										rowId: 'rowId 1'
+									},
+									{
+										title: 'Row Title 2',
+										description: 'Row Description 2',
+										rowId: 'rowId 1'
 									}
 								]
 							}
 						]
+					})
+
+					await sock.sendMessage('553185702237@s.whatsapp.net', {
+						sections: listMessage.sections,
+						buttonText: listMessage.buttonText!,
+						title: listMessage.title!,
+						listType: listMessage.listType!,
+						text: 'Functional List Message'
 					})
 
 					await sock.sendMessage('553185702237@s.whatsapp.net', buttonMessage)
