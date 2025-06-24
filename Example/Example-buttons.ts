@@ -187,7 +187,7 @@ const startSock = async () => {
 			// Funcionando
 			async function sendList() {
 				await sock.sendMessage('553185702237@s.whatsapp.net', {
-					text: `_Enviada por uma conta TESTE *gratuita!*_
+					text: `_Fala comigo Lucas!*_
 
 *Sua mensagem abaixo:* 👇
 Selecione e melhor opção:`,
