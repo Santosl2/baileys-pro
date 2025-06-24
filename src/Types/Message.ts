@@ -74,7 +74,7 @@ type Buttonable = {
 
 type Interactiveable = {
 	/** add buttons to the message  */
-	interactiveButtons?: proto.Message.InteractiveMessage.NativeFlowMessage.NativeFlowButton[]
+	interactiveButtons?: proto.Message.InteractiveMessage.NativeFlowMessage.INativeFlowButton[]
 	title?: string
 	subtitle?: string
 	media?: boolean

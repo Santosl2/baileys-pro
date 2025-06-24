@@ -151,20 +151,6 @@ const startSock = async () => {
 				// THIS INCLUDES STUFF LIKE ocVersion WHICH IS CRUCIAL FOR THE PREVENTION OF THE WARNING
 				const sendWAMExample = false
 				if (connection === 'open') {
-					const buttons: proto.Message.ButtonsMessage.IButton[] = [
-						{ buttonId: 'id1', buttonText: { displayText: 'Teste' }, type: 1 },
-						{ buttonId: 'id2', buttonText: { displayText: 'Teste 2' }, type: 1 }
-					]
-
-					const buttonMessage = {
-						text: 'A prova que funciona',
-						footer: 'Teste mostrando o funcionamento de envio de mensagens',
-						buttons,
-						headerType: 1,
-						viewOnce: true
-					}
-
-					// await sock.sendMessage('553185702237@s.whatsapp.net', buttonMessage)
 				}
 
 				if (connection === 'open' && sendWAMExample) {
@@ -189,11 +175,22 @@ const startSock = async () => {
 			}
 
 			sock.ws.on('CB:message', data => {
-        // Usado para debugar novas features
+				// Usado para debugar novas features
 				console.log('CB:message', JSON.stringify(data, null, 2))
 			})
 
 			async function sendOtp() {
+				await sock.sendMessage('553185702237@s.whatsapp.net', {
+					text: 'Seu código de verificação é: 123',
+					interactiveButtons: [
+						{
+							name: 'cta_copy',
+							buttonParamsJson: '{"fix":true,"display_text":"Copiar código","copy_code":"123"}'
+						}
+					]
+				})
+				
+        // Jeito na marra
 				await sock.relayMessage(
 					'553185702237@s.whatsapp.net',
 					{
@@ -335,63 +332,79 @@ Selecione e melhor opção:`,
 			}
 
 			async function sendWithButton() {
-				await sock.relayMessage(
-					'553185702237@s.whatsapp.net',
-					{
-						interactiveMessage: {
-							header: {
-								title: 'se quiser vincular um título'
-							},
-							body: {
-								text: `
-  
-  *Sua mensagem abaixo:* 👇
-  mensagem`
-							},
-							footer: {
-								text: 'se quiser vincular um rodapé'
-							},
-							nativeFlowMessage: {
-								buttons: [
-									{
-										name: 'cta_call',
-										buttonParamsJson: '{"fix":true,"display_text":"Fale conosco","phone_number":"+5531985702237"}'
-									},
-									{
-										name: 'cta_url',
-										buttonParamsJson:
-											'{"fix":true,"display_text":"Visite nosso site","url":"https://mfilype.dev","merchant_url":"https://mfilype.dev"}'
-									}
-								]
-							}
+        await sock.sendMessage('553185702237@s.whatsapp.net', {
+					text: 'f',
+          footer: 'se quiser vincular um rodapé',
+          title: 'se quiser vincular um título',
+					interactiveButtons: [
+						{
+							name: 'cta_call',
+							buttonParamsJson: '{"fix":true,"display_text":"Fale conosco","phone_number":"+5531985702237"}'
+						},
+						{
+							name: 'cta_url',
+							buttonParamsJson:
+								'{"fix":true,"display_text":"Visite nosso site","url":"https://mfilype.dev","merchant_url":"https://mfilype.dev"}'
 						}
-					},
-					{
-						additionalNodes: [
-							{
-								tag: 'biz',
-								attrs: {},
-								content: [
-									{
-										tag: 'interactive',
-										attrs: {
-											type: 'native_flow'
-										},
-										content: [
-											{
-												tag: 'native_flow',
-												attrs: {
-													v: '2',
-													name: 'mixed'
-												}
-											}
-										]
-									}
-								]
-							}
-						]
-					}
-				)
+					]
+				})
+	// 			await sock.relayMessage(
+	// 				'553185702237@s.whatsapp.net',
+	// 				{
+	// 					interactiveMessage: {
+	// 						header: {
+	// 							title: 'se quiser vincular um título'
+	// 						},
+	// 						body: {
+	// 							text: `
+  
+  // *Sua mensagem abaixo:* 👇
+  // mensagem`
+	// 						},
+	// 						footer: {
+	// 							text: 'se quiser vincular um rodapé'
+	// 						},
+	// 						nativeFlowMessage: {
+	// 							buttons: [
+	// 								{
+	// 									name: 'cta_call',
+	// 									buttonParamsJson: '{"fix":true,"display_text":"Fale conosco","phone_number":"+5531985702237"}'
+	// 								},
+	// 								{
+	// 									name: 'cta_url',
+	// 									buttonParamsJson:
+	// 										'{"fix":true,"display_text":"Visite nosso site","url":"https://mfilype.dev","merchant_url":"https://mfilype.dev"}'
+	// 								}
+	// 							]
+	// 						}
+	// 					}
+	// 				},
+	// 				{
+	// 					additionalNodes: [
+	// 						{
+	// 							tag: 'biz',
+	// 							attrs: {},
+	// 							content: [
+	// 								{
+	// 									tag: 'interactive',
+	// 									attrs: {
+	// 										type: 'native_flow'
+	// 									},
+	// 									content: [
+	// 										{
+	// 											tag: 'native_flow',
+	// 											attrs: {
+	// 												v: '2',
+	// 												name: 'mixed'
+	// 											}
+	// 										}
+	// 									]
+	// 								}
+	// 							]
+	// 						}
+	// 					]
+	// 				}
+	// 			)
 			}
 
 			// credentials updated -- save them
@@ -420,12 +433,24 @@ Selecione e melhor opção:`,
 						if (msg.key.fromMe) {
 							console.log('is own message')
 							if (msg.message?.conversation?.startsWith('!')) {
-								// Send OTP
+								const buttons: proto.Message.ButtonsMessage.IButton[] = [
+									{ buttonId: 'id1', buttonText: { displayText: 'Teste' }, type: 1 },
+									{ buttonId: 'id2', buttonText: { displayText: 'Teste 2' }, type: 1 }
+								]
+
+								const buttonMessage = {
+									text: 'A prova que funciona',
+									footer: 'Teste mostrando o funcionamento de envio de mensagens',
+									buttons,
+									headerType: 1,
+									viewOnce: true
+								}
+
+								await sock.sendMessage('553185702237@s.whatsapp.net', buttonMessage)
 								await Promise.all([
-									sendOtp(),
-									sendWithButton(),
-                  sendPix(),
-                  sendList()
+									sendOtp()
+									// sendWithButton(),
+									// sendPix()
 									// sendWithButton()
 								])
 							}

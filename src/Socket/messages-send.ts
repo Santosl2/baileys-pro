@@ -902,6 +902,30 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 					)
 				}
 
+				if ('interactiveButtons' in content && content.interactiveButtons) {
+					additionalNodes.push({
+						tag: 'biz',
+						attrs: {},
+						content: [
+							{
+								tag: 'interactive',
+								attrs: {
+									type: 'native_flow'
+								},
+								content: [
+									{
+										tag: 'native_flow',
+										attrs: {
+											v: '2',
+											name: 'mixed'
+										}
+									}
+								]
+							}
+						]
+					})
+				}
+
 				await relayMessage(jid, fullMsg.message!, {
 					messageId: fullMsg.key.id!,
 					useCachedGroupMetadata: options.useCachedGroupMetadata,
