@@ -6,70 +6,30 @@ import makeWASocket, {
 	BinaryInfo,
 	delay,
 	DisconnectReason,
-	downloadAndProcessHistorySyncNotification,
 	encodeWAM,
 	fetchLatestBaileysVersion,
 	getAggregateVotesInPollMessage,
-	getHistoryMsg,
-	isJidBroadcast,
-	isJidNewsletter,
 	makeCacheableSignalKeyStore,
 	proto,
-	useMultiFileAuthState,
-	WAMessageContent,
-	WAMessageKey
+	useMultiFileAuthState
 } from '../src'
 //import MAIN_LOGGER from '../src/Utils/logger'
-import open from 'open'
 import fs from 'fs'
 import P from 'pino'
 
 const logger = P({ timestamp: () => `,"time":"${new Date().toJSON()}"` }, P.destination('./wa-logs.txt'))
 logger.level = 'trace'
 
-const doReplies = process.argv.includes('--do-reply')
 const usePairingCode = process.argv.includes('--use-pairing-code')
 
 // external map to store retry counts of messages when decryption/encryption fails
 // keep this out of the socket itself, so as to prevent a message decryption/encryption loop across socket restarts
 const msgRetryCounterCache = new NodeCache()
 
-const onDemandMap = new Map<string, string>()
-
 // Read line interface
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
 const question = (text: string) => new Promise<string>(resolve => rl.question(text, resolve))
 
-function patchMessageBeforeSending(msg: proto.IMessage, jid: string[]): Promise<proto.IMessage> | proto.IMessage {
-	//console.log({ jid, msg: JSON.stringify(msg, null, 2) });
-	if (msg?.deviceSentMessage?.message?.listMessage) {
-		//msg.deviceSentMessage.message.listMessage.listType = proto.Message.ListMessage.ListType.SINGLE_SELECT;
-		console.log('ListType in deviceSentMessage is patched:', msg.deviceSentMessage.message.listMessage.listType)
-	}
-
-	if (msg?.listMessage) {
-		//msg.listMessage.listType = proto.Message.ListMessage.ListType.SINGLE_SELECT;
-		console.log('ListType in listMessage is patched:', msg.listMessage.listType)
-	}
-
-	const requiresPatch = !!(msg.buttonsMessage || msg.templateMessage || msg.listMessage)
-	if (requiresPatch) {
-		msg = {
-			viewOnceMessage: {
-				message: {
-					messageContextInfo: {
-						deviceListMetadata: {},
-						deviceListMetadataVersion: 2
-					},
-					...msg
-				}
-			}
-		}
-	}
-
-	console.log(JSON.stringify(msg, null, 2))
-	return msg
-}
 // start a connection
 const startSock = async () => {
 	const { state, saveCreds } = await useMultiFileAuthState('baileys_auth_info')
@@ -106,18 +66,6 @@ const startSock = async () => {
 		const phoneNumber = await question('Please enter your phone number:\n')
 		const code = await sock.requestPairingCode(phoneNumber)
 		console.log(`Pairing code: ${code}`)
-	}
-
-	const sendMessageWTyping = async (msg: AnyMessageContent, jid: string) => {
-		await sock.presenceSubscribe(jid)
-		await delay(500)
-
-		await sock.sendPresenceUpdate('composing', jid)
-		await delay(2000)
-
-		await sock.sendPresenceUpdate('paused', jid)
-
-		await sock.sendMessage(jid, msg)
 	}
 
 	// the process function lets you process all events that just occurred
@@ -176,7 +124,7 @@ const startSock = async () => {
 
 			sock.ws.on('CB:message', data => {
 				// Usado para debugar novas features
-				console.log('CB:message', JSON.stringify(data, null, 2))
+				//	console.log('CB:message', JSON.stringify(data, null, 2))
 			})
 
 			async function sendOtp() {
@@ -189,103 +137,132 @@ const startSock = async () => {
 						}
 					]
 				})
-				
-        // Jeito na marra
-				await sock.relayMessage(
-					'553185702237@s.whatsapp.net',
-					{
-						interactiveMessage: {
-							body: {
-								text: 'Seu código de verificação pode ser copiado abaixo:'
-							},
-							nativeFlowMessage: {
-								buttons: [
-									{
-										name: 'cta_copy',
-										buttonParamsJson: '{"fix":true,"display_text":"Copiar código","copy_code":"123"}'
-									}
-								]
-							}
-						}
-					},
-					{
-						additionalNodes: [
-							{
-								tag: 'biz',
-								attrs: {},
-								content: [
-									{
-										tag: 'interactive',
-										attrs: {
-											type: 'native_flow'
-										},
-										content: [
-											{
-												tag: 'native_flow',
-												attrs: {
-													v: '2',
-													name: 'mixed'
-												}
-											}
-										]
-									}
-								]
-							}
-						]
-					}
-				)
+
+				// Jeito na marra
+				// await sock.relayMessage(
+				// 	'553185702237@s.whatsapp.net',
+				// 	{
+				// 		interactiveMessage: {
+				// 			body: {
+				// 				text: 'Seu código de verificação pode ser copiado abaixo:'
+				// 			},
+				// 			nativeFlowMessage: {
+				// 				buttons: [
+				// 					{
+				// 						name: 'cta_copy',
+				// 						buttonParamsJson: '{"fix":true,"display_text":"Copiar código","copy_code":"123"}'
+				// 					}
+				// 				]
+				// 			}
+				// 		}
+				// 	},
+				// 	{
+				// 		additionalNodes: [
+				// 			{
+				// 				tag: 'biz',
+				// 				attrs: {},
+				// 				content: [
+				// 					{
+				// 						tag: 'interactive',
+				// 						attrs: {
+				// 							type: 'native_flow'
+				// 						},
+				// 						content: [
+				// 							{
+				// 								tag: 'native_flow',
+				// 								attrs: {
+				// 									v: '2',
+				// 									name: 'mixed'
+				// 								}
+				// 							}
+				// 						]
+				// 					}
+				// 				]
+				// 			}
+				// 		]
+				// 	}
+				// )
 			}
 
+			// Funcionando
 			async function sendList() {
-				await sock.relayMessage(
-					'553185702237@s.whatsapp.net',
-					{
-						listMessage: {
-							description: `_Enviada por uma conta TESTE *gratuita!*_
+				await sock.sendMessage('553185702237@s.whatsapp.net', {
+					text: `_Enviada por uma conta TESTE *gratuita!*_
 
 *Sua mensagem abaixo:* 👇
 Selecione e melhor opção:`,
-							buttonText: 'Abrir lista de opções',
-							listType: 1,
-							sections: [
+					buttonText: 'Abrir lista de opções',
+					title: 'Selecione uma opção',
+					footer: 'Selecione uma opção',
+					listType: 1,
+					sections: [
+						{
+							rows: [
 								{
-									rows: [
-										{
-											title: 'Z-API',
-											description: 'Z-API Asas para sua imaginação',
-											rowId: 'ListV3:1'
-										},
-										{
-											title: 'Outros',
-											description: 'Não funcionam',
-											rowId: 'ListV3:2'
-										}
-									],
-									title: 'Opções disponíveis'
+									title: 'Z-API',
+									description: 'Z-API Asas para sua imaginação',
+									rowId: 'ListV3:1'
+								},
+								{
+									title: 'Outros',
+									description: 'Não funcionam',
+									rowId: 'ListV3:2'
 								}
-							]
+							],
+							title: 'Opções disponíveis'
 						}
-					},
-					{
-						additionalNodes: [
-							{
-								tag: 'biz',
-								attrs: {},
-								content: [
-									{
-										tag: 'list',
-										attrs: {
-											type: 'product_list',
-											v: '2'
-										}
-									}
-								]
-							}
-						]
-					}
-				)
+					]
+				})
+				// 				await sock.relayMessage(
+				// 					'553185702237@s.whatsapp.net',
+				// 					{
+				// 						listMessage: {
+				// 							description: `_Enviada por uma conta TESTE *gratuita!*_
+
+				// *Sua mensagem abaixo:* 👇
+				// Selecione e melhor opção:`,
+				// 							buttonText: 'Abrir lista de opções',
+				// 							listType: 1,
+				// 							sections: [
+				// 								{
+				// 									rows: [
+				// 										{
+				// 											title: 'Z-API',
+				// 											description: 'Z-API Asas para sua imaginação',
+				// 											rowId: 'ListV3:1'
+				// 										},
+				// 										{
+				// 											title: 'Outros',
+				// 											description: 'Não funcionam',
+				// 											rowId: 'ListV3:2'
+				// 										}
+				// 									],
+				// 									title: 'Opções disponíveis'
+				// 								}
+				// 							]
+				// 						}
+				// 					},
+				// 					{
+				// 						additionalNodes: [
+				// 							{
+				// 								tag: 'biz',
+				// 								attrs: {},
+				// 								content: [
+				// 									{
+				// 										tag: 'list',
+				// 										attrs: {
+				// 											type: 'product_list',
+				// 											v: '2'
+				// 										}
+				// 									}
+				// 								]
+				// 							}
+				// 						]
+				// 					}
+				// 				)
 			}
 
+			// Funcionando
 			async function sendPix() {
 				await sock.relayMessage(
 					'553185702237@s.whatsapp.net',
@@ -331,11 +308,12 @@ Selecione e melhor opção:`,
 				)
 			}
 
-			async function sendWithButton() {
-        await sock.sendMessage('553185702237@s.whatsapp.net', {
+			// Funcionando
+			async function sendWithMultipleButtons() {
+				await sock.sendMessage('553185702237@s.whatsapp.net', {
 					text: 'f',
-          footer: 'se quiser vincular um rodapé',
-          title: 'se quiser vincular um título',
+					footer: 'se quiser vincular um rodapé',
+					title: 'se quiser vincular um título',
 					interactiveButtons: [
 						{
 							name: 'cta_call',
@@ -348,63 +326,81 @@ Selecione e melhor opção:`,
 						}
 					]
 				})
-	// 			await sock.relayMessage(
-	// 				'553185702237@s.whatsapp.net',
-	// 				{
-	// 					interactiveMessage: {
-	// 						header: {
-	// 							title: 'se quiser vincular um título'
-	// 						},
-	// 						body: {
-	// 							text: `
-  
-  // *Sua mensagem abaixo:* 👇
-  // mensagem`
-	// 						},
-	// 						footer: {
-	// 							text: 'se quiser vincular um rodapé'
-	// 						},
-	// 						nativeFlowMessage: {
-	// 							buttons: [
-	// 								{
-	// 									name: 'cta_call',
-	// 									buttonParamsJson: '{"fix":true,"display_text":"Fale conosco","phone_number":"+5531985702237"}'
-	// 								},
-	// 								{
-	// 									name: 'cta_url',
-	// 									buttonParamsJson:
-	// 										'{"fix":true,"display_text":"Visite nosso site","url":"https://mfilype.dev","merchant_url":"https://mfilype.dev"}'
-	// 								}
-	// 							]
-	// 						}
-	// 					}
-	// 				},
-	// 				{
-	// 					additionalNodes: [
-	// 						{
-	// 							tag: 'biz',
-	// 							attrs: {},
-	// 							content: [
-	// 								{
-	// 									tag: 'interactive',
-	// 									attrs: {
-	// 										type: 'native_flow'
-	// 									},
-	// 									content: [
-	// 										{
-	// 											tag: 'native_flow',
-	// 											attrs: {
-	// 												v: '2',
-	// 												name: 'mixed'
-	// 											}
-	// 										}
-	// 									]
-	// 								}
-	// 							]
-	// 						}
-	// 					]
-	// 				}
-	// 			)
+				// 			await sock.relayMessage(
+				// 				'553185702237@s.whatsapp.net',
+				// 				{
+				// 					interactiveMessage: {
+				// 						header: {
+				// 							title: 'se quiser vincular um título'
+				// 						},
+				// 						body: {
+				// 							text: `
+
+				// *Sua mensagem abaixo:* 👇
+				// mensagem`
+				// 						},
+				// 						footer: {
+				// 							text: 'se quiser vincular um rodapé'
+				// 						},
+				// 						nativeFlowMessage: {
+				// 							buttons: [
+				// 								{
+				// 									name: 'cta_call',
+				// 									buttonParamsJson: '{"fix":true,"display_text":"Fale conosco","phone_number":"+5531985702237"}'
+				// 								},
+				// 								{
+				// 									name: 'cta_url',
+				// 									buttonParamsJson:
+				// 										'{"fix":true,"display_text":"Visite nosso site","url":"https://mfilype.dev","merchant_url":"https://mfilype.dev"}'
+				// 								}
+				// 							]
+				// 						}
+				// 					}
+				// 				},
+				// 				{
+				// 					additionalNodes: [
+				// 						{
+				// 							tag: 'biz',
+				// 							attrs: {},
+				// 							content: [
+				// 								{
+				// 									tag: 'interactive',
+				// 									attrs: {
+				// 										type: 'native_flow'
+				// 									},
+				// 									content: [
+				// 										{
+				// 											tag: 'native_flow',
+				// 											attrs: {
+				// 												v: '2',
+				// 												name: 'mixed'
+				// 											}
+				// 										}
+				// 									]
+				// 								}
+				// 							]
+				// 						}
+				// 					]
+				// 				}
+				// 			)
+			}
+
+			// Funcionando
+			async function sendWithBasicButtons() {
+				const buttons: proto.Message.ButtonsMessage.IButton[] = [
+					{ buttonId: 'id1', buttonText: { displayText: 'Teste' }, type: 1 },
+					{ buttonId: 'id2', buttonText: { displayText: 'Teste 2' }, type: 1 }
+				]
+
+				const buttonMessage = {
+					text: 'A prova que funciona',
+					footer: 'Teste mostrando o funcionamento de envio de mensagens',
+					buttons,
+					headerType: 1
+					// viewOnce: true
+				}
+
+				await sock.sendMessage('553185702237@s.whatsapp.net', buttonMessage)
 			}
 
 			// credentials updated -- save them
@@ -433,26 +429,7 @@ Selecione e melhor opção:`,
 						if (msg.key.fromMe) {
 							console.log('is own message')
 							if (msg.message?.conversation?.startsWith('!')) {
-								const buttons: proto.Message.ButtonsMessage.IButton[] = [
-									{ buttonId: 'id1', buttonText: { displayText: 'Teste' }, type: 1 },
-									{ buttonId: 'id2', buttonText: { displayText: 'Teste 2' }, type: 1 }
-								]
-
-								const buttonMessage = {
-									text: 'A prova que funciona',
-									footer: 'Teste mostrando o funcionamento de envio de mensagens',
-									buttons,
-									headerType: 1,
-									viewOnce: true
-								}
-
-								await sock.sendMessage('553185702237@s.whatsapp.net', buttonMessage)
-								await Promise.all([
-									sendOtp()
-									// sendWithButton(),
-									// sendPix()
-									// sendWithButton()
-								])
+								await Promise.all([sendOtp(), sendWithMultipleButtons()])
 							}
 						}
 					}
