@@ -189,6 +189,7 @@ const startSock = async () => {
 			}
 
 			sock.ws.on('CB:message', data => {
+        // Usado para debugar novas features
 				console.log('CB:message', JSON.stringify(data, null, 2))
 			})
 
