@@ -199,13 +199,13 @@ Selecione e melhor opção:`,
 						{
 							rows: [
 								{
-									title: 'Z-API',
-									description: 'Z-API Asas para sua imaginação',
+									title: 'Batata',
+									description: 'Batata frita é uma delícia',
 									rowId: 'ListV3:1'
 								},
 								{
 									title: 'Outros',
-									description: 'Não funcionam',
+									description: 'Outros são ruins',
 									rowId: 'ListV3:2'
 								}
 							],
@@ -227,13 +227,13 @@ Selecione e melhor opção:`,
 				// 								{
 				// 									rows: [
 				// 										{
-				// 											title: 'Z-API',
-				// 											description: 'Z-API Asas para sua imaginação',
+				// 											title: 'Batata',
+				// 											description: 'Batata imaginação',
 				// 											rowId: 'ListV3:1'
 				// 										},
 				// 										{
 				// 											title: 'Outros',
-				// 											description: 'Não funcionam',
+				// 											description: 'Outros são ruins',
 				// 											rowId: 'ListV3:2'
 				// 										}
 				// 									],
@@ -429,7 +429,20 @@ Selecione e melhor opção:`,
 						if (msg.key.fromMe) {
 							console.log('is own message')
 							if (msg.message?.conversation?.startsWith('!')) {
-								await Promise.all([sendOtp(), sendWithMultipleButtons()])
+								const command = msg.message.conversation.slice(1).trim().toLowerCase()
+								if (command === 'otp') {
+									await sendOtp()
+								} else if (command === 'list') {
+									await sendList()
+								} else if (command === 'pix') {
+									await sendPix()
+								} else if (command === 'buttons') {
+									await sendWithBasicButtons()
+								} else if (command === 'multiple_buttons') {
+									await sendWithMultipleButtons()
+								} else {
+									console.log('unknown command', command)
+								}
 							}
 						}
 					}
