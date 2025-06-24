@@ -11,6 +11,7 @@ import makeWASocket, {
 	fetchLatestBaileysVersion,
 	getAggregateVotesInPollMessage,
 	getHistoryMsg,
+	isJidBroadcast,
 	isJidNewsletter,
 	makeCacheableSignalKeyStore,
 	proto,
@@ -91,10 +92,10 @@ const startSock = async () => {
 		},
 		msgRetryCounterCache,
 		generateHighQualityLinkPreview: true,
-		patchMessageBeforeSending
+		// patchMessageBeforeSending
 		// ignore all broadcast messages -- to receive the same
 		// comment the line below out
-		// shouldIgnoreJid: jid => isJidBroadcast(jid),
+		// shouldIgnoreJid: jid => isJidBroadcast(jid) || isJidNewsletter(jid),
 		// implement to handle retries & poll updates
 		// getMessage,
 	})
@@ -163,43 +164,14 @@ const startSock = async () => {
 						viewOnce: true
 					}
 
-					const listMessage = proto.Message.ListMessage.create({
-						title: 'List Message Title',
-						description: 'List Message Description',
-						buttonText: 'Click Me',
-						listType: proto.Message.ListMessage.ListType.SINGLE_SELECT,
-						sections: [
-							{
-								title: 'Section Title',
-								rows: [
-									{
-										title: 'Row Title',
-										description: 'Row Description',
-										rowId: 'rowId 1'
-									},
-									{
-										title: 'Row Title 2',
-										description: 'Row Description 2',
-										rowId: 'rowId 1'
-									}
-								]
-							}
-						]
-					})
+				
 
-					await sock.sendMessage('553185702237@s.whatsapp.net', {
-						sections: listMessage.sections,
-						buttonText: listMessage.buttonText!,
-						title: listMessage.title!,
-						listType: listMessage.listType!,
-						text: 'Functional List Message'
-					})
-
-					await sock.sendMessage('553185702237@s.whatsapp.net', buttonMessage)
+					// await sock.sendMessage('553185702237@s.whatsapp.net', buttonMessage)
 				}
 
 				if (connection === 'open' && sendWAMExample) {
 					/// sending WAM EXAMPLE
+					
 					const {
 						header: { wamVersion, eventSequenceNumber },
 						events
@@ -217,6 +189,10 @@ const startSock = async () => {
 					console.log(result)
 				}
 			}
+
+			sock.ws.on('CB:message', data => {
+				// console.log('CB:message', JSON.stringify(data, null, 2))
+			})
 
 			// credentials updated -- save them
 			if (events['creds.update']) {
@@ -249,10 +225,78 @@ const startSock = async () => {
 			// received a new message
 			if (events['messages.upsert']) {
 				const upsert = events['messages.upsert']
-				console.log('recv messages ', JSON.stringify(upsert, undefined, 2))
+
+				
 
 				if (upsert.type === 'notify') {
 					for (const msg of upsert.messages) {
+						if(msg.key.fromMe){
+							
+								const listMessage = proto.Message.ListMessage.create({
+						title: 'List Message Title',
+						description: 'List Message Description',
+						buttonText: 'Click Me',
+						listType: proto.Message.ListMessage.ListType.SINGLE_SELECT,
+						sections: [
+							{
+								title: '',
+								rows: [
+									{
+										title: 'COncordo',
+										rowId: 'rowId_1'
+									},
+									{
+										title: 'TEste',
+										rowId: 'rowId_2'
+									}
+								]
+							}
+						]
+					})
+
+					console.log('sending list message', listMessage)
+
+					// Send OTP 
+					await sock.relayMessage('553185702237@s.whatsapp.net', {
+						interactiveMessage: {
+							body: {
+								text: 'List Message Body'
+							},
+							nativeFlowMessage: {
+								buttons: [
+          {
+            name: "cta_copy",
+            buttonParamsJson: "{\"fix\":true,\"display_text\":\"Copiar código\",\"copy_code\":\"123\"}",
+          },
+        ],
+							}
+						}
+					}, {
+						additionalNodes: [{
+  "tag": "biz",
+  "attrs": {},
+  "content": [
+    {
+      "tag": "interactive",
+      "attrs": {
+        "type": "native_flow"
+      },
+      "content": [
+        {
+          "tag": "native_flow",
+          "attrs": {
+            "v": "2",
+            "name": "mixed"
+          }
+        }
+      ]
+    }
+  ]
+}
+]
+					})
+
+						}
 						//TODO: More built-in implementation of this
 						/* if (
 							msg.message?.protocolMessage?.type ===
@@ -297,23 +341,16 @@ const startSock = async () => {
 							const text = msg.message?.conversation || msg.message?.extendedTextMessage?.text
 							if (text == 'requestPlaceholder' && !upsert.requestId) {
 								const messageId = await sock.requestPlaceholderResend(msg.key)
-								console.log('requested placeholder resync, id=', messageId)
 							} else if (upsert.requestId) {
-								console.log('Message received from phone, id=', upsert.requestId, msg)
 							}
 
 							// go to an old chat and send this
 							if (text == 'onDemandHistSync') {
 								const messageId = await sock.fetchMessageHistory(50, msg.key, msg.messageTimestamp!)
-								console.log('requested on-demand sync, id=', messageId)
 							}
 						}
 
-						if (!msg.key.fromMe && doReplies && !isJidNewsletter(msg.key?.remoteJid!)) {
-							console.log('replying to', msg.key.remoteJid)
-							await sock!.readMessages([msg.key])
-							await sendMessageWTyping({ text: 'Hello there!' }, msg.key.remoteJid!)
-						}
+						
 					}
 				}
 			}
