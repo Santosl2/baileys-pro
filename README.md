@@ -179,11 +179,10 @@ const buttonMessage = {
 	text: "Hi it's button message",
 	footer: 'Hello World',
 	buttons,
-	headerType: 1,
-	viewOnce: true
+	headerType: 1
 }
 
-await sock.sendMessage(id, buttonMessage, { quoted: null })
+await sock.sendMessage(id, buttonMessage)
 ```
 
 - **To send button with image**
@@ -199,11 +198,10 @@ const buttonMessage = {
 	caption: "Hi it's button message with image",
 	footer: 'Hello World',
 	buttons,
-	headerType: 1,
-	viewOnce: true
+	headerType: 1
 }
 
-await sock.sendMessage(id, buttonMessage, { quoted: null })
+await sock.sendMessage(id, buttonMessage)
 ```
 
 - **To send button with video**
@@ -219,11 +217,10 @@ const buttonMessage = {
 	caption: "Hi it's button message with video",
 	footer: 'Hello World',
 	buttons,
-	headerType: 1,
-	viewOnce: true
+	headerType: 1
 }
 
-await sock.sendMessage(id, buttonMessage, { quoted: null })
+await sock.sendMessage(id, buttonMessage)
 ```
 
 - **To send interactive message**
@@ -248,7 +245,6 @@ const interactiveButtons = [
 		name: 'cta_copy',
 		buttonParamsJson: JSON.stringify({
 			display_text: 'Copy Code',
-			id: '12345',
 			copy_code: '12345'
 		})
 	}
@@ -261,7 +257,51 @@ const interactiveMessage = {
 	interactiveButtons
 }
 
-await sock.sendMessage(id, interactiveMessage, { quoted: null })
+await sock.sendMessage(id, interactiveMessage)
+```
+
+- **To send copy code button**
+
+```ts
+await sock.sendMessage(id, {
+	text: 'Your verification code is: 123',
+	interactiveButtons: [
+		{
+			name: 'cta_copy',
+			buttonParamsJson: JSON.stringify({
+				display_text: 'Copy Code',
+				copy_code: '123'
+			})
+		}
+	]
+})
+```
+
+- **To send call and URL buttons**
+
+```ts
+await sock.sendMessage(id, {
+	text: 'Contact us or visit our website',
+	footer: 'Choose an option',
+	title: 'Get in touch',
+	interactiveButtons: [
+		{
+			name: 'cta_call',
+			buttonParamsJson: JSON.stringify({
+				display_text: 'Call Us',
+				phone_number: '+1234567890'
+			})
+		},
+		{
+			name: 'cta_url',
+			buttonParamsJson: JSON.stringify({
+				display_text: 'Visit Website',
+				url: 'https://example.com',
+				merchant_url: 'https://example.com'
+			})
+		}
+	]
+})
 ```
 
 - **To send interactive message with image**
@@ -286,7 +326,6 @@ const interactiveButtons = [
 		name: 'cta_copy',
 		buttonParamsJson: JSON.stringify({
 			display_text: 'Copy Code',
-			id: '12345',
 			copy_code: '12345'
 		})
 	}
@@ -300,7 +339,7 @@ const interactiveMessage = {
 	interactiveButtons
 }
 
-await sock.sendMessage(id, interactiveMessage, { quoted: null })
+await sock.sendMessage(id, interactiveMessage)
 ```
 
 - **To send interactive message with video**
@@ -325,7 +364,6 @@ const interactiveButtons = [
 		name: 'cta_copy',
 		buttonParamsJson: JSON.stringify({
 			display_text: 'Copy Code',
-			id: '12345',
 			copy_code: '12345'
 		})
 	}
@@ -339,7 +377,7 @@ const interactiveMessage = {
 	interactiveButtons
 }
 
-await sock.sendMessage(id, interactiveMessage, { quoted: null })
+await sock.sendMessage(id, interactiveMessage)
 ```
 
 ### AI Icon

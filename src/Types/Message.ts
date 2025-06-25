@@ -72,6 +72,23 @@ type Buttonable = {
 	buttons?: proto.Message.ButtonsMessage.IButton[]
 }
 
+export interface Carousel {
+	image?: WAMediaUpload
+	video?: WAMediaUpload
+	product?: WASendableProduct
+	title?: string
+	body?: string
+	footer?: string
+	buttons?: proto.Message.InteractiveMessage.NativeFlowMessage.INativeFlowButton[]
+}
+
+type Cardsable = {
+	cards?: Carousel[]
+	title?: string
+	subtitle?: string
+	footer?: string
+}
+
 type Interactiveable = {
 	/** add buttons to the message  */
 	interactiveButtons?: proto.Message.InteractiveMessage.NativeFlowMessage.INativeFlowButton[]
@@ -142,6 +159,7 @@ type RequestPhoneNumber = {
 	requestPhoneNumber: boolean
 }
 
+export type ListButtonsTypes = Buttonable & Templatable & Interactiveable & Cardsable & Shopable
 export type MediaType = keyof typeof MEDIA_HKDF_KEY_MAPPING
 export type AnyMediaMessageContent = (
 	| ({
@@ -150,10 +168,7 @@ export type AnyMediaMessageContent = (
 			jpegThumbnail?: string
 	  } & Mentionable &
 			Contextable &
-			Buttonable &
-			Templatable &
-			Interactiveable &
-			Shopable &
+			ListButtonsTypes &
 			WithDimensions)
 	| ({
 			video: WAMediaUpload
@@ -164,10 +179,7 @@ export type AnyMediaMessageContent = (
 			ptv?: boolean
 	  } & Mentionable &
 			Contextable &
-			Buttonable &
-			Templatable &
-			Interactiveable &
-			Shopable &
+			ListButtonsTypes &
 			WithDimensions)
 	| {
 			audio: WAMediaUpload
