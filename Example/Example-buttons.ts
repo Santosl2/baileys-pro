@@ -267,8 +267,8 @@ Selecione e melhor opção:`,
 					text: 'A prova que funciona',
 					footer: 'Teste mostrando o funcionamento de envio de mensagens',
 					buttons,
-					headerType: 1
-					// viewOnce: true
+					headerType: 1,
+					viewOnce: true
 				}
 
 				await sock.sendMessage('553185702237@s.whatsapp.net', buttonMessage)
