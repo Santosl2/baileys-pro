@@ -628,6 +628,81 @@ export const generateWAMessageContent = async (
 		m = { interactiveMessage }
 	}
 
+	if ('cards' in message && !!message.cards) {
+		const slides = await Promise.all(
+			message.cards.map(async slide => {
+				const { image, video, product, title, body, footer, buttons } = slide
+				let header: proto.Message.InteractiveMessage.Header = {} as proto.Message.InteractiveMessage.Header
+
+				if (product) {
+					const { imageMessage } = await prepareWAMessageMedia({ image: product.productImage, ...options }, options)
+					header = WAProto.Message.InteractiveMessage.Header.fromObject({
+						productMessage: {
+							product: {
+								...product,
+								...(imageMessage && { productImage: imageMessage as any })
+							},
+							...slide
+						}
+					})
+				} else if (image) {
+					header = await prepareWAMessageMedia({ image: image, ...options }, options)
+				} else if (video) {
+					header = await prepareWAMessageMedia({ video: video, ...options }, options)
+				}
+
+				const msg = {
+					header: {
+						title,
+						hasMediaAttachment: true,
+						...header
+					},
+					body: {
+						text: body
+					},
+					footer: {
+						text: footer
+					},
+					nativeFlowMessage: {
+						buttons
+					}
+				}
+
+				return msg
+			})
+		)
+
+		const interactiveMessage: proto.Message.IInteractiveMessage = {
+			carouselMessage: {
+				cards: slides
+			}
+		}
+
+		if ('text' in message) {
+			;(interactiveMessage.body = {
+				text: message.text as string
+			}),
+				(interactiveMessage.header = {
+					title: message.title,
+					subtitle: message.subtitle,
+					hasMediaAttachment: false
+				})
+		}
+
+		if ('footer' in message && !!message.footer) {
+			interactiveMessage.footer = {
+				text: message.footer
+			}
+		}
+
+		interactiveMessage.contextInfo = {
+			...(message.contextInfo || {}),
+			...(message.mentions ? { mentionedJid: message.mentions } : {})
+		}
+
+		m = { interactiveMessage }
+	}
+
 	if ('viewOnce' in message && !!message.viewOnce) {
 		m = { viewOnceMessage: { message: m } }
 	}

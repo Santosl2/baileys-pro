@@ -262,6 +262,26 @@ Selecione e melhor opção:`,
 				// 				)
 			}
 
+			// Todo: Ainda em desenvolvimento
+			async function sendCarousel() {
+				await sock.sendMessage('553185702237@s.whatsapp.net', {
+					text: 'f',
+					cards: [
+						{
+							buttons: [
+								{
+									name: 'cta_call',
+									buttonParamsJson: '{"fix":true,"display_text":"Fale conosco","phone_number":"+5531985702237"}'
+								}
+							],
+							image: {
+								url: 'https://i.redd.it/i-got-bored-so-i-decided-to-draw-a-random-image-on-the-v0-4ig97vv85vjb1.png?width=1280&format=png&auto=webp&s=7177756d1f393b6e093596d06e1ba539f723264b'
+							}
+						}
+					]
+				})
+			}
+
 			// Funcionando
 			async function sendPix() {
 				await sock.relayMessage(
@@ -440,6 +460,8 @@ Selecione e melhor opção:`,
 									await sendWithBasicButtons()
 								} else if (command === 'multiple_buttons') {
 									await sendWithMultipleButtons()
+								} else if (command === 'carousel') {
+									await sendCarousel()
 								} else {
 									console.log('unknown command', command)
 								}

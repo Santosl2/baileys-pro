@@ -683,6 +683,19 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 	}
 
 	const getButtonArgs = (message: proto.IMessage): BinaryNode => {
+		if (
+			message.interactiveMessage?.nativeFlowMessage &&
+			//@ts-ignore
+			message.interactiveMessage?.nativeFlowMessage?.buttons?.length > 0
+		) {
+			return {
+				tag: 'biz',
+				attrs: {
+					native_flow_name: 'order_details'
+				}
+			}
+		}
+
 		if (message.buttonsMessage) {
 			return {
 				tag: 'biz',
