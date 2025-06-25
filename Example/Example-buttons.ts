@@ -137,51 +137,6 @@ const startSock = async () => {
 						}
 					]
 				})
-
-				// Jeito na marra
-				// await sock.relayMessage(
-				// 	'553185702237@s.whatsapp.net',
-				// 	{
-				// 		interactiveMessage: {
-				// 			body: {
-				// 				text: 'Seu código de verificação pode ser copiado abaixo:'
-				// 			},
-				// 			nativeFlowMessage: {
-				// 				buttons: [
-				// 					{
-				// 						name: 'cta_copy',
-				// 						buttonParamsJson: '{"fix":true,"display_text":"Copiar código","copy_code":"123"}'
-				// 					}
-				// 				]
-				// 			}
-				// 		}
-				// 	},
-				// 	{
-				// 		additionalNodes: [
-				// 			{
-				// 				tag: 'biz',
-				// 				attrs: {},
-				// 				content: [
-				// 					{
-				// 						tag: 'interactive',
-				// 						attrs: {
-				// 							type: 'native_flow'
-				// 						},
-				// 						content: [
-				// 							{
-				// 								tag: 'native_flow',
-				// 								attrs: {
-				// 									v: '2',
-				// 									name: 'mixed'
-				// 								}
-				// 							}
-				// 						]
-				// 					}
-				// 				]
-				// 			}
-				// 		]
-				// 	}
-				// )
 			}
 
 			// Funcionando
@@ -213,53 +168,6 @@ Selecione e melhor opção:`,
 						}
 					]
 				})
-				// 				await sock.relayMessage(
-				// 					'553185702237@s.whatsapp.net',
-				// 					{
-				// 						listMessage: {
-				// 							description: `_Enviada por uma conta TESTE *gratuita!*_
-
-				// *Sua mensagem abaixo:* 👇
-				// Selecione e melhor opção:`,
-				// 							buttonText: 'Abrir lista de opções',
-				// 							listType: 1,
-				// 							sections: [
-				// 								{
-				// 									rows: [
-				// 										{
-				// 											title: 'Batata',
-				// 											description: 'Batata imaginação',
-				// 											rowId: 'ListV3:1'
-				// 										},
-				// 										{
-				// 											title: 'Outros',
-				// 											description: 'Outros são ruins',
-				// 											rowId: 'ListV3:2'
-				// 										}
-				// 									],
-				// 									title: 'Opções disponíveis'
-				// 								}
-				// 							]
-				// 						}
-				// 					},
-				// 					{
-				// 						additionalNodes: [
-				// 							{
-				// 								tag: 'biz',
-				// 								attrs: {},
-				// 								content: [
-				// 									{
-				// 										tag: 'list',
-				// 										attrs: {
-				// 											type: 'product_list',
-				// 											v: '2'
-				// 										}
-				// 									}
-				// 								]
-				// 							}
-				// 						]
-				// 					}
-				// 				)
 			}
 
 			// Todo: Ainda em desenvolvimento
@@ -346,63 +254,6 @@ Selecione e melhor opção:`,
 						}
 					]
 				})
-				// 			await sock.relayMessage(
-				// 				'553185702237@s.whatsapp.net',
-				// 				{
-				// 					interactiveMessage: {
-				// 						header: {
-				// 							title: 'se quiser vincular um título'
-				// 						},
-				// 						body: {
-				// 							text: `
-
-				// *Sua mensagem abaixo:* 👇
-				// mensagem`
-				// 						},
-				// 						footer: {
-				// 							text: 'se quiser vincular um rodapé'
-				// 						},
-				// 						nativeFlowMessage: {
-				// 							buttons: [
-				// 								{
-				// 									name: 'cta_call',
-				// 									buttonParamsJson: '{"fix":true,"display_text":"Fale conosco","phone_number":"+5531985702237"}'
-				// 								},
-				// 								{
-				// 									name: 'cta_url',
-				// 									buttonParamsJson:
-				// 										'{"fix":true,"display_text":"Visite nosso site","url":"https://mfilype.dev","merchant_url":"https://mfilype.dev"}'
-				// 								}
-				// 							]
-				// 						}
-				// 					}
-				// 				},
-				// 				{
-				// 					additionalNodes: [
-				// 						{
-				// 							tag: 'biz',
-				// 							attrs: {},
-				// 							content: [
-				// 								{
-				// 									tag: 'interactive',
-				// 									attrs: {
-				// 										type: 'native_flow'
-				// 									},
-				// 									content: [
-				// 										{
-				// 											tag: 'native_flow',
-				// 											attrs: {
-				// 												v: '2',
-				// 												name: 'mixed'
-				// 											}
-				// 										}
-				// 									]
-				// 								}
-				// 							]
-				// 						}
-				// 					]
-				// 				}
-				// 			)
 			}
 
 			// Funcionando
