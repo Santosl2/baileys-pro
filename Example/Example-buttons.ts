@@ -256,6 +256,30 @@ Selecione e melhor opção:`,
 				})
 			}
 
+			async function sendWithMultipleButtonsWithImage() {
+				await sock.sendMessage('553185702237@s.whatsapp.net', {
+					caption: 'f',
+					footer: 'se quiser vincular um rodapé',
+					title: 'se quiser vincular um título',
+					media: true,
+					subtitle: 'se quiser vincular um subtítulo',
+					image: {
+						url: 'https://cdn.pixabay.com/photo/2024/05/14/11/37/tv-8760950_1280.png'
+					},
+					interactiveButtons: [
+						{
+							name: 'cta_call',
+							buttonParamsJson: '{"fix":true,"display_text":"Fale conosco","phone_number":"+5531985702237"}'
+						},
+						{
+							name: 'cta_url',
+							buttonParamsJson:
+								'{"fix":true,"display_text":"Visite nosso site","url":"https://mfilype.dev","merchant_url":"https://mfilype.dev"}'
+						}
+					]
+				})
+			}
+
 			// Funcionando
 			async function sendWithBasicButtons() {
 				const buttons: proto.Message.ButtonsMessage.IButton[] = [
@@ -311,6 +335,8 @@ Selecione e melhor opção:`,
 									await sendWithBasicButtons()
 								} else if (command === 'multiple_buttons') {
 									await sendWithMultipleButtons()
+								} else if (command === 'multiple_buttons_with_image') {
+									await sendWithMultipleButtonsWithImage()
 								} else if (command === 'carousel') {
 									await sendCarousel()
 								} else {

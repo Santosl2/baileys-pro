@@ -336,6 +336,8 @@ const interactiveMessage = {
 	caption: 'this is the caption',
 	title: 'this is the title',
 	footer: 'this is the footer',
+	media: true,
+	subtitle: 'se quiser vincular um subtítulo',
 	interactiveButtons
 }
 
@@ -374,6 +376,8 @@ const interactiveMessage = {
 	caption: 'this is the caption',
 	title: 'this is the title',
 	footer: 'this is the footer',
+	media: true,
+	subtitle: 'se quiser vincular um subtítulo',
 	interactiveButtons
 }
 
