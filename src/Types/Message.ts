@@ -407,6 +407,13 @@ export enum WANativeFlowButtonEnum {
 	GALAXY_MESSAGE = 'galaxy_message'
 }
 
+export enum WAPixTypes {
+	CPF = 'CPF',
+	CNPJ = 'CNPJ',
+	EMAIL = 'EMAIL',
+	PHONE = 'PHONE'
+}
+
 export enum WAPaymentStatusEnum {
 	CAPTURED = 'captured',
 	PENDING = 'pending'

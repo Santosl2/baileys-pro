@@ -16,7 +16,8 @@ import makeWASocket, {
 	WAPaymentStatusEnum,
 	WAPaymentOrderStatusEnum,
 	WAProductOrderTypeEnum,
-	WAInteractiveMessagesNativeFlowName
+	WAInteractiveMessagesNativeFlowName,
+	WAPixTypes
 } from '../src'
 //import MAIN_LOGGER from '../src/Utils/logger'
 import fs from 'fs'
@@ -205,8 +206,47 @@ Selecione e melhor opção:`,
 								buttons: [
 									{
 										name: 'payment_info',
-										buttonParamsJson:
-											'{"currency":"BRL","total_amount":{"value":12,"offset":100},"reference_id":"4SE1828Q8SA","type":"physical-goods","order":{"status":"pending","subtotal":{"value":0,"offset":100},"order_type":"ORDER","items":[{"name":"","amount":{"value":0,"offset":100},"quantity":0,"sale_amount":{"value":0,"offset":100}}]},"payment_settings":[{"type":"pix_static_code","pix_static_code":{"merchant_name":"Pix","key":"Chave PIX","key_type":"CPF"}}]}'
+										buttonParamsJson: JSON.stringify({
+											currency: 'BRL',
+											total_amount: {
+												value: 12,
+												offset: 100
+											},
+											reference_id: '4SE1828Q8SA',
+											type: 'physical-goods',
+											order: {
+												status: 'pending',
+												subtotal: {
+													value: 0,
+													offset: 100
+												},
+												order_type: 'ORDER',
+												items: [
+													{
+														name: '',
+														amount: {
+															value: 0,
+															offset: 100
+														},
+														quantity: 0,
+														sale_amount: {
+															value: 0,
+															offset: 100
+														}
+													}
+												]
+											},
+											payment_settings: [
+												{
+													type: 'pix_static_code',
+													pix_static_code: {
+														merchant_name: 'Maatheus Filype',
+														key: '11111111111', // Chave PIX,
+														key_type: WAPixTypes.CPF
+													}
+												}
+											]
+										})
 									}
 								],
 								messageVersion: 1
