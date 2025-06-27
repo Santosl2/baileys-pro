@@ -9,6 +9,7 @@ import {
 	MessageRelayOptions,
 	MiscMessageGenerationOptions,
 	SocketConfig,
+	WAInteractiveMessagesNativeFlowName,
 	WAMessageKey
 } from '../Types'
 import {
@@ -711,7 +712,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 							{
 								tag: 'native_flow',
 								attrs: {
-									name: 'quick_reply'
+									name: WAInteractiveMessagesNativeFlowName.QUICK_REPLY
 								}
 							}
 						]
@@ -735,7 +736,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 								tag: 'native_flow',
 								attrs: {
 									v: '2',
-									name: 'mixed'
+									name: WAInteractiveMessagesNativeFlowName.MIXED
 								}
 							}
 						]

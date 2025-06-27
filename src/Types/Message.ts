@@ -389,3 +389,65 @@ export type MediaDecryptionKeyInfo = {
 }
 
 export type MinimalMessage = Pick<proto.IWebMessageInfo, 'key' | 'messageTimestamp'>
+
+export enum WANativeFlowButtonEnum {
+	REVIEW_AND_PAY = 'review_and_pay',
+	PAYMENT_INFO = 'payment_info',
+	REVIEW_ORDER = 'review_order',
+	ORDER_STATUS = 'order_status',
+	PAYMENT_STATUS = 'payment_status',
+	PAYMENT_METHOD = 'payment_method',
+	OPEN_WEBVIEW = 'open_webview',
+	MESSAGE_WITH_LINK_STATUS = 'message_with_link_status',
+	CTA_URL = 'cta_url',
+	CTA_CALL = 'cta_call',
+	QUICK_REPLY = 'quick_reply',
+	CTA_CATALOG = 'cta_catalog',
+	CTA_COPY = 'cta_copy',
+	GALAXY_MESSAGE = 'galaxy_message'
+}
+
+export enum WAPaymentStatusEnum {
+	CAPTURED = 'captured',
+	PENDING = 'pending'
+}
+
+export enum WAPaymentOrderStatusEnum {
+	PENDING = 'pending',
+	PROCESSING = 'processing',
+	PARTIALLY_SHIPPED = 'partially_shipped',
+	SHIPPED = 'shipped',
+	COMPLETE = 'completed',
+	CANCELED = 'canceled',
+	PAYMENT_REQUESTED = 'payment_requested',
+	PREPARING_TO_SHIP = 'preparing_to_ship',
+	DELIVERED = 'delivered',
+	CONFIRMED = 'confirmed',
+	DELAYED = 'delayed',
+	OUT_FOR_DELIVERY = 'out_for_delivery',
+	FAILED = 'failed'
+}
+
+export enum WAProductOrderTypeEnum {
+	DIGITAL_GOODS = 'digital-goods',
+	PHYSICAL_GOODS = 'physical-goods',
+	ANY = 'any',
+	NONE = 'none'
+}
+
+export enum WAInteractiveMessagesNativeFlowName {
+	ORDER_DETAILS = 'order_details',
+	ORDER_STATUS = 'order_status',
+	PAYMENT_STATUS = 'payment_status',
+	PAYMENT_METHOD = 'payment_method',
+	MESSAGE_WITH_LINK = 'message_with_link',
+	MESSAGE_WITH_LINK_STATUS = 'message_with_link_status',
+	QUICK_REPLY = 'quick_reply',
+	CTA_CALL = 'cta_call',
+	CTA_URL = 'cta_url',
+	CTA_CATALOG = 'cta_catalog',
+	PAYMENT_INFO = 'payment_info',
+	CTA_COPY_CODE = 'cta_copy',
+	MIXED = 'mixed',
+	CTA_FLOW = 'galaxy_message'
+}

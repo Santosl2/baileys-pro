@@ -11,7 +11,12 @@ import makeWASocket, {
 	getAggregateVotesInPollMessage,
 	makeCacheableSignalKeyStore,
 	proto,
-	useMultiFileAuthState
+	useMultiFileAuthState,
+	WANativeFlowButtonEnum,
+	WAPaymentStatusEnum,
+	WAPaymentOrderStatusEnum,
+	WAProductOrderTypeEnum,
+	WAInteractiveMessagesNativeFlowName
 } from '../src'
 //import MAIN_LOGGER from '../src/Utils/logger'
 import fs from 'fs'
@@ -124,7 +129,7 @@ const startSock = async () => {
 
 			sock.ws.on('CB:message', data => {
 				// Usado para debugar novas features
-				//	console.log('CB:message', JSON.stringify(data, null, 2))
+				console.log('CB:message', JSON.stringify(data, null, 2))
 			})
 
 			async function sendOtp() {
@@ -132,7 +137,7 @@ const startSock = async () => {
 					text: 'Seu código de verificação é: 123',
 					interactiveButtons: [
 						{
-							name: 'cta_copy',
+							name: WANativeFlowButtonEnum.CTA_COPY,
 							buttonParamsJson: '{"fix":true,"display_text":"Copiar código","copy_code":"123"}'
 						}
 					]
@@ -244,11 +249,11 @@ Selecione e melhor opção:`,
 					title: 'se quiser vincular um título',
 					interactiveButtons: [
 						{
-							name: 'cta_call',
+							name: WANativeFlowButtonEnum.CTA_CALL,
 							buttonParamsJson: '{"fix":true,"display_text":"Fale conosco","phone_number":"+5531985702237"}'
 						},
 						{
-							name: 'cta_url',
+							name: WANativeFlowButtonEnum.CTA_URL,
 							buttonParamsJson:
 								'{"fix":true,"display_text":"Visite nosso site","url":"https://mfilype.dev","merchant_url":"https://mfilype.dev"}'
 						}
@@ -296,6 +301,270 @@ Selecione e melhor opção:`,
 				}
 
 				await sock.sendMessage('553185702237@s.whatsapp.net', buttonMessage)
+			}
+
+			// Ainda em desenvolvimento
+			// Botoes de criacao de pedido
+			async function sendButtonCode1() {
+				await sock.relayMessage(
+					'553195702237',
+					{
+						interactiveMessage: {
+							nativeFlowMessage: {
+								buttons: [
+									{
+										name: WANativeFlowButtonEnum.REVIEW_AND_PAY,
+										buttonParamsJson: JSON.stringify({
+											order: {
+												items: [
+													{
+														amount: {
+															value: 100000,
+															offset: 1000
+														},
+														isCustomItem: false,
+														isQuantitySet: true,
+														name: 'Nome do produto',
+														quantity: 2,
+														// Ver como gerar
+														retailer_id: '8502610599852671'
+													}
+												],
+												//  [
+												// 	"pending",
+												// 	"processing",
+												// 	"partially_shipped",
+												// 	"shipped",
+												// 	"completed",
+												// 	"canceled",
+												// 	"payment_requested",
+												// 	"preparing_to_ship",
+												// 	"delivered",
+												// 	"confirmed",
+												// 	"delayed",
+												// 	"out_for_delivery",
+												// 	"failed"
+												// ]
+												status: WAPaymentOrderStatusEnum.PAYMENT_REQUESTED,
+												subtotal: {
+													offset: 1000,
+													/// Esse valor abaixo representa 300
+													/// 300 reais quantity * amount.value
+													value: 300000
+												},
+												discount: {
+													offset: 1000,
+													/// Esse valor abaixo representa 20
+													value: 20000
+												},
+												shipping: {
+													offset: 1000,
+													/// Esse valor abaixo representa 7
+													value: 7000
+												},
+												tax: {
+													offset: 1000,
+													/// Esse valor abaixo representa 50
+													value: 50000
+												}
+											},
+											currency: 'BRL',
+											// [
+											// 	"digital-goods",
+											// 	"physical-goods",
+											// 	"any",
+											// 	"none"
+											// ];
+											type: WAProductOrderTypeEnum.PHYSICAL_GOODS,
+											payment_configuration: 'merchant_categorization_code',
+											// Ver como gerar isso
+											reference_id: '4SEQSGX7A9D',
+											// Ver como gerar isso
+											order_request_id: '4SEQSGX77XF',
+											total_amount: {
+												offset: 1000,
+												// A soma de ((value * quantity) - discount + tax + shipping)
+												value: 337000
+											},
+											native_payment_methods: ['cards'],
+											payment_settings: [
+												// Se for cartão deve ter esse campo
+												{
+													type: 'cards',
+													cards: {
+														enabled: true
+													}
+												},
+												{
+													type: 'pix_static_code', // pix_dynamic_code
+													pix_static_code: {
+														merchant_name: 'Nome da chave',
+														key: '11111111111' // Chave PIX
+													}
+												}
+											]
+										})
+									}
+								]
+							}
+						}
+					},
+					{
+						additionalNodes: [
+							{
+								tag: 'biz',
+								attrs: {
+									native_flow_name: WAInteractiveMessagesNativeFlowName.ORDER_DETAILS
+								}
+							}
+						]
+					}
+				)
+			}
+
+			// Ainda em desenvolvimento
+			// Botoes de atualizacao de STATUS do pedido
+			async function sendButtonCode2() {
+				await sock.relayMessage(
+					'553195702237',
+					{
+						interactiveMessage: {
+							nativeFlowMessage: {
+								buttons: [
+									{
+										name: WANativeFlowButtonEnum.REVIEW_ORDER,
+										// Seguir o exemplo do sendButtonCode1 para entender cada campo
+										buttonParamsJson: JSON.stringify({
+											order: {
+												items: [
+													{
+														amount: {
+															value: 150000,
+															offset: 1000
+														},
+														isCustomItem: true,
+														isQuantitySet: true,
+														name: 'order 1',
+														quantity: 2,
+														retailer_id: 'custom-item-4N8FCTW23N7'
+													},
+													{
+														amount: {
+															value: 150000,
+															offset: 1000
+														},
+														isCustomItem: false,
+														isQuantitySet: true,
+														name: 'order 2',
+														quantity: 2,
+														retailer_id: '23940797548900636'
+													}
+												],
+												status: WAPaymentOrderStatusEnum.SHIPPED,
+												subtotal: {
+													offset: 1000,
+													value: 600000
+												},
+												discount: {
+													offset: 1000,
+													value: 10000
+												},
+												shipping: {
+													offset: 1000,
+													value: 5000
+												},
+												tax: {
+													offset: 1000,
+													value: 10000
+												}
+											},
+											currency: 'BRL',
+											payment_status: WAPaymentStatusEnum.PENDING,
+											payment_timestamp: 1750990799,
+											reference_id: '4QDORZW7K27',
+											total_amount: {
+												offset: 1000,
+												value: 605000
+											}
+										})
+									}
+								]
+							}
+						}
+					},
+					{
+						additionalNodes: [
+							{
+								tag: 'biz',
+								attrs: {
+									native_flow_name: WAInteractiveMessagesNativeFlowName.ORDER_STATUS
+								}
+							}
+						]
+					}
+				)
+			}
+
+			// Ainda em desenvolvimento
+			// Botoes de atualizacao de STATUS do pagamento
+			async function sendButtonCode3() {
+				await sock.relayMessage(
+					'553195702237',
+					{
+						interactiveMessage: {
+							nativeFlowMessage: {
+								buttons: [
+									{
+										name: WANativeFlowButtonEnum.PAYMENT_STATUS,
+										// Seguir o exemplo do sendButtonCode1 para entender cada campo
+										buttonParamsJson: JSON.stringify({
+											order: {
+												items: [
+													{
+														amount: { value: 150000, offset: 1000 },
+														isCustomItem: true,
+														isQuantitySet: true,
+														name: 'order 1',
+														quantity: 2,
+														retailer_id: 'custom-item-4N8FCTW23N7'
+													},
+													{
+														amount: { value: 150000, offset: 1000 },
+														isCustomItem: false,
+														isQuantitySet: true,
+														name: 'order 2',
+														quantity: 2,
+														retailer_id: '23940797548900636'
+													}
+												],
+												status: WAPaymentOrderStatusEnum.PROCESSING,
+												subtotal: { offset: 1000, value: 600000 },
+												discount: { offset: 1000, value: 10000 },
+												shipping: { offset: 1000, value: 5000 },
+												tax: { offset: 1000, value: 10000 }
+											},
+											currency: 'BRL',
+											payment_status: WAPaymentStatusEnum.CAPTURED,
+											payment_timestamp: 1750990830,
+											reference_id: '4N8FCTW1WM6',
+											total_amount: { offset: 1000, value: 605000 }
+										})
+									}
+								]
+							}
+						}
+					},
+					{
+						additionalNodes: [
+							{
+								tag: 'biz',
+								attrs: {
+									native_flow_name: WAInteractiveMessagesNativeFlowName.PAYMENT_STATUS
+								}
+							}
+						]
+					}
+				)
 			}
 
 			// credentials updated -- save them
