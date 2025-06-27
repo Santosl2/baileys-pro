@@ -8,6 +8,12 @@ import { Curve, hmacSign } from './crypto'
 import { encodeBigEndian } from './generics'
 import { createSignalIdentity } from './signal'
 
+// Prefixes for device signature generation
+// const AdvPrefixAccountSignature = Buffer.from([6, 0])
+const AdvPrefixDeviceSignatureGenerate = Buffer.from([6, 1])
+const AdvHostedPrefixDeviceIdentityAccountSignature = Buffer.from([6, 5])
+const AdvHostedPrefixDeviceIdentityDeviceSignatureVerification = Buffer.from([6, 6])
+
 const getUserAgent = (config: SocketConfig): proto.ClientPayload.IUserAgent => {
 	return {
 		appVersion: {
@@ -132,10 +138,12 @@ export const configureSuccessfulPairing = (
 	const jid = deviceNode.attrs.jid
 
 	const { details, hmac, accountType } = proto.ADVSignedDeviceIdentityHMAC.decode(deviceIdentityNode.content as Buffer)
+	// check if account is hostedAdd commentMore actions
 	const isHostedAccount = accountType !== undefined && accountType === proto.ADVEncryptionType.HOSTED
 
-	const hmacPrefix = isHostedAccount ? Buffer.from([6, 5]) : Buffer.alloc(0)
+	const hmacPrefix = isHostedAccount ? AdvHostedPrefixDeviceIdentityAccountSignature : Buffer.alloc(0)
 	const advSign = hmacSign(Buffer.concat([hmacPrefix, details!]), Buffer.from(advSecretKey, 'base64'))
+
 	if (Buffer.compare(hmac!, advSign) !== 0) {
 		throw new Boom('Invalid account signature')
 	}
@@ -147,7 +155,10 @@ export const configureSuccessfulPairing = (
 		throw new Boom('Failed to verify account signature')
 	}
 
-	const devicePrefix = isHostedAccount ? Buffer.from([6, 6]) : Buffer.from([6, 1])
+	const devicePrefix = isHostedAccount
+		? AdvHostedPrefixDeviceIdentityDeviceSignatureVerification
+		: AdvPrefixDeviceSignatureGenerate
+
 	const deviceMsg = Buffer.concat([devicePrefix, deviceDetails!, signedIdentityKey.public, accountSignatureKey!])
 	account.deviceSignature = Curve.sign(signedIdentityKey.private, deviceMsg)
 
