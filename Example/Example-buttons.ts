@@ -205,7 +205,7 @@ Selecione e melhor opção:`,
 							nativeFlowMessage: {
 								buttons: [
 									{
-										name: 'payment_info',
+										name: WANativeFlowButtonEnum.PAYMENT_INFO,
 										buttonParamsJson: JSON.stringify({
 											currency: 'BRL',
 											total_amount: {
