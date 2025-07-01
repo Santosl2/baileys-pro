@@ -238,7 +238,7 @@ Selecione e melhor opção:`,
 											},
 											payment_settings: [
 												{
-													type: 'pix_static_code',
+													type: 'pix_static_code', // pix_DYNAMIC_code
 													pix_static_code: {
 														merchant_name: 'Maatheus Filype',
 														key: '11111111111', // Chave PIX,
