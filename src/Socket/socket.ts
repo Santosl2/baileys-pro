@@ -189,7 +189,7 @@ export const makeSocket = (config: SocketConfig) => {
 
 				ws.on(`TAG:${msgId}`, onRecv)
 				ws.on('close', onErr) // if the socket closes, you'll never receive the message
-				ws.off('error', onErr)
+				ws.on('error', onErr)
 			})
 
 			return result as any
