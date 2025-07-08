@@ -725,31 +725,32 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		// 	}
 		// }
 
-		if (message.buttonsMessage) {
-			return {
-				tag: 'biz',
-				attrs: {},
-				content: [
-					{
-						tag: 'interactive',
-						attrs: {
-							type: 'native_flow',
-							v: '1'
-						},
-						content: [
-							{
-								tag: 'native_flow',
-								attrs: {
-									name: WAInteractiveMessagesNativeFlowName.QUICK_REPLY
-								}
-							}
-						]
-					}
-				]
-			}
-		}
+		// if (message.buttonsMessage) {
+		// 	return {
+		// 		tag: 'biz',
+		// 		attrs: {},
+		// 		content: [
+		// 			{
+		// 				tag: 'interactive',
+		// 				attrs: {
+		// 					type: 'native_flow',
+		// 					v: '1'
+		// 				},
+		// 				content: [
+		// 					{
+		// 						tag: 'native_flow',
+		// 						attrs: {
+		// 							v: '2',
+		// 							name: WAInteractiveMessagesNativeFlowName.QUICK_REPLY
+		// 						}
+		// 					}
+		// 				]
+		// 			}
+		// 		]
+		// 	}
+		// }
 
-		if (message.interactiveMessage) {
+		if (message.interactiveMessage || message.buttonsMessage) {
 			return {
 				tag: 'biz',
 				attrs: {},
