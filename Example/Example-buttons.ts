@@ -57,8 +57,24 @@ const startSock = async () => {
 			keys: makeCacheableSignalKeyStore(state.keys, logger)
 		},
 		msgRetryCounterCache,
-		generateHighQualityLinkPreview: true
-		// patchMessageBeforeSending
+		generateHighQualityLinkPreview: true,
+		patchMessageBeforeSending: msg => {
+			const requiresPatch = !!(msg.buttonsMessage || msg.templateMessage || msg.listMessage)
+			if (requiresPatch) {
+				msg = {
+					viewOnceMessage: {
+						message: {
+							messageContextInfo: {
+								deviceListMetadata: {},
+								deviceListMetadataVersion: 2
+							},
+							...msg
+						}
+					}
+				}
+			}
+			return msg
+		}
 		// ignore all broadcast messages -- to receive the same
 		// comment the line below out
 		// shouldIgnoreJid: jid => isJidBroadcast(jid) || isJidNewsletter(jid),
@@ -130,7 +146,7 @@ const startSock = async () => {
 
 			sock.ws.on('CB:message', data => {
 				// Usado para debugar novas features
-				console.log('CB:message', JSON.stringify(data, null, 2))
+				// console.log('CB:message', JSON.stringify(data, null, 2))
 			})
 
 			async function sendOtp() {
@@ -313,13 +329,21 @@ Selecione e melhor opção:`,
 					},
 					interactiveButtons: [
 						{
-							name: 'cta_call',
-							buttonParamsJson: '{"fix":true,"display_text":"Fale conosco","phone_number":"+5531985702237"}'
+							name: WANativeFlowButtonEnum.CTA_CALL,
+							buttonParamsJson: JSON.stringify({
+								fix: true,
+								display_text: 'Fale conosco',
+								phone_number: '+5531985702237'
+							})
 						},
 						{
-							name: 'cta_url',
-							buttonParamsJson:
-								'{"fix":true,"display_text":"Visite nosso site","url":"https://mfilype.dev","merchant_url":"https://mfilype.dev"}'
+							name: WANativeFlowButtonEnum.CTA_URL,
+							buttonParamsJson: JSON.stringify({
+								fix: true,
+								display_text: 'Visite nosso site',
+								url: 'https://mfilype.dev',
+								merchant_url: 'https://mfilype.dev'
+							})
 						}
 					]
 				})
@@ -327,20 +351,29 @@ Selecione e melhor opção:`,
 
 			// Funcionando
 			async function sendWithBasicButtons() {
-				const buttons: proto.Message.ButtonsMessage.IButton[] = [
-					{ buttonId: 'id1', buttonText: { displayText: 'Teste' }, type: 1 },
-					{ buttonId: 'id2', buttonText: { displayText: 'Teste 2' }, type: 1 }
-				]
+				await sock.sendMessage('553185702237@s.whatsapp.net', {
+					text: 'Teste do Matheus',
+					footer: 'se quiser vincular um rodapé',
 
-				const buttonMessage = {
-					text: 'A prova que funciona',
-					footer: 'Teste mostrando o funcionamento de envio de mensagens',
-					buttons,
-					headerType: 1,
-					viewOnce: true
-				}
-
-				await sock.sendMessage('553185702237@s.whatsapp.net', buttonMessage)
+					interactiveButtons: [
+						{
+							name: WANativeFlowButtonEnum.REPLY,
+							buttonParamsJson: JSON.stringify({
+								fix: true,
+								display_text: 'Fale conosco',
+								id: 'abc'
+							})
+						},
+						{
+							name: WANativeFlowButtonEnum.REPLY,
+							buttonParamsJson: JSON.stringify({
+								fix: true,
+								display_text: 'Fale conoscoc',
+								id: 'abcd'
+							})
+						}
+					]
+				})
 			}
 
 			// Ainda em desenvolvimento

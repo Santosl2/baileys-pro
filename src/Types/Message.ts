@@ -407,6 +407,7 @@ export enum WANativeFlowButtonEnum {
 	QUICK_REPLY = 'quick_reply',
 	CTA_CATALOG = 'cta_catalog',
 	CTA_COPY = 'cta_copy',
+	REPLY = 'quick_reply',
 	GALAXY_MESSAGE = 'galaxy_message'
 }
 
