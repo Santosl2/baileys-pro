@@ -667,6 +667,8 @@ Selecione e melhor opção:`,
 							console.log('is own message')
 							if (msg.message?.conversation?.startsWith('!')) {
 								const command = msg.message.conversation.slice(1).trim().toLowerCase()
+								// msg.message.buttonsResponseMessage?.selectedButtonId
+
 								if (command === 'otp') {
 									await sendOtp()
 								} else if (command === 'list') {
