@@ -663,11 +663,16 @@ Selecione e melhor opção:`,
 
 				if (upsert.type === 'notify') {
 					for (const msg of upsert.messages) {
+						const clickedButton = msg.message?.buttonsResponseMessage?.selectedButtonId
+
+						if (clickedButton === 'abc') {
+						}
+
 						if (msg.key.fromMe) {
 							console.log('is own message')
 							if (msg.message?.conversation?.startsWith('!')) {
 								const command = msg.message.conversation.slice(1).trim().toLowerCase()
-								// msg.message.buttonsResponseMessage?.selectedButtonId
+								//
 
 								if (command === 'otp') {
 									await sendOtp()
