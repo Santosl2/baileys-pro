@@ -256,9 +256,9 @@ Selecione e melhor opção:`,
 												{
 													type: 'pix_static_code', // pix_DYNAMIC_code
 													pix_static_code: {
-														merchant_name: 'Maatheus Filype',
-														key: '11111111111', // Chave PIX,
-														key_type: WAPixTypes.CPF
+														merchant_name: 'Matheus Filype',
+														key: 'mfilype2019@gmail.com', // Chave PIX,
+														key_type: WAPixTypes.EMAIL
 													}
 												}
 											]
