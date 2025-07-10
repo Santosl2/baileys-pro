@@ -17,7 +17,8 @@ import makeWASocket, {
 	WAPaymentOrderStatusEnum,
 	WAProductOrderTypeEnum,
 	WAInteractiveMessagesNativeFlowName,
-	WAPixTypes
+	WAPixTypes,
+	fetchLatestWaWebVersion
 } from '../src'
 //import MAIN_LOGGER from '../src/Utils/logger'
 import fs from 'fs'
@@ -40,12 +41,11 @@ const question = (text: string) => new Promise<string>(resolve => rl.question(te
 const startSock = async () => {
 	const { state, saveCreds } = await useMultiFileAuthState('baileys_auth_info')
 	// fetch latest version of WA Web
-	const { version, isLatest } = await fetchLatestBaileysVersion()
+	const { version, isLatest } = await fetchLatestWaWebVersion({})
 	console.log(`using WA v${version.join('.')}, isLatest: ${isLatest}`)
 
 	const sock = makeWASocket({
-		// version,
-		version: [2, 3000, 1023979355],
+		version,
 
 		// logger: P({level: 'silent'}),
 		logger,
