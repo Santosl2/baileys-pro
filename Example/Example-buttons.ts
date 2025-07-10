@@ -57,24 +57,7 @@ const startSock = async () => {
 			keys: makeCacheableSignalKeyStore(state.keys, logger)
 		},
 		msgRetryCounterCache,
-		generateHighQualityLinkPreview: true,
-		patchMessageBeforeSending: msg => {
-			const requiresPatch = !!(msg.buttonsMessage || msg.templateMessage || msg.listMessage)
-			if (requiresPatch) {
-				msg = {
-					viewOnceMessage: {
-						message: {
-							messageContextInfo: {
-								deviceListMetadata: {},
-								deviceListMetadataVersion: 2
-							},
-							...msg
-						}
-					}
-				}
-			}
-			return msg
-		}
+		generateHighQualityLinkPreview: true
 		// ignore all broadcast messages -- to receive the same
 		// comment the line below out
 		// shouldIgnoreJid: jid => isJidBroadcast(jid) || isJidNewsletter(jid),
@@ -119,28 +102,8 @@ const startSock = async () => {
 				// THIS FILE.JSON APPROACH IS JUST AN APPROACH I USED, BE FREE TO DO THIS IN ANOTHER WAY.
 				// THE FIRST EVENT CONTAINS THE CONSTANT GLOBALS, EXCEPT THE seqenceNumber(in the event) and commitTime
 				// THIS INCLUDES STUFF LIKE ocVersion WHICH IS CRUCIAL FOR THE PREVENTION OF THE WARNING
-				const sendWAMExample = false
+
 				if (connection === 'open') {
-				}
-
-				if (connection === 'open' && sendWAMExample) {
-					/// sending WAM EXAMPLE
-
-					const {
-						header: { wamVersion, eventSequenceNumber },
-						events
-					} = JSON.parse(await fs.promises.readFile('./boot_analytics_test.json', 'utf-8'))
-
-					const binaryInfo = new BinaryInfo({
-						protocolVersion: wamVersion,
-						sequence: eventSequenceNumber,
-						events: events
-					})
-
-					const buffer = encodeWAM(binaryInfo)
-
-					const result = await sock.sendWAMBuffer(buffer)
-					console.log(result)
 				}
 			}
 
@@ -744,6 +707,10 @@ Selecione e melhor opção:`,
 
 			if (events['chats.delete']) {
 				console.log('chats deleted ', events['chats.delete'])
+			}
+
+			if (events['messaging-history.set']) {
+				console.log('messaging-history.set', events['messaging-history.set'])
 			}
 		}
 	)
