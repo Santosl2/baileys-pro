@@ -415,6 +415,7 @@ export enum WAPixTypes {
 	CPF = 'CPF',
 	CNPJ = 'CNPJ',
 	EMAIL = 'EMAIL',
+	RANDOM = 'EVP',
 	PHONE = 'PHONE'
 }
 

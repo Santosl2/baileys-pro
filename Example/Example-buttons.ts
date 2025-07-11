@@ -214,87 +214,139 @@ Selecione e melhor opção:`,
 
 			// Funcionando
 			async function sendPix() {
-				await sock.relayMessage(
-					'553185702237@s.whatsapp.net',
-					{
-						interactiveMessage: {
-							nativeFlowMessage: {
-								buttons: [
-									{
-										name: WANativeFlowButtonEnum.PAYMENT_INFO,
-										buttonParamsJson: JSON.stringify({
-											currency: 'BRL',
-											total_amount: {
-												value: 12,
+				await sock.sendMessage('553185702237@s.whatsapp.net', {
+					text: 'f',
+					footer: 'se quiser vincular um rodapé',
+					title: 'se quiser vincular um título',
+					interactiveButtons: [
+						{
+							name: WANativeFlowButtonEnum.PAYMENT_INFO,
+							buttonParamsJson: JSON.stringify({
+								currency: 'BRL',
+								total_amount: {
+									value: 12,
+									offset: 100
+								},
+								reference_id: '4SE1828Q8SA',
+								type: 'physical-goods',
+								order: {
+									status: 'pending',
+									subtotal: {
+										value: 0,
+										offset: 100
+									},
+									order_type: 'ORDER',
+									items: [
+										{
+											name: '',
+											amount: {
+												value: 0,
 												offset: 100
 											},
-											reference_id: '4SE1828Q8SA',
-											type: 'physical-goods',
-											order: {
-												status: 'pending',
-												subtotal: {
-													value: 0,
-													offset: 100
-												},
-												order_type: 'ORDER',
-												items: [
-													{
-														name: '',
-														amount: {
-															value: 0,
-															offset: 100
-														},
-														quantity: 0,
-														sale_amount: {
-															value: 0,
-															offset: 100
-														}
-													}
-												]
-											},
-											payment_settings: [
-												{
-													type: 'pix_static_code', // pix_DYNAMIC_code
-													pix_static_code: {
-														merchant_name: 'Maatheus Filype',
-														key: '11111111111', // Chave PIX,
-														key_type: WAPixTypes.CPF
-													}
-												}
-											]
-										})
-									}
-								],
-								messageVersion: 1
-							}
-						}
-					},
-					{
-						additionalNodes: [
-							{
-								tag: 'biz',
-								attrs: {},
-								content: [
-									{
-										tag: 'interactive',
-										attrs: {
-											type: 'native_flow',
-											v: '1'
-										},
-										content: [
-											{
-												tag: 'native_flow',
-												attrs: {
-													name: 'payment_info'
-												}
+											quantity: 0,
+											sale_amount: {
+												value: 0,
+												offset: 100
 											}
-										]
+										}
+									]
+								},
+								payment_settings: [
+									{
+										type: 'pix_static_code', // pix_DYNAMIC_code
+										pix_static_code: {
+											merchant_name: 'Matheus Filype',
+											key: 'mfilype2019@gmail.com', // Chave PIX,
+											key_type: WAPixTypes.EMAIL
+										}
 									}
 								]
-							}
-						]
-					}
-				)
+							})
+						}
+					]
+				})
+
+				// await sock.relayMessage(
+				// 	'553185702237@s.whatsapp.net',
+				// 	{
+				// 		interactiveMessage: {
+				// 			nativeFlowMessage: {
+				// 				buttons: [
+				// 					{
+				// 						name: WANativeFlowButtonEnum.PAYMENT_INFO,
+				// 						buttonParamsJson: JSON.stringify({
+				// 							currency: 'BRL',
+				// 							total_amount: {
+				// 								value: 12,
+				// 								offset: 100
+				// 							},
+				// 							reference_id: '4SE1828Q8SA',
+				// 							type: 'physical-goods',
+				// 							order: {
+				// 								status: 'pending',
+				// 								subtotal: {
+				// 									value: 0,
+				// 									offset: 100
+				// 								},
+				// 								order_type: 'ORDER',
+				// 								items: [
+				// 									{
+				// 										name: '',
+				// 										amount: {
+				// 											value: 0,
+				// 											offset: 100
+				// 										},
+				// 										quantity: 0,
+				// 										sale_amount: {
+				// 											value: 0,
+				// 											offset: 100
+				// 										}
+				// 									}
+				// 								]
+				// 							},
+				// 							payment_settings: [
+				// 								{
+				// 									type: 'pix_static_code', // pix_DYNAMIC_code
+				// 									pix_static_code: {
+				// 										merchant_name: 'Matheus Filype',
+				// 										key: 'mfilype2019@gmail.com', // Chave PIX,
+				// 										key_type: WAPixTypes.EMAIL
+				// 									}
+				// 								}
+				// 							]
+				// 						})
+				// 					}
+				// 				],
+				// 				messageVersion: 1
+				// 			}
+				// 		}
+				// 	},
+				// 	{
+				// 		additionalNodes: [
+				// 			{
+				// 				tag: 'biz',
+				// 				attrs: {},
+				// 				content: [
+				// 					{
+				// 						tag: 'interactive',
+				// 						attrs: {
+				// 							type: 'native_flow',
+				// 							v: '1'
+				// 						},
+				// 						content: [
+				// 							{
+				// 								tag: 'native_flow',
+				// 								attrs: {
+				// 									name: 'payment_info'
+				// 								}
+				// 							}
+				// 						]
+				// 					}
+				// 				]
+				// 			}
+				// 		]
+				// 	}
+				// )
 			}
 
 			// Funcionando

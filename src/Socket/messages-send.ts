@@ -712,6 +712,18 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 	}
 
 	const getButtonArgs = (message: proto.IMessage): BinaryNode => {
+		// BinaryNodeAttributes
+		const baseAttrs: {
+			tag: 'biz'
+			attrs: {
+				[key: string]: string | undefined
+			}
+			content: Array<object | BinaryNode> | undefined
+		} = {
+			tag: 'biz',
+			attrs: {},
+			content: undefined
+		}
 		// if (
 		// 	message.interactiveMessage?.nativeFlowMessage &&
 		// 	//@ts-ignore
@@ -750,44 +762,65 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		// 	}
 		// }
 
-		if (message.interactiveMessage || message.buttonsMessage) {
-			return {
-				tag: 'biz',
-				attrs: {},
-				content: [
-					{
-						tag: 'interactive',
-						attrs: {
-							type: 'native_flow'
-						},
-						content: [
-							{
-								tag: 'native_flow',
-								attrs: {
-									v: '2',
-									name: WAInteractiveMessagesNativeFlowName.MIXED
-								}
+		if (
+			message?.interactiveMessage?.nativeFlowMessage?.buttons?.[0]?.name ===
+			WAInteractiveMessagesNativeFlowName.PAYMENT_INFO
+		) {
+			baseAttrs.content = [
+				{
+					tag: 'interactive',
+					attrs: {
+						type: 'native_flow',
+						v: '1'
+					},
+					content: [
+						{
+							tag: 'native_flow',
+							attrs: {
+								name: 'payment_info'
 							}
-						]
-					}
-				]
-			}
+						}
+					]
+				}
+			]
+
+			return baseAttrs as BinaryNode
+		}
+
+		if (message.interactiveMessage || message.buttonsMessage) {
+			baseAttrs.content = [
+				{
+					tag: 'interactive',
+					attrs: {
+						type: 'native_flow'
+					},
+					content: [
+						{
+							tag: 'native_flow',
+							attrs: {
+								v: '2',
+								name: WAInteractiveMessagesNativeFlowName.MIXED
+							}
+						}
+					]
+				}
+			]
+
+			return baseAttrs as BinaryNode
 		}
 
 		if (message.listMessage) {
-			return {
-				tag: 'biz',
-				attrs: {},
-				content: [
-					{
-						tag: 'list',
-						attrs: {
-							type: 'product_list',
-							v: '2'
-						}
+			baseAttrs.content = [
+				{
+					tag: 'list',
+					attrs: {
+						type: 'product_list',
+						v: '2'
 					}
-				]
-			}
+				}
+			]
+
+			return baseAttrs as BinaryNode
 		}
 
 		return {} as BinaryNode
