@@ -727,7 +727,9 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		// if (
 		// 	message.interactiveMessage?.nativeFlowMessage &&
 		// 	//@ts-ignore
-		// 	message.interactiveMessage?.nativeFlowMessage?.buttons?.length > 0
+		// 	message.interactiveMessage?.nativeFlowMessage?.buttons?.length > 0 &&
+		// 	message.interactiveMessage?.nativeFlowMessage?.buttons?.[0]?.name ===
+		// 		WAWebInteractiveMessagesNativeFlowNameEnum.REVIEW_AND_PAY
 		// ) {
 		// 	return {
 		// 		tag: 'biz',
@@ -921,6 +923,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		},
 		sendMessage: async (jid: string, content: AnyMessageContent, options: MiscMessageGenerationOptions = {}) => {
 			const userJid = authState.creds.me!.id
+
 			if (
 				typeof content === 'object' &&
 				'disappearingMessagesInChat' in content &&

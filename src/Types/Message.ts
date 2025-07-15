@@ -213,6 +213,10 @@ export type ButtonReplyInfo = {
 	index: number
 }
 
+export type PaymentRequest = {
+	requestPayment?: proto.Message.IRequestPaymentMessage
+}
+
 export type GroupInviteInfo = {
 	inviteCode: string
 	inviteExpiration: number
@@ -236,6 +240,7 @@ export type AnyRegularMessageContent = (
 			Shopable &
 			Contextable &
 			Listable &
+			PaymentRequest &
 			Editable)
 	| AnyMediaMessageContent
 	| ({
@@ -246,6 +251,7 @@ export type AnyRegularMessageContent = (
 			Templatable &
 			Interactiveable &
 			Shopable &
+			PaymentRequest &
 			Editable)
 	| {
 			contacts: {
@@ -393,7 +399,7 @@ export type MediaDecryptionKeyInfo = {
 
 export type MinimalMessage = Pick<proto.IWebMessageInfo, 'key' | 'messageTimestamp'>
 
-export enum WANativeFlowButtonEnum {
+export enum WAWebInteractiveMessagesNativeFlowNameEnum {
 	REVIEW_AND_PAY = 'review_and_pay',
 	PAYMENT_INFO = 'payment_info',
 	REVIEW_ORDER = 'review_order',
@@ -404,10 +410,10 @@ export enum WANativeFlowButtonEnum {
 	MESSAGE_WITH_LINK_STATUS = 'message_with_link_status',
 	CTA_URL = 'cta_url',
 	CTA_CALL = 'cta_call',
-	QUICK_REPLY = 'quick_reply',
 	CTA_CATALOG = 'cta_catalog',
 	CTA_COPY = 'cta_copy',
 	REPLY = 'quick_reply',
+	MIXED = 'mixed',
 	GALAXY_MESSAGE = 'galaxy_message'
 }
 
@@ -417,6 +423,15 @@ export enum WAPixTypes {
 	EMAIL = 'EMAIL',
 	RANDOM = 'EVP',
 	PHONE = 'PHONE'
+}
+
+export enum WAPaymentSettingsTypeEnum {
+	BOLETO = 'boleto',
+	CARDS = 'cards',
+	PAYMENT_GATEWAY = 'payment_gateway',
+	PAYMENT_LINK = 'payment_link',
+	PIX_DYNAMIC_CODE = 'pix_dynamic_code',
+	PIX_STATIC_CODE = 'pix_static_code'
 }
 
 export enum WAPaymentStatusEnum {
