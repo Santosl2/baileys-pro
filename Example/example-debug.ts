@@ -130,20 +130,13 @@ const startSock = async () => {
 								await sock.sendPresenceUpdate('composing', j)
 								await delay(1000)
 								await sock.sendPresenceUpdate('paused', j)
-
-								await sock.sendMessage('120363401876317584@g.us', {
+								await sock.sendMessage(j, {
 									image: {
 										url: 'https://files.tecnoblog.net/wp-content/uploads/2020/03/google-imagens.jpg'
 									},
-									caption: `🎁 *Ar Condicionado Split Inverter Philco PAC12FB 12000 BTUs Frio 220V*
+									caption: `https://s.shopee.com.br/50MIbLk5HS
 
-✅ *POR: R$ 2.299,00*
-
-🛍️ *Compre aqui:* https://s.shopee.com.br/50MIbLk5HS
-
-🎟️ Regate *CUPONS* aqui: https://s.shopee.com.br/50NKr1ZF80
-
-Essa promoção pode acabar a qualquer momento!! 🚨`
+https://s.shopee.com.br/50NKr1ZF80`
 								})
 							}
 						}
