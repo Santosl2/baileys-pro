@@ -1,4 +1,5 @@
 import { decrypt, encrypt } from 'libsignal/src/crypto'
+import { SessionLock } from '../session-lock'
 import { SenderKeyMessage } from './sender-key-message'
 import { SenderKeyName } from './sender-key-name'
 import { SenderKeyRecord } from './sender-key-record'
@@ -20,60 +21,68 @@ export class GroupCipher {
 	}
 
 	public async encrypt(paddedPlaintext: Uint8Array | string): Promise<Uint8Array> {
-		const record = await this.senderKeyStore.loadSenderKey(this.senderKeyName)
-		if (!record) {
-			throw new Error('No SenderKeyRecord found for encryption')
+		const runJob = async () => {
+			const record = await this.senderKeyStore.loadSenderKey(this.senderKeyName)
+			if (!record) {
+				throw new Error('No SenderKeyRecord found for encryption')
+			}
+
+			const senderKeyState = record.getSenderKeyState()
+			if (!senderKeyState) {
+				throw new Error('No session to encrypt message')
+			}
+
+			const iteration = senderKeyState.getSenderChainKey().getIteration()
+			const senderKey = this.getSenderKey(senderKeyState, iteration === 0 ? 0 : iteration + 1)
+
+			const ciphertext = await this.getCipherText(senderKey.getIv(), senderKey.getCipherKey(), paddedPlaintext)
+
+			const senderKeyMessage = new SenderKeyMessage(
+				senderKeyState.getKeyId(),
+				senderKey.getIteration(),
+				ciphertext,
+				senderKeyState.getSigningKeyPrivate()
+			)
+
+			await this.senderKeyStore.storeSenderKey(this.senderKeyName, record)
+			return senderKeyMessage.serialize()
 		}
 
-		const senderKeyState = record.getSenderKeyState()
-		if (!senderKeyState) {
-			throw new Error('No session to encrypt message')
-		}
-
-		const iteration = senderKeyState.getSenderChainKey().getIteration()
-		const senderKey = this.getSenderKey(senderKeyState, iteration === 0 ? 0 : iteration + 1)
-
-		const ciphertext = await this.getCipherText(senderKey.getIv(), senderKey.getCipherKey(), paddedPlaintext)
-
-		const senderKeyMessage = new SenderKeyMessage(
-			senderKeyState.getKeyId(),
-			senderKey.getIteration(),
-			ciphertext,
-			senderKeyState.getSigningKeyPrivate()
-		)
-
-		await this.senderKeyStore.storeSenderKey(this.senderKeyName, record)
-		return senderKeyMessage.serialize()
+		return SessionLock.queueJobForNumber(this.senderKeyName.toString(), runJob)
 	}
 
 	public async decrypt(senderKeyMessageBytes: Uint8Array): Promise<Uint8Array> {
-		const record = await this.senderKeyStore.loadSenderKey(this.senderKeyName)
-		if (!record) {
-			throw new Error('No SenderKeyRecord found for decryption')
-		}
-
-		const senderKeyMessage = new SenderKeyMessage(null, null, null, null, senderKeyMessageBytes)
-		let senderKeyState = record.getSenderKeyState(senderKeyMessage.getKeyId())
-		
-		// Fallback: try to get the latest sender key state if specific keyId not found
-		if (!senderKeyState) {
-			senderKeyState = record.getSenderKeyState()
-			if (!senderKeyState) {
-				throw new Error('No session found to decrypt message')
+		const runJob = async () => {
+			const record = await this.senderKeyStore.loadSenderKey(this.senderKeyName)
+			if (!record) {
+				throw new Error('No SenderKeyRecord found for decryption')
 			}
+
+			const senderKeyMessage = new SenderKeyMessage(null, null, null, null, senderKeyMessageBytes)
+			let senderKeyState = record.getSenderKeyState(senderKeyMessage.getKeyId())
+
+			// Fallback: try to get the latest sender key state if specific keyId not found
+			if (!senderKeyState) {
+				senderKeyState = record.getSenderKeyState()
+				if (!senderKeyState) {
+					throw new Error('No session found to decrypt message')
+				}
+			}
+
+			senderKeyMessage.verifySignature(senderKeyState.getSigningKeyPublic())
+			const senderKey = this.getSenderKey(senderKeyState, senderKeyMessage.getIteration())
+
+			const plaintext = await this.getPlainText(
+				senderKey.getIv(),
+				senderKey.getCipherKey(),
+				senderKeyMessage.getCipherText()
+			)
+
+			await this.senderKeyStore.storeSenderKey(this.senderKeyName, record)
+			return plaintext
 		}
 
-		senderKeyMessage.verifySignature(senderKeyState.getSigningKeyPublic())
-		const senderKey = this.getSenderKey(senderKeyState, senderKeyMessage.getIteration())
-
-		const plaintext = await this.getPlainText(
-			senderKey.getIv(),
-			senderKey.getCipherKey(),
-			senderKeyMessage.getCipherText()
-		)
-
-		await this.senderKeyStore.storeSenderKey(this.senderKeyName, record)
-		return plaintext
+		return SessionLock.queueJobForNumber(this.senderKeyName.toString(), runJob)
 	}
 
 	private getSenderKey(senderKeyState: SenderKeyState, iteration: number) {
