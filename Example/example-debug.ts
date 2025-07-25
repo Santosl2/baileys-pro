@@ -125,7 +125,7 @@ const startSock = async () => {
 							//
 
 							if (command === 'resend') {
-								const j = '120363401876317584@g.us'
+								const j = '120363417393533025@g.us'
 								await sock.presenceSubscribe(j)
 								await sock.sendPresenceUpdate('composing', j)
 								await delay(1000)

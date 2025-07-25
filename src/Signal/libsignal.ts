@@ -2,6 +2,7 @@ import * as libsignal from 'libsignal'
 import { SignalAuthState, SignalKeyStoreWithTransaction } from '../Types'
 import { SignalRepository } from '../Types/Signal'
 import { generateSignalPubKey } from '../Utils'
+import logger from '../Utils/logger'
 import { jidDecode } from '../WABinary'
 import type { SenderKeyStore } from './Group/group_cipher'
 import { SenderKeyName } from './Group/sender-key-name'
@@ -72,9 +73,14 @@ export function makeLibSignalRepository(auth: SignalAuthState): SignalRepository
 
 			// Use transaction to ensure atomicityAdd commentMore actions
 			return (auth.keys as SignalKeyStoreWithTransaction).transaction(async () => {
-				const { type: sigType, body } = await cipher.encrypt(data)
-				const type = sigType === 3 ? 'pkmsg' : 'msg'
-				return { type, ciphertext: Buffer.from(body, 'binary') }
+				try {
+					const { type: sigType, body } = await cipher.encrypt(data)
+					const type = sigType === 3 ? 'pkmsg' : 'msg'
+					return { type, ciphertext: Buffer.from(body, 'binary') }
+				} catch (error) {
+					logger.info(`Encryption failed ${error}`)
+					throw error
+				}
 			})
 		},
 		async encryptGroupMessage({ group, meId, data }) {
@@ -85,18 +91,23 @@ export function makeLibSignalRepository(auth: SignalAuthState): SignalRepository
 
 			// Use transaction to ensure atomicity
 			return (auth.keys as SignalKeyStoreWithTransaction).transaction(async () => {
-				const { [senderNameStr]: senderKey } = await auth.keys.get('sender-key', [senderNameStr])
-				if (!senderKey) {
-					await storage.storeSenderKey(senderName, new SenderKeyRecord())
-				}
+				try {
+					const { [senderNameStr]: senderKey } = await auth.keys.get('sender-key', [senderNameStr])
+					if (!senderKey) {
+						await storage.storeSenderKey(senderName, new SenderKeyRecord())
+					}
 
-				const senderKeyDistributionMessage = await builder.create(senderName)
-				const session = new GroupCipher(storage, senderName)
-				const ciphertext = await session.encrypt(data)
+					const senderKeyDistributionMessage = await builder.create(senderName)
+					const session = new GroupCipher(storage, senderName)
+					const ciphertext = await session.encrypt(data)
 
-				return {
-					ciphertext,
-					senderKeyDistributionMessage: senderKeyDistributionMessage.serialize()
+					return {
+						ciphertext,
+						senderKeyDistributionMessage: senderKeyDistributionMessage.serialize()
+					}
+				} catch (error) {
+					logger.info(`Group message encryption failed ${error}`)
+					throw error
 				}
 			})
 		},

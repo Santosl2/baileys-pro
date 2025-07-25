@@ -132,11 +132,16 @@ const startSock = async () => {
 								await sock.sendPresenceUpdate('paused', j)
 								await sock.sendMessage(j, {
 									image: {
-										url: 'https://files.tecnoblog.net/wp-content/uploads/2020/03/google-imagens.jpg'
+										url: 'https://m.media-amazon.com/images/I/415W9dedoGL.jpg'
 									},
-									caption: `https://s.shopee.com.br/50MIbLk5HS
+									caption: `*SUPER PROMOÇÃO* 😮‍💨
 
-https://s.shopee.com.br/50NKr1ZF80`
+🎁 Supercoffee Lingua de Gato - Economic Size (380g) - Caffeine Army
+
+~De: N/A~
+✅ *POR:* R$ 197,80
+
+Compre aqui: https://amzn.to/4miOyNJ`
 								})
 							}
 						}
