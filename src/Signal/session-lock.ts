@@ -16,7 +16,7 @@ export class SessionLock {
 		const promise = runCurrent
 			.then(function () {
 				if (jobQueue[id] === runCurrent) {
-					console.log(`SessionLock: job for ${id} completed`)
+					//console.log(`SessionLock: job for ${id} completed`)
 					delete jobQueue[id]
 				}
 			})
