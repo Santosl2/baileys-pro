@@ -996,6 +996,7 @@ export const makeChatsSocket = (config: SocketConfig) => {
 					await doAppStateSync()
 				} else {
 					if (needToFlushWithAppStateSync) {
+						needToFlushWithAppStateSync = false
 						ev.flush()
 					}
 				}
@@ -1027,6 +1028,7 @@ export const makeChatsSocket = (config: SocketConfig) => {
 				if (needToFlushWithAppStateSync) {
 					logger.debug('flushing with app state sync')
 					ev.flush()
+					needToFlushWithAppStateSync = false
 				}
 			}
 		}
