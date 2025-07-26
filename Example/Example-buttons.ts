@@ -626,8 +626,11 @@ Selecione e melhor opção:`,
 
 				if (upsert.type === 'notify') {
 					for (const msg of upsert.messages) {
-						const clickedButton = msg.message?.buttonsResponseMessage?.selectedButtonId
+						// Para pegar o botão que o usuário clicou
+						const clickedButton = msg.message?.buttonsResponseMessage?.selectedButtonId || msg.message?.templateButtonReplyMessage?.selectedId
 
+						// console.log(JSONmsg.message?.templateButtonReplyMessage)
+// 
 						if (clickedButton === 'abc') {
 						}
 
