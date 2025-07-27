@@ -613,7 +613,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		logger.debug({ participant, sendToAll }, 'forced new session for retry recp')
 
 		for (const [i, msg] of msgs.entries()) {
-			if (msg) {
+			if (msg && willSendMessageAgain(ids[i], participant)) {
 				updateSendMessageAgainCount(ids[i], participant)
 				const msgRelayOpts: MessageRelayOptions = { messageId: ids[i] }
 
@@ -705,6 +705,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 						if (willSendMessageAgain(ids[0], key.participant)) {
 							if (key.fromMe) {
 								try {
+									updateSendMessageAgainCount(ids[0], key.participant)
 									logger.debug({ attrs, key }, 'recv retry request')
 									await sendMessagesAgain(key, ids, retryNode!)
 								} catch (error) {

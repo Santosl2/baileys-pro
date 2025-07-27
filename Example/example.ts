@@ -4,6 +4,7 @@ import readline from 'readline'
 import makeWASocket, {
 	AnyMessageContent,
 	BinaryInfo,
+	BinaryNode,
 	delay,
 	DisconnectReason,
 	downloadAndProcessHistorySyncNotification,
@@ -85,6 +86,7 @@ const startSock = async () => {
 		logger,
 		// logger: P({ level: 'debug' }),
 		printQRInTerminal: !usePairingCode,
+		
 		auth: {
 			creds: state.creds,
 			/** caching makes the store faster to send/recv messages */
@@ -98,6 +100,8 @@ const startSock = async () => {
 		// shouldIgnoreJid: jid => isJidBroadcast(jid) || isJidNewsletter(jid),
 		// implement to handle retries & poll updates
 		// getMessage,
+		shouldSyncHistoryMessage: jid => false,
+		getMessage
 	})
 
 	// Pairing code for Web clients
@@ -151,6 +155,65 @@ const startSock = async () => {
 				// THIS INCLUDES STUFF LIKE ocVersion WHICH IS CRUCIAL FOR THE PREVENTION OF THE WARNING
 				const sendWAMExample = false
 				if (connection === 'open') {
+	const mockReceiptNode: BinaryNode = {
+	tag: 'receipt',
+	attrs: {
+		id: 'ABC12345DEF',
+		from: '12001234567@whatsapp.net',
+		participant: '12007654321@whatsapp.net',
+		type: 'retry',
+		t: `${Math.floor(Date.now() / 1000)}`,
+		// recipient: 'me@whatsapp.net'
+	},
+	content: [
+		{
+			tag: 'list',
+			attrs: {},
+			content: [
+				{
+					tag: 'item',
+					attrs: { id: 'MSGID1' },
+					content: []
+				},
+				{
+					tag: 'item',
+					attrs: { id: 'MSGID2' },
+					content: []
+				}
+			]
+		},
+		{
+			tag: 'retry',
+			attrs: {
+				count: '1',
+				id: 'ABC12345DEF',
+				t: `${Math.floor(Date.now() / 1000)}`,
+				v: '1',
+				phash: 'prekey-hash',
+				recvTimestamp: `${Date.now()}`,
+				// exclusivos de mensagens E2E com cifragem
+				retryId: 'retry-uuid-001',
+				epoch: '1',
+				skey: 'symmetric-key',
+				enc: 'encrypted-payload',
+				version: '2'
+			},
+			content: []
+		},
+		{
+			tag: 'registration',
+			attrs: {
+				id: 'device-registration-id'
+			},
+			content: []
+		}
+	]
+}
+
+for(let i = 0; i < 10; i++) {
+sock.ws.emit('CB:receipt', mockReceiptNode)
+ }
+
 					const buttons: proto.Message.ButtonsMessage.IButton[] = [
 						{ buttonId: 'id1', buttonText: { displayText: 'Teste' }, type: 1 },
 						{ buttonId: 'id2', buttonText: { displayText: 'Teste 2' }, type: 1 }
@@ -225,76 +288,53 @@ const startSock = async () => {
 			// received a new message
 			if (events['messages.upsert']) {
 				const upsert = events['messages.upsert']
-
+				console.log('recv messages.upsert', JSON.stringify(upsert, undefined, 2))
 				
 
 				if (upsert.type === 'notify') {
 					for (const msg of upsert.messages) {
 						if(msg.key.fromMe){
-							
-								const listMessage = proto.Message.ListMessage.create({
-						title: 'List Message Title',
-						description: 'List Message Description',
-						buttonText: 'Click Me',
-						listType: proto.Message.ListMessage.ListType.SINGLE_SELECT,
-						sections: [
-							{
-								title: '',
-								rows: [
-									{
-										title: 'COncordo',
-										rowId: 'rowId_1'
-									},
-									{
-										title: 'TEste',
-										rowId: 'rowId_2'
-									}
-								]
-							}
-						]
-					})
-
-					console.log('sending list message', listMessage)
+						
 
 					// Send OTP 
-					await sock.relayMessage('553185702237@s.whatsapp.net', {
-						interactiveMessage: {
-							body: {
-								text: 'List Message Body'
-							},
-							nativeFlowMessage: {
-								buttons: [
-          {
-            name: "cta_copy",
-            buttonParamsJson: "{\"fix\":true,\"display_text\":\"Copiar código\",\"copy_code\":\"123\"}",
-          },
-        ],
-							}
-						}
-					}, {
-						additionalNodes: [{
-  "tag": "biz",
-  "attrs": {},
-  "content": [
-    {
-      "tag": "interactive",
-      "attrs": {
-        "type": "native_flow"
-      },
-      "content": [
-        {
-          "tag": "native_flow",
-          "attrs": {
-            "v": "2",
-            "name": "mixed"
-          }
-        }
-      ]
-    }
-  ]
-}
-]
-					})
+// 					await sock.relayMessage('553185702237@s.whatsapp.net', {
+// 						interactiveMessage: {
+// 							body: {
+// 								text: 'List Message Body'
+// 							},
+// 							nativeFlowMessage: {
+// 								buttons: [
+//           {
+//             name: "cta_copy",
+//             buttonParamsJson: "{\"fix\":true,\"display_text\":\"Copiar código\",\"copy_code\":\"123\"}",
+//           },
+//         ],
+// 							}
+// 						}
+// 					}, {
+// 						additionalNodes: [{
+//   "tag": "biz",
+//   "attrs": {},
+//   "content": [
+//     {
+//       "tag": "interactive",
+//       "attrs": {
+//         "type": "native_flow"
+//       },
+//       "content": [
+//         {
+//           "tag": "native_flow",
+//           "attrs": {
+//             "v": "2",
+//             "name": "mixed"
+//           }
+//         }
+//       ]
+//     }
+//   ]
+// }
+// ]
+// 					})
 
 						}
 						//TODO: More built-in implementation of this
@@ -388,7 +428,7 @@ const startSock = async () => {
 			}
 
 			if (events['chats.update']) {
-				console.log(events['chats.update'])
+			
 			}
 
 			if (events['contacts.update']) {
@@ -412,6 +452,7 @@ const startSock = async () => {
 		// Implement a way to retreive messages that were upserted from messages.upsert
 		// up to you
 
+		console.log('getMessage', key)
 		// only if store is present
 		return proto.Message.fromObject({})
 	}
