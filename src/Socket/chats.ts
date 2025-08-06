@@ -993,6 +993,12 @@ export const makeChatsSocket = (config: SocketConfig) => {
 			(async () => {
 				if (historyMsg && authState.creds.myAppStateKeyId) {
 					pendingAppStateSync = false
+
+					if (!shouldProcessHistoryMsg) {
+						needToFlushWithAppStateSync = false
+						ev.flush()
+					}
+
 					await doAppStateSync()
 				} else {
 					if (needToFlushWithAppStateSync) {
