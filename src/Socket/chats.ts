@@ -1030,12 +1030,12 @@ export const makeChatsSocket = (config: SocketConfig) => {
 
 				const accountSyncCounter = (authState.creds.accountSyncCounter || 0) + 1
 				ev.emit('creds.update', { accountSyncCounter })
+			}
 
-				if (needToFlushWithAppStateSync) {
-					logger.debug('flushing with app state sync')
-					ev.flush()
-					needToFlushWithAppStateSync = false
-				}
+			if (needToFlushWithAppStateSync) {
+				logger.debug('flushing with app state sync')
+				ev.flush()
+				needToFlushWithAppStateSync = false
 			}
 		}
 	})
