@@ -1001,7 +1001,7 @@ export const makeChatsSocket = (config: SocketConfig) => {
 
 					await doAppStateSync()
 				} else {
-					if (needToFlushWithAppStateSync) {
+					if (needToFlushWithAppStateSync || !shouldProcessHistoryMsg) {
 						needToFlushWithAppStateSync = false
 						ev.flush()
 					}
