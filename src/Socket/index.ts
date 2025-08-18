@@ -3,10 +3,17 @@ import { UserFacingSocketConfig } from '../Types'
 import { makeBusinessSocket } from './business'
 
 // export the last socket layer
-const makeWASocket = (config: UserFacingSocketConfig) =>
-	makeBusinessSocket({
+const makeWASocket = (config: UserFacingSocketConfig) => {
+	const newConfig = {
 		...DEFAULT_CONNECTION_CONFIG,
 		...config
-	})
+	}
+
+	if (config.shouldSyncHistoryMessage === undefined) {
+		newConfig.shouldSyncHistoryMessage = () => !!newConfig.syncFullHistory
+	}
+
+	return makeBusinessSocket(newConfig)
+}
 
 export default makeWASocket
