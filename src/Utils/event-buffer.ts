@@ -150,6 +150,7 @@ export const makeEventBuffer = (logger: ILogger): BaileysBufferableEventEmitter 
 				try {
 					return await work(...args)
 				} finally {
+					flush()
 					// Flushing is now controlled centrally by the state machine.
 				}
 			}
