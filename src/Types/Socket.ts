@@ -20,6 +20,10 @@ export type CacheStore = {
 	del(key: string): void
 	/** flush all data */
 	flushAll(): void
+	/** mset multiple values at once */
+	mset<T>(values: { key: string; value: T }[]): Promise<void>
+	/** get multiple values at once */
+	mget<T>(keys: string[]): (T | undefined)[]
 }
 
 export type PatchedMessageWithRecipientJID = proto.IMessage & { recipientJid?: string }
