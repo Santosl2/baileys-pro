@@ -34,7 +34,7 @@ const msgRetryCounterCache = new NodeCache()
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
 const question = (text: string) => new Promise<string>(resolve => rl.question(text, resolve))
 
-const WHATSAPP_NUMBER = '554499701349@s.whatsapp.net'
+const WHATSAPP_NUMBER = '553185702237@s.whatsapp.net'
 // start a connection
 const startSock = async () => {
 	const { state, saveCreds } = await useMultiFileAuthState('baileys_auth_info')

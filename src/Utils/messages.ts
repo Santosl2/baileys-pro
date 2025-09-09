@@ -583,8 +583,13 @@ export const generateWAMessageContent = async (
 				buttonsMessage.contentText = message.caption
 			}
 
-			const type = Object.keys(m)[0].replace('Message', '').toUpperCase()
-			buttonsMessage.headerType = ButtonType[type]
+			if (Object.keys(m)?.length) {
+				const firstKey = Object.keys(m)[0]
+				const type = firstKey ? firstKey.replace('Message', '').toUpperCase() : undefined
+				if (type && ButtonType[type as keyof typeof ButtonType] !== undefined) {
+					buttonsMessage.headerType = ButtonType[type as keyof typeof ButtonType]
+				}
+			}
 
 			Object.assign(buttonsMessage, m)
 		}
@@ -650,7 +655,7 @@ export const generateWAMessageContent = async (
 
 	if ('interactiveButtons' in message && !!message.interactiveButtons) {
 		const interactiveMessage: proto.Message.IInteractiveMessage = {
-			nativeFlowMessage: WAProto.Message.InteractiveMessage.NativeFlowMessage.fromObject({
+			nativeFlowMessage: WAProto.Message.InteractiveMessage.NativeFlowMessage.create({
 				buttons: message.interactiveButtons
 			})
 		}
@@ -708,7 +713,7 @@ export const generateWAMessageContent = async (
 
 				if (product) {
 					const { imageMessage } = await prepareWAMessageMedia({ image: product.productImage, ...options }, options)
-					header = WAProto.Message.InteractiveMessage.Header.fromObject({
+					header = WAProto.Message.InteractiveMessage.Header.create({
 						productMessage: {
 							product: {
 								...product,
@@ -718,16 +723,18 @@ export const generateWAMessageContent = async (
 						}
 					})
 				} else if (image) {
+					//@ts-expect-error
 					header = await prepareWAMessageMedia({ image: image, ...options }, options)
 				} else if (video) {
+					//@ts-expect-error
 					header = await prepareWAMessageMedia({ video: video, ...options }, options)
 				}
 
 				const msg = {
 					header: {
+						...header,
 						title,
-						hasMediaAttachment: true,
-						...header
+						hasMediaAttachment: true
 					},
 					body: {
 						text: body

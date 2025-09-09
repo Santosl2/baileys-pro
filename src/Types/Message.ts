@@ -216,7 +216,7 @@ type RequestPhoneNumber = {
 }
 
 export type ListButtonsTypes = Buttonable & Templatable & Interactiveable & Cardsable & Shopable
-export type MediaType = keyof typeof MEDIA_HKDF_KEY_MAPPING
+
 export type AnyMediaMessageContent = (
 	| ({
 			image: WAMediaUpload

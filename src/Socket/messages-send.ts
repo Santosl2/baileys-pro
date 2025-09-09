@@ -2,15 +2,15 @@ import NodeCache from '@cacheable/node-cache'
 import { Boom } from '@hapi/boom'
 import { proto } from '../../WAProto/index.js'
 import { DEFAULT_CACHE_TTLS, WA_DEFAULT_EPHEMERAL } from '../Defaults'
-import type {
-	AnyMessageContent,
-	MediaConnInfo,
-	MessageReceiptType,
-	MessageRelayOptions,
-	MiscMessageGenerationOptions,
-	SocketConfig,
+import {
 	WAInteractiveMessagesNativeFlowName,
-	WAMessageKey
+	type AnyMessageContent,
+	type MediaConnInfo,
+	type MessageReceiptType,
+	type MessageRelayOptions,
+	type MiscMessageGenerationOptions,
+	type SocketConfig,
+	type WAMessageKey
 } from '../Types'
 import { WAMessageAddressingMode } from '../Types'
 import {
