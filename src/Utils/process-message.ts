@@ -1,6 +1,6 @@
-import { AxiosRequestConfig } from 'axios'
-import { proto } from '../../WAProto'
-import {
+import type { AxiosRequestConfig } from 'axios'
+import { proto } from '../../WAProto/index.js'
+import type {
 	AuthenticationCreds,
 	BaileysEventEmitter,
 	CacheStore,
@@ -10,14 +10,15 @@ import {
 	RequestJoinAction,
 	RequestJoinMethod,
 	SignalKeyStoreWithTransaction,
-	WAMessageStubType
+	SignalRepository
 } from '../Types'
+import { WAMessageStubType } from '../Types'
 import { getContentType, normalizeMessageContent } from '../Utils/messages'
 import { areJidsSameUser, isJidBroadcast, isJidStatusBroadcast, jidNormalizedUser } from '../WABinary'
 import { aesDecryptGCM, hmacSign } from './crypto'
 import { toNumber } from './generics'
 import { downloadAndProcessHistorySyncNotification } from './history'
-import { ILogger } from './logger'
+import type { ILogger } from './logger'
 
 type ProcessMessageContext = {
 	shouldProcessHistoryMsg: boolean
@@ -27,6 +28,7 @@ type ProcessMessageContext = {
 	ev: BaileysEventEmitter
 	logger?: ILogger
 	options: AxiosRequestConfig<{}>
+	signalRepository: SignalRepository
 }
 
 const REAL_MSG_STUB_TYPES = new Set([
@@ -145,7 +147,16 @@ export function decryptPollVote(
 
 const processMessage = async (
 	message: proto.IWebMessageInfo,
-	{ shouldProcessHistoryMsg, placeholderResendCache, ev, creds, keyStore, logger, options }: ProcessMessageContext
+	{
+		shouldProcessHistoryMsg,
+		placeholderResendCache,
+		ev,
+		creds,
+		signalRepository,
+		keyStore,
+		logger,
+		options
+	}: ProcessMessageContext
 ) => {
 	const meId = creds.me!.id
 	const { accountSettings } = creds
@@ -225,7 +236,7 @@ const processMessage = async (
 						}
 
 						logger?.info({ newAppStateSyncKeyId, newKeys }, 'injecting new app state sync keys')
-					})
+					}, meId)
 
 					ev.emit('creds.update', { myAppStateKeyId: newAppStateSyncKeyId })
 				} else {
@@ -273,6 +284,7 @@ const processMessage = async (
 					}
 				}
 
+				break
 			case proto.Message.ProtocolMessage.Type.MESSAGE_EDIT:
 				ev.emit('messages.update', [
 					{
@@ -291,6 +303,19 @@ const processMessage = async (
 					}
 				])
 				break
+			case proto.Message.ProtocolMessage.Type.LID_MIGRATION_MAPPING_SYNC:
+				const lidMappingStore = signalRepository.getLIDMappingStore()
+				const encodedPayload = protocolMsg.lidMigrationMappingSyncMessage?.encodedMappingPayload!
+				const { pnToLidMappings, chatDbMigrationTimestamp } =
+					proto.LIDMigrationMappingSyncPayload.decode(encodedPayload)
+				logger?.debug({ pnToLidMappings, chatDbMigrationTimestamp }, 'got lid mappings and chat db migration timestamp')
+				const pairs = []
+				for (const { pn, latestLid, assignedLid } of pnToLidMappings) {
+					const lid = latestLid || assignedLid
+					pairs.push({ lid: `${lid}@lid`, pn: `${pn}@s.whatsapp.net` })
+				}
+
+				await lidMappingStore.storeLIDPNMappings(pairs)
 		}
 	} else if (content?.reactionMessage) {
 		const reaction: proto.IReaction = {

@@ -1,12 +1,12 @@
-import { AxiosRequestConfig } from 'axios'
+import type { AxiosRequestConfig } from 'axios'
 import type { Agent } from 'https'
 import type { URL } from 'url'
-import { proto } from '../../WAProto'
-import { ILogger } from '../Utils/logger'
-import { AuthenticationState, SignalAuthState, TransactionCapabilityOptions } from './Auth'
-import { GroupMetadata } from './GroupMetadata'
-import { MediaConnInfo } from './Message'
-import { SignalRepository } from './Signal'
+import { proto } from '../../WAProto/index.js'
+import type { ILogger } from '../Utils/logger'
+import type { AuthenticationState, SignalAuthState, TransactionCapabilityOptions } from './Auth'
+import type { GroupMetadata } from './GroupMetadata'
+import { type MediaConnInfo } from './Message'
+import type { SignalRepository } from './Signal'
 
 export type WAVersion = [number, number, number]
 export type WABrowserDescription = [string, string, string]
@@ -95,6 +95,12 @@ export type SocketConfig = {
 	 * */
 	generateHighQualityLinkPreview: boolean
 
+	/** Enable automatic session recreation for failed messages */
+	enableAutoSessionRecreation: boolean
+
+	/** Enable recent message caching for retry handling */
+	enableRecentMessageCache: boolean
+
 	/**
 	 * Returns if a jid should be ignored,
 	 * no event for that jid will be triggered.
@@ -131,5 +137,15 @@ export type SocketConfig = {
 	/** cached group metadata, use to prevent redundant requests to WA & speed up msg sending */
 	cachedGroupMetadata: (jid: string) => Promise<GroupMetadata | undefined>
 
-	makeSignalRepository: (auth: SignalAuthState) => SignalRepository
+	makeSignalRepository: (
+		auth: SignalAuthState,
+		onWhatsAppFunc?: (...jids: string[]) => Promise<
+			| {
+					jid: string
+					exists: boolean
+					lid: string
+			  }[]
+			| undefined
+		>
+	) => SignalRepository
 }

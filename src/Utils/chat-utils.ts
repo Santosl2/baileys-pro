@@ -1,7 +1,7 @@
 import { Boom } from '@hapi/boom'
-import { AxiosRequestConfig } from 'axios'
-import { proto } from '../../WAProto'
-import {
+import type { AxiosRequestConfig } from 'axios'
+import { proto } from '../../WAProto/index.js'
+import type {
 	BaileysEventEmitter,
 	Chat,
 	ChatModification,
@@ -14,18 +14,15 @@ import {
 	WAPatchCreate,
 	WAPatchName
 } from '../Types'
-import { ChatLabelAssociation, LabelAssociationType, MessageLabelAssociation } from '../Types/LabelAssociation'
 import {
-	BinaryNode,
-	getBinaryNodeChild,
-	getBinaryNodeChildren,
-	isJidGroup,
-	isJidUser,
-	jidNormalizedUser
-} from '../WABinary'
+	type ChatLabelAssociation,
+	LabelAssociationType,
+	type MessageLabelAssociation
+} from '../Types/LabelAssociation'
+import { type BinaryNode, getBinaryNodeChild, getBinaryNodeChildren, isJidGroup, jidNormalizedUser } from '../WABinary'
 import { aesDecrypt, aesEncrypt, hkdf, hmacSign } from './crypto'
 import { toNumber } from './generics'
-import logger, { ILogger } from './logger'
+import type { ILogger } from './logger'
 import { LT_HASH_ANTI_TAMPERING } from './lt-hash'
 import { downloadContentFromMessage } from './messages-media'
 
@@ -158,7 +155,7 @@ export const encodeSyncdPatch = async (
 	state = { ...state, indexValueMap: { ...state.indexValueMap } }
 
 	const indexBuffer = Buffer.from(JSON.stringify(index))
-	const dataProto = proto.SyncActionData.fromObject({
+	const dataProto = proto.SyncActionData.create({
 		index: indexBuffer,
 		value: syncAction,
 		padding: new Uint8Array(0),
@@ -240,13 +237,13 @@ export const decodeSyncdMutations = async (
 		const syncAction = proto.SyncActionData.decode(result)
 
 		if (validateMacs) {
-			const hmac = hmacSign(syncAction.index!, key.indexKey)
+			const hmac = hmacSign(syncAction.index, key.indexKey)
 			if (Buffer.compare(hmac, record.index!.blob!) !== 0) {
 				throw new Boom('HMAC index verification failed')
 			}
 		}
 
-		const indexStr = Buffer.from(syncAction.index!).toString()
+		const indexStr = Buffer.from(syncAction.index).toString()
 		onMutation({ syncAction, index: JSON.parse(indexStr) })
 
 		ltGenerator.mix({
@@ -344,7 +341,7 @@ export const extractSyncdPatches = async (result: BinaryNode, options: AxiosRequ
 
 					const syncd = proto.SyncdPatch.decode(content as Uint8Array)
 					if (!syncd.version) {
-						syncd.version = { version: +collectionNode.attrs.version + 1 }
+						syncd.version = { version: +collectionNode.attrs.version! + 1 }
 					}
 
 					syncds.push(syncd)
@@ -616,8 +613,18 @@ export const chatModificationToAppPatch = (mod: ChatModification, jid: string) =
 			apiVersion: 2,
 			operation: mod.contact ? OP.SET : OP.REMOVE
 		}
+	} else if ('disableLinkPreviews' in mod) {
+		patch = {
+			syncAction: {
+				privacySettingDisableLinkPreviewsAction: mod.disableLinkPreviews || {}
+			},
+			index: ['setting_disableLinkPreviews'],
+			type: 'regular',
+			apiVersion: 8,
+			operation: OP.SET
+		}
 	} else if ('star' in mod) {
-		const key = mod.star.messages[0]
+		const key = mod.star.messages[0]!
 		patch = {
 			syncAction: {
 				starAction: {
@@ -651,6 +658,22 @@ export const chatModificationToAppPatch = (mod: ChatModification, jid: string) =
 			index: ['setting_pushName'],
 			type: 'critical_block',
 			apiVersion: 1,
+			operation: OP.SET
+		}
+	} else if ('quickReply' in mod) {
+		patch = {
+			syncAction: {
+				quickReplyAction: {
+					count: 0,
+					deleted: mod.quickReply.deleted || false,
+					keywords: [],
+					message: mod.quickReply.message || '',
+					shortcut: mod.quickReply.shortcut || ''
+				}
+			},
+			index: ['quick_reply', mod.quickReply.timestamp || String(Math.floor(Date.now() / 1000))],
+			type: 'regular',
+			apiVersion: 2,
 			operation: OP.SET
 		}
 	} else if ('addLabel' in mod) {
@@ -754,7 +777,7 @@ export const processSyncAction = (
 			{
 				id,
 				muteEndTime: action.muteAction?.muted ? toNumber(action.muteAction.muteEndTimestamp) : null,
-				conditional: getChatUpdateConditional(id, undefined)
+				conditional: getChatUpdateConditional(id!, undefined)
 			}
 		])
 	} else if (action?.archiveChatAction || type === 'archive' || type === 'unarchive') {
@@ -783,7 +806,7 @@ export const processSyncAction = (
 			{
 				id,
 				archived: isArchived,
-				conditional: getChatUpdateConditional(id, msgRange)
+				conditional: getChatUpdateConditional(id!, msgRange)
 			}
 		])
 	} else if (action?.markChatAsReadAction) {
@@ -797,7 +820,7 @@ export const processSyncAction = (
 			{
 				id,
 				unreadCount: isNullUpdate ? null : !!markReadAction?.read ? 0 : -1,
-				conditional: getChatUpdateConditional(id, markReadAction?.messageRange)
+				conditional: getChatUpdateConditional(id!, markReadAction?.messageRange)
 			}
 		])
 	} else if (action?.deleteMessageForMeAction || type === 'deleteMessageForMe') {
@@ -813,10 +836,10 @@ export const processSyncAction = (
 	} else if (action?.contactAction) {
 		ev.emit('contacts.upsert', [
 			{
-				id: id,
+				id: id!,
 				name: action.contactAction.fullName!,
 				lid: action.contactAction.lidJid || undefined,
-				jid: isJidUser(id) ? id : undefined
+				phoneNumber: action.contactAction.pnJid || undefined
 			}
 		])
 	} else if (action?.pushNameSetting) {
@@ -829,7 +852,7 @@ export const processSyncAction = (
 			{
 				id,
 				pinned: action.pinAction?.pinned ? toNumber(action.timestamp) : null,
-				conditional: getChatUpdateConditional(id, undefined)
+				conditional: getChatUpdateConditional(id!, undefined)
 			}
 		])
 	} else if (action?.unarchiveChatsSetting) {
@@ -854,13 +877,13 @@ export const processSyncAction = (
 		])
 	} else if (action?.deleteChatAction || type === 'deleteChat') {
 		if (!isInitialSync) {
-			ev.emit('chats.delete', [id])
+			ev.emit('chats.delete', [id!])
 		}
 	} else if (action?.labelEditAction) {
 		const { name, color, deleted, predefinedId } = action.labelEditAction
 
 		ev.emit('labels.edit', {
-			id,
+			id: id!,
 			name: name!,
 			color: color!,
 			deleted: deleted!,

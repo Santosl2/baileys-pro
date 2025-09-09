@@ -1,12 +1,7 @@
+/* @ts-ignore */
 import { calculateSignature, verifySignature } from 'libsignal/src/curve'
-import { proto } from '../../../WAProto'
+import { proto } from '../../../WAProto/index.js'
 import { CiphertextMessage } from './ciphertext-message'
-
-interface SenderKeyMessageStructure {
-	id: number
-	iteration: number
-	ciphertext: string | Buffer
-}
 
 export class SenderKeyMessage extends CiphertextMessage {
 	private readonly SIGNATURE_LENGTH = 64
@@ -27,10 +22,10 @@ export class SenderKeyMessage extends CiphertextMessage {
 		super()
 
 		if (serialized) {
-			const version = serialized[0]
+			const version = serialized[0]!
 			const message = serialized.slice(1, serialized.length - this.SIGNATURE_LENGTH)
 			const signature = serialized.slice(-1 * this.SIGNATURE_LENGTH)
-			const senderKeyMessage = proto.SenderKeyMessage.decode(message).toJSON() as SenderKeyMessageStructure
+			const senderKeyMessage = proto.SenderKeyMessage.decode(message)
 
 			this.serialized = serialized
 			this.messageVersion = (version & 0xff) >> 4
