@@ -26,9 +26,7 @@ import {
 	WAPrivacyValue,
 	WAReadReceiptsValue
 } from '../Types'
-import { ALL_WA_PATCH_NAMES } from '../Types'
 import type { LabelActionBody } from '../Types/Label'
-import { SyncState } from '../Types/State'
 import {
 	chatModificationToAppPatch,
 	ChatMutationMap,
