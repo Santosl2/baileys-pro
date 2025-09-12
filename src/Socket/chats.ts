@@ -26,7 +26,9 @@ import {
 	WAPrivacyValue,
 	WAReadReceiptsValue
 } from '../Types'
-import { LabelActionBody } from '../Types/Label'
+import { ALL_WA_PATCH_NAMES } from '../Types'
+import type { LabelActionBody } from '../Types/Label'
+import { SyncState } from '../Types/State'
 import {
 	chatModificationToAppPatch,
 	ChatMutationMap,
@@ -67,10 +69,12 @@ export const makeChatsSocket = (config: SocketConfig) => {
 	const { ev, ws, authState, generateMessageTag, sendNode, query, onUnexpectedError } = sock
 
 	let privacySettings: { [_: string]: string } | undefined
-	let syncState: SyncState = SyncState.Connecting
 
+	let syncState: SyncState = SyncState.Connecting
 	/** this mutex ensures that the notifications (receipts, messages etc.) are processed in order */
 	const processingMutex = makeMutex()
+
+	// Timeout for AwaitingInitialSync state
 	let awaitingSyncTimeout: NodeJS.Timeout | undefined
 
 	const placeholderResendCache =
@@ -846,6 +850,18 @@ export const makeChatsSocket = (config: SocketConfig) => {
 	}
 
 	/**
+	 * Enable/Disable link preview privacy, not related to baileys link preview generation
+	 */
+	const updateDisableLinkPreviewsPrivacy = (isPreviewsDisabled: boolean) => {
+		return chatModify(
+			{
+				disableLinkPreviews: { isPreviewsDisabled }
+			},
+			''
+		)
+	}
+
+	/**
 	 * Star or Unstar a message
 	 */
 	const star = (jid: string, messages: { id: string; fromMe?: boolean }[], star: boolean) => {
@@ -1137,6 +1153,7 @@ export const makeChatsSocket = (config: SocketConfig) => {
 		updateProfileStatus,
 		updateProfileName,
 		updateBlockStatus,
+		updateDisableLinkPreviewsPrivacy,
 		updateCallPrivacy,
 		updateMessagesPrivacy,
 		updateLastSeenPrivacy,
