@@ -17,7 +17,7 @@ export class USyncLIDProtocol implements USyncQueryProtocol {
 
 	parser(node: BinaryNode): string | null {
 		if (node.tag === 'lid') {
-			return node.attrs.val
+			return node.attrs.val!
 		}
 
 		return null

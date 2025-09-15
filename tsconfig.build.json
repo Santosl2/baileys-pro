@@ -1,7 +1,11 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
-    "noEmit": false,
+   "noEmitOnError": false,
+    "skipLibCheck": true,
+    "verbatimModuleSyntax": false,
+    "checkJs": false,
+    "strict": false,
     "allowImportingTsExtensions": false,
     "outDir": "lib",
     "declaration": true,

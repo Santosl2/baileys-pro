@@ -26,7 +26,7 @@ export class USyncStatusProtocol implements USyncQueryProtocol {
 			let status: string | null = node?.content?.toString() ?? null
 			const setAt = new Date(+(node?.attrs.t || 0) * 1000)
 			if (!status) {
-				if (+node.attrs?.code === 401) {
+				if (+node.attrs?.code! === 401) {
 					status = ''
 				} else {
 					status = null

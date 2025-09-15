@@ -15,7 +15,7 @@ export type BotProfileInfo = {
 	category: string
 	isDefault: boolean
 	prompts: string[]
-	personaId: string
+	personaId?: string
 	commands: BotProfileCommand[]
 	commandsDescription: string
 }
@@ -35,7 +35,7 @@ export class USyncBotProfileProtocol implements USyncQueryProtocol {
 		return {
 			tag: 'bot',
 			attrs: {},
-			content: [{ tag: 'profile', attrs: { persona_id: user.personaId } }]
+			content: [{ tag: 'profile', attrs: { persona_id: user.personaId! } }]
 		}
 	}
 
@@ -62,7 +62,7 @@ export class USyncBotProfileProtocol implements USyncQueryProtocol {
 
 		return {
 			isDefault: !!getBinaryNodeChild(profile, 'default'),
-			jid: node.attrs.jid,
+			jid: node.attrs.jid!,
 			name: getBinaryNodeChildString(profile, 'name')!,
 			attributes: getBinaryNodeChildString(profile, 'attributes')!,
 			description: getBinaryNodeChildString(profile, 'description')!,

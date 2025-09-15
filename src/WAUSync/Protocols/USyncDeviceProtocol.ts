@@ -49,8 +49,8 @@ export class USyncDeviceProtocol implements USyncQueryProtocol {
 
 			if (Array.isArray(deviceListNode?.content)) {
 				for (const { tag, attrs } of deviceListNode.content) {
-					const id = +attrs.id
-					const keyIndex = +attrs['key-index']
+					const id = +attrs.id!
+					const keyIndex = +attrs['key-index']!
 					if (tag === 'device') {
 						deviceList.push({
 							id,
