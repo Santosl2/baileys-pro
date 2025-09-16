@@ -416,6 +416,7 @@ export const makeSocket = (config: SocketConfig) => {
 					},
 					content: [{ tag: 'ping', attrs: {} }]
 				}).catch(err => {
+					end(new Boom('Connection was lost', { statusCode: DisconnectReason.connectionLost, data: err }))
 					logger.error({ trace: err.stack }, 'error in sending keep alive')
 				})
 			} else {
