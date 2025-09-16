@@ -370,14 +370,14 @@ export const addTransactionCapability = (
 						logger.info({ idsRequiringFetch }, 'processing sender keys in transaction')
 						// For sender keys, process each one with queued operations to maintain serialization
 
-	// Batch fetch all sender keys first, then queue individual cache updates
+						// Batch fetch all sender keys first, then queue individual cache updates
 						const batchResult = await state.get(type, idsRequiringFetch)
 						logger.debug({ fetched: Object.keys(batchResult).length }, 'fetched sender keys in batch')
 						const updatePromises = idsRequiringFetch.map(senderKeyName =>
 							queueSenderKeyOperation(senderKeyName, async () => {
 								transactionCache[type] ||= {}
 								if (batchResult[senderKeyName]) {
-									(transactionCache[type]! as any)[senderKeyName] = batchResult[senderKeyName]
+									;(transactionCache[type]! as any)[senderKeyName] = batchResult[senderKeyName]
 								}
 							})
 						)
@@ -455,21 +455,19 @@ export const addTransactionCapability = (
 				if (hasSenderKeys) {
 					logger.info({ senderKeyNames }, 'processing sender key set operations')
 					// Handle sender key operations with per-key queues
-					for (const senderKeyName of senderKeyNames) {
-						await queueSenderKeyOperation(senderKeyName, async () => {
-							// Create data subset for this specific sender key
-							const senderKeyData = {
-								'sender-key': {
-									[senderKeyName]: data['sender-key']![senderKeyName]
-								}
-							}
 
-							logger.trace({ senderKeyName }, 'storing sender key')
-							// Apply changes to the store
-							await state.set(senderKeyData)
-							logger.trace({ senderKeyName }, 'sender key stored')
-						})
-					}
+					await Promise.all(
+						senderKeyNames.map(senderKeyName =>
+							queueSenderKeyOperation(senderKeyName, async () => {
+								const senderKeyData = {
+									'sender-key': {
+										[senderKeyName]: data['sender-key']![senderKeyName]
+									}
+								}
+								await state.set(senderKeyData)
+							})
+						)
+					)
 
 					// Handle any non-sender-key data with regular mutexes
 					const nonSenderKeyData = { ...data }
