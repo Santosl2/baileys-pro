@@ -372,11 +372,12 @@ export const addTransactionCapability = (
 
 	// Batch fetch all sender keys first, then queue individual cache updates
 						const batchResult = await state.get(type, idsRequiringFetch)
+						logger.debug({ fetched: Object.keys(batchResult).length }, 'fetched sender keys in batch')
 						const updatePromises = idsRequiringFetch.map(senderKeyName =>
 							queueSenderKeyOperation(senderKeyName, async () => {
 								transactionCache[type] ||= {}
 								if (batchResult[senderKeyName]) {
-									transactionCache[type]![senderKeyName] = batchResult[senderKeyName]
+									(transactionCache[type]! as any)[senderKeyName] = batchResult[senderKeyName]
 								}
 							})
 						)
