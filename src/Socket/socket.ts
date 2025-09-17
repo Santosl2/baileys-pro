@@ -632,8 +632,12 @@ export const makeSocket = (config: SocketConfig) => {
 	})
 	// login complete
 	ws.on('CB:success', async (node: BinaryNode) => {
-		await uploadPreKeysToServerIfRequired()
-		await sendPassiveIq('active')
+		try {
+			await uploadPreKeysToServerIfRequired()
+			await sendPassiveIq('active')
+		} catch (error) {
+			logger.error({ error }, 'error in post login tasks')
+		}
 
 		logger.info('opened connection to WA')
 		clearTimeout(qrTimer) // will never happen in all likelyhood -- but just in case WA sends success on first try
