@@ -334,13 +334,6 @@ export const makeSocket = (config: SocketConfig) => {
 
 	const end = (error: Error | undefined) => {
 		if (closed) {
-			ev.emit('connection.update', {
-				connection: 'close',
-				lastDisconnect: {
-					error,
-					date: new Date()
-				}
-			})
 			logger.trace({ trace: error?.stack }, 'connection already closed')
 			return
 		}
