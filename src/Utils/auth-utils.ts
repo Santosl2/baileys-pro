@@ -370,30 +370,30 @@ export const addTransactionCapability = (
 						logger.info({ idsRequiringFetch }, 'processing sender keys in transaction')
 						// For sender keys, process each one with queued operations to maintain serialization
 
-						// // Batch fetch all sender keys first, then queue individual cache updates
-						// const batchResult = await state.get(type, idsRequiringFetch)
-						// logger.debug({ fetched: Object.keys(batchResult).length }, 'fetched sender keys in batch')
-						// const updatePromises = idsRequiringFetch.map(senderKeyName =>
-						// 	queueSenderKeyOperation(senderKeyName, async () => {
-						// 		transactionCache[type] ||= {}
-						// 		if (batchResult[senderKeyName]) {
-						// 			;(transactionCache[type]! as any)[senderKeyName] = batchResult[senderKeyName]
-						// 		}
-						// 	})
-						// )
-						// await Promise.all(updatePromises)
-						// logger.info({ count: idsRequiringFetch.length }, 'sender keys fetched and cached in transaction')
-
-						for (const senderKeyName of idsRequiringFetch) {
-							await queueSenderKeyOperation(senderKeyName, async () => {
-								logger.info({ senderKeyName }, 'fetching sender key in transaction')
-								const result = await state.get(type, [senderKeyName])
-								// Update transaction cache
+						// Batch fetch all sender keys first, then queue individual cache updates
+						const batchResult = await state.get(type, idsRequiringFetch)
+						logger.debug({ fetched: Object.keys(batchResult).length }, 'fetched sender keys in batch')
+						const updatePromises = idsRequiringFetch.map(senderKeyName =>
+							queueSenderKeyOperation(senderKeyName, async () => {
 								transactionCache[type] ||= {}
-								Object.assign(transactionCache[type]!, result)
-								logger.info({ senderKeyName, hasResult: !!result[senderKeyName] }, 'sender key fetch complete')
+								if (batchResult[senderKeyName]) {
+									;(transactionCache[type]! as any)[senderKeyName] = batchResult[senderKeyName]
+								}
 							})
-						}
+						)
+						await Promise.allSettled(updatePromises)
+						logger.info({ count: idsRequiringFetch.length }, 'sender keys fetched and cached in transaction')
+
+						// for (const senderKeyName of idsRequiringFetch) {
+						// 	await queueSenderKeyOperation(senderKeyName, async () => {
+						// 		logger.info({ senderKeyName }, 'fetching sender key in transaction')
+						// 		const result = await state.get(type, [senderKeyName])
+						// 		// Update transaction cache
+						// 		transactionCache[type] ||= {}
+						// 		Object.assign(transactionCache[type]!, result)
+						// 		logger.info({ senderKeyName, hasResult: !!result[senderKeyName] }, 'sender key fetch complete')
+						// 	})
+						// }
 					} else {
 						// Use runExclusive for cleaner mutex handling
 						await getKeyTypeMutex(type as string).runExclusive(async () => {
