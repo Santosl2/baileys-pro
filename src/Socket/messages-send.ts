@@ -57,7 +57,8 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		generateHighQualityLinkPreview,
 		options: axiosOptions,
 		patchMessageBeforeSending,
-		cachedGroupMetadata
+		cachedGroupMetadata,
+		recentMessageSentHistory
 	} = config
 	const sock: NewsletterSocket = makeNewsletterSocket(makeGroupsSocket(config))
 	const {
@@ -502,12 +503,12 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				}
 
 				if (groupData?.ephemeralDuration && groupData.ephemeralDuration > 0) {
-						additionalAttributes = {
-							...additionalAttributes,
-							expiration:  groupData.ephemeralDuration.toString()
-						}
+					additionalAttributes = {
+						...additionalAttributes,
+						expiration: groupData.ephemeralDuration.toString()
+					}
 				}
-				
+
 				const patched = await patchMessageBeforeSending(message)
 
 				if (Array.isArray(patched)) {
@@ -535,7 +536,8 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 
 				// if there are some participants with whom the session has not been established
 				// if there are, we re-send the senderkey
-				if (senderKeyJids.length) {
+				// Send only if participant count is not set
+				if (senderKeyJids.length && !participant?.count) {
 					logger.debug({ senderKeyJids }, 'sending new sender key')
 
 					const senderKeyMsg: proto.IMessage = {
@@ -553,11 +555,20 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 					participants.push(...result.nodes)
 				}
 
-				binaryNodeContent.push({
-					tag: 'enc',
-					attrs: { v: '2', type: 'skmsg' },
-					content: ciphertext
-				})
+				// If participant count is set, include it in the message
+				if (participant?.count) {
+					binaryNodeContent.push({
+						tag: 'enc',
+						attrs: { v: '2', type: 'msg', count: participant.count.toString() },
+						content: ciphertext
+					})
+				} else {
+					binaryNodeContent.push({
+						tag: 'enc',
+						attrs: { v: '2', type: 'skmsg' },
+						content: ciphertext
+					})
+				}
 
 				await authState.keys.set({ 'sender-key-memory': { [jid]: senderKeyMap } })
 			} else {
@@ -1024,6 +1035,8 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				// 		]
 				// 	})
 				// }
+
+				recentMessageSentHistory.set(jid, fullMsg.key.id!, fullMsg.message!)
 
 				await relayMessage(jid, fullMsg.message!, {
 					messageId: fullMsg.key.id!,

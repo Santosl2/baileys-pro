@@ -7,7 +7,7 @@ import { SenderKeyState } from './sender-key-state'
 
 export interface SenderKeyStore {
 	loadSenderKey(senderKeyName: SenderKeyName): Promise<SenderKeyRecord>
-
+	loadSession(id: string): Promise<any>
 	storeSenderKey(senderKeyName: SenderKeyName, record: SenderKeyRecord): Promise<void>
 }
 

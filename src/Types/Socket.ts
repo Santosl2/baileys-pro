@@ -28,7 +28,14 @@ export type CacheStore = {
 
 export type PatchedMessageWithRecipientJID = proto.IMessage & { recipientJid?: string }
 
+export type RecentMessageSentHistoryStore = {
+	get: (from: string, messageId: string) => proto.IMessage | undefined
+	set: (from: string, messageId: string, message: proto.IMessage) => void
+}
+
 export type SocketConfig = {
+	recentMessageSentHistory: RecentMessageSentHistoryStore
+
 	/** the WS url to connect to WA */
 	waWebSocketUrl: string | URL
 	/** Fails the connection if the socket times out in this interval */

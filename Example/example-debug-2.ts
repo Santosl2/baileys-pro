@@ -23,7 +23,8 @@ import makeWASocket, {
 //import MAIN_LOGGER from '../src/Utils/logger'
 import fs from 'fs'
 import P from 'pino'
-
+import http from 'http'
+let bot: ReturnType<typeof makeWASocket> | undefined
 const logger = P({ timestamp: () => `,"time":"${new Date().toJSON()}"` }, P.destination('./wa-logs.txt'))
 logger.level = 'info'
 
@@ -89,6 +90,7 @@ const startSock = async () => {
 				}
 
 				if (connection === 'open') {
+					bot = sock // for easy access in console
 				}
 			}
 
@@ -117,6 +119,7 @@ const startSock = async () => {
 			// received a new message
 			if (events['messages.upsert']) {
 				const upsert = events['messages.upsert']
+				console.log('recv messages.upsert', JSON.stringify(upsert, undefined, 2))
 
 				if (upsert.type === 'notify') {
 					for (const msg of upsert.messages) {
@@ -209,3 +212,37 @@ Compre aqui: https://amzn.to/4miOyNJ`
 }
 
 startSock()
+const server = http.createServer(async (req, res) => {
+	if (req.method === 'POST' && req.url === '/send-message') {
+		let body = ''
+		req.on('data', chunk => {
+			body += chunk.toString()
+		})
+
+		req.on('end', async () => {
+			try {
+				const { jid, message } = JSON.parse(body)
+
+				if (!jid || !message) {
+					res.writeHead(400, { 'Content-Type': 'application/json' })
+					res.end(JSON.stringify({ error: 'Missing jid or message in request body' }))
+					return
+				}
+
+				await bot!.sendMessage(jid, { text: message })
+				res.writeHead(200, { 'Content-Type': 'application/json' })
+				res.end(JSON.stringify({ success: true }))
+			} catch (error) {
+				res.writeHead(500, { 'Content-Type': 'application/json' })
+				res.end(JSON.stringify({ error: 'Failed to send message', details: error.message }))
+			}
+		})
+	} else {
+		res.writeHead(404, { 'Content-Type': 'application/json' })
+		res.end(JSON.stringify({ error: 'Not Found' }))
+	}
+})
+
+server.listen(3101, () => {
+	console.log('HTTP server running on http://localhost:3100')
+})

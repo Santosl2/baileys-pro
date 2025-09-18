@@ -4,6 +4,7 @@ import { randomBytes } from 'crypto'
 import Long = require('long')
 import { proto } from '../../WAProto'
 import { DEFAULT_CACHE_TTLS, KEY_BUNDLE_TYPE, MIN_PREKEY_COUNT } from '../Defaults'
+import { jidToSignalProtocolAddress } from '../Signal/libsignal'
 import {
 	MessageReceiptType,
 	MessageRelayOptions,
@@ -59,7 +60,8 @@ import { extractGroupMetadata } from './groups'
 import { makeMessagesSocket } from './messages-send'
 
 export const makeMessagesRecvSocket = (config: SocketConfig) => {
-	const { logger, retryRequestDelayMs, maxMsgRetryCount, getMessage, shouldIgnoreJid } = config
+	const { logger, retryRequestDelayMs, maxMsgRetryCount, getMessage, shouldIgnoreJid, recentMessageSentHistory } =
+		config
 	const sock = makeMessagesSocket(config)
 	const {
 		ev,
@@ -167,17 +169,32 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		const { fullMessage } = decodeMessageNode(node, authState.creds.me!.id, authState.creds.me!.lid || '')
 		const { key: msgKey } = fullMessage
 		const msgId = msgKey.id!
+		const fromJid = node.attrs.from
 
-		const key = `${msgId}:${msgKey?.participant}`
-		let retryCount = msgRetryCache.get<number>(key) || 0
-		if (retryCount >= maxMsgRetryCount) {
+		let retryCount = msgRetryCache.get<number>(msgId) || 1
+		if (retryCount > maxMsgRetryCount) {
 			logger.debug({ retryCount, msgId }, 'reached retry limit, clearing')
-			msgRetryCache.del(key)
+			msgRetryCache.del(msgId)
 			return
 		}
 
+		let shouldRecreateSession = false
+
 		retryCount += 1
-		msgRetryCache.set(key, retryCount)
+		msgRetryCache.set(msgId, retryCount)
+
+		if (isJidGroup(fromJid)) {
+			const sessionId = jidToSignalProtocolAddress(node.attrs.participant)
+			const hasSession = await signalRepository.validateSession(fromJid)
+
+			shouldRecreateSession = retryCount > 1 || !hasSession.exists
+
+			if (shouldRecreateSession) {
+				// Delete existing session to force recreation
+				await authState.keys.set({ session: { [sessionId]: null } })
+				forceIncludeKeys = true
+			}
+		}
 
 		const { account, signedPreKey, signedIdentityKey: identityKey } = authState.creds
 
@@ -222,7 +239,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 				receipt.attrs.participant = node.attrs.participant
 			}
 
-			if (retryCount > 1 || forceIncludeKeys) {
+			if (retryCount > 1 || forceIncludeKeys || shouldRecreateSession) {
 				const { update, preKeys } = await getNextPreKeys(authState, 1)
 
 				const [keyId] = Object.keys(preKeys)
@@ -595,9 +612,26 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		msgRetryCache.set(key, newValue)
 	}
 
+	const getMessageForRetry = async (key: proto.IMessageKey) => {
+		try {
+			const recentMsg = recentMessageSentHistory.get(key.remoteJid!, key.id!)
+
+			if (recentMsg) {
+				return recentMsg
+			}
+
+			const message = await getMessage({ ...key })
+
+			return message
+		} catch {
+			logger.error({ key }, 'error getting message for retry')
+			return undefined
+		}
+	}
+
 	const sendMessagesAgain = async (key: proto.IMessageKey, ids: string[], retryNode: BinaryNode) => {
-		// todo: implement a cache to store the last 256 sent messages (copy whatsmeow)
-		const msgs = await Promise.all(ids.map(id => getMessage({ ...key, id })))
+		const msgs = await Promise.all(ids.map(id => getMessageForRetry({ ...key, id })))
+
 		const remoteJid = key.remoteJid!
 		const participant = key.participant || remoteJid
 		// if it's the primary jid sending the request
@@ -759,6 +793,84 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		}
 	}
 
+	// const handleMessage = async (node: BinaryNode) => {
+	// 	if (shouldIgnoreJid(node.attrs.from) && node.attrs.from !== '@s.whatsapp.net') {
+	// 		logger.debug({ key: node.attrs.key }, 'ignored message')
+	// 		await sendMessageAck(node)
+	// 		return
+	// 	}
+
+	// 	try {
+	// 		if (node.attrs.participant) {
+	// 			await assertSessions([author || msg.key.participant], false)
+	// 		}
+
+	// 		const { fullMessage: msg, category, author, decryptionTask } = decodeMessageStanza(node, authState)
+	// 		await Promise.all([
+	// 			processingMutex.mutex(async () => {
+	// 				await decryptionTask
+	// 				// message failed to decrypt
+	// 				if (msg.messageStubType === proto.WebMessageInfo.StubType.CIPHERTEXT && !msg.key.isViewOnce) {
+	// 					logger.debug({ key: msg.key, params: msg.messageStubParameters }, 'failure in decrypting message')
+	// 					retryMutex.mutex(async () => {
+	// 						if (ws.isOpen) {
+	// 							const encNode = getBinaryNodeChild(node, 'enc')
+	// 							await sendRetryRequest(node, !encNode)
+	// 							if (retryRequestDelayMs) {
+	// 								await delay(retryRequestDelayMs)
+	// 							}
+	// 						} else {
+	// 							logger.debug({ node }, 'connection closed, ignoring retry req')
+	// 						}
+	// 					})
+	// 				} else {
+	// 					// no type in the receipt => message delivered
+	// 					let type: MessageReceiptType = undefined
+	// 					let participant = msg.key.participant
+	// 					if (category === 'peer') {
+	// 						// special peer message
+	// 						type = 'peer_msg'
+	// 					} else if (msg.key.fromMe) {
+	// 						// message was sent by us from a different device
+	// 						type = 'sender'
+	// 						// need to specially handle this case
+	// 						if (isJidUser(msg.key.remoteJid!)) {
+	// 							participant = author
+	// 						}
+	// 					} else if (!sendActiveReceipts) {
+	// 						type = 'inactive'
+	// 					}
+
+	// 					await sendReceipt(msg.key.remoteJid!, participant!, [msg.key.id!], type)
+
+	// 					// send ack for history message
+	// 					const isAnyHistoryMsg = getHistoryMsg(msg.message!)
+	// 					if (isAnyHistoryMsg) {
+	// 						const jid = jidNormalizedUser(msg.key.remoteJid!)
+	// 						await sendReceipt(jid, undefined, [msg.key.id!], 'hist_sync')
+	// 					}
+	// 				}
+
+	// 				cleanMessage(msg, authState.creds.me!.id)
+
+	// 				if (
+	// 					msg.message?.protocolMessage?.type === proto.Message.ProtocolMessage.Type.SHARE_PHONE_NUMBER &&
+	// 					node.attrs.sender_pn
+	// 				) {
+	// 					ev.emit('chats.phoneNumberShare', {
+	// 						lid: node.attrs.from,
+	// 						jid: node.attrs.sender_pn
+	// 					})
+	// 				}
+
+	// 				await upsertMessage(msg, node.attrs.offline ? 'append' : 'notify')
+	// 			})
+	// 		])
+	// 	} finally {
+	// 		await sendMessageAck(node)
+	// 	}
+	// }
+
 	const handleMessage = async (node: BinaryNode) => {
 		if (shouldIgnoreJid(node.attrs.from) && node.attrs.from !== '@s.whatsapp.net') {
 			logger.debug({ key: node.attrs.key }, 'ignored message')
@@ -865,13 +977,13 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 
 					cleanMessage(msg, authState.creds.me!.id)
 
-					await sendMessageAck(node)
-
 					await upsertMessage(msg, node.attrs.offline ? 'append' : 'notify')
 				})
 			])
 		} catch (error) {
 			logger.error({ error, node }, 'error in handling message')
+		} finally {
+			await sendMessageAck(node)
 		}
 	}
 
