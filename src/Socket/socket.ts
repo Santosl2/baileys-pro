@@ -61,6 +61,7 @@ export const makeSocket = (config: SocketConfig) => {
 		defaultQueryTimeoutMs,
 		transactionOpts,
 		qrTimeout,
+		cachedGroupMetadata,
 		makeSignalRepository
 	} = config
 
@@ -68,6 +69,10 @@ export const makeSocket = (config: SocketConfig) => {
 		console.warn(
 			'⚠️ The printQRInTerminal option has been deprecated. You will no longer receive QR codes in the terminal automatically. Please listen to the connection.update event yourself and handle the QR your way. You can remove this message by removing this opttion. This message will be removed in a future version.'
 		)
+	}
+
+	if (cachedGroupMetadata) {
+		console.warn('⚠️ `cachedGroupMetadata` is deprecated. Use `groupMetadataCache` instead.')
 	}
 
 	const url = typeof waWebSocketUrl === 'string' ? new URL(waWebSocketUrl) : waWebSocketUrl

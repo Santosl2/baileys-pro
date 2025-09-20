@@ -158,7 +158,7 @@ export type SocketConfig = {
 	 *  cached group metadata, use to prevent redundant requests to WA & speed up msg sending
 	 *
 	 */
-	cachedGroupMetadata: (jid: string) => Promise<GroupMetadata | undefined>
+	cachedGroupMetadata?: (jid: string) => Promise<GroupMetadata | undefined>
 
 	groupMetadataCache?: CacheStoreWithGeneric<GroupMetadata | undefined>
 
