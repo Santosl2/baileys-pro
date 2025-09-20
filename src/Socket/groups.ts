@@ -317,7 +317,7 @@ export const extractGroupMetadata = (result: BinaryNode) => {
 		desc = getBinaryNodeChildString(descChild, 'body')
 		descOwner = descChild.attrs.participant ? jidNormalizedUser(descChild.attrs.participant) : undefined
 		descOwnerJid = descChild.attrs.participant_pn ? jidNormalizedUser(descChild.attrs.participant_pn) : undefined
-		descTime = +descChild.attrs.t
+		descTime = descChild.attrs.t ? +descChild.attrs.t : undefined
 		descId = descChild.attrs.id
 	}
 

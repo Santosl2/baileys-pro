@@ -1,9 +1,18 @@
+import NodeCache from '@cacheable/node-cache'
 import { proto } from '../../WAProto'
 import { makeLibSignalRepository } from '../Signal/libsignal'
 import type { AuthenticationState, MediaType, SocketConfig, WAVersion } from '../Types'
 import { Browsers } from '../Utils'
 import logger from '../Utils/logger'
 import { version } from './baileys-version.json'
+
+export const DEFAULT_CACHE_TTLS = {
+	SIGNAL_STORE: 5 * 60, // 5 minutes
+	MSG_RETRY: 60 * 60, // 1 hour
+	CALL_OFFER: 5 * 60, // 5 minutes
+	USER_DEVICES: 5 * 60, // 5 minutes
+	GROUP_METADATA: 15 * 60 // 15 minutes
+}
 
 export const UNAUTHORIZED_CODES = [401, 403, 419]
 
@@ -67,6 +76,12 @@ export const DEFAULT_CONNECTION_CONFIG: SocketConfig = {
 	getMessage: async () => undefined,
 	cachedGroupMetadata: async () => undefined,
 	makeSignalRepository: makeLibSignalRepository,
+
+	groupMetadataCache: new NodeCache({
+		useClones: false,
+		stdTTL: DEFAULT_CACHE_TTLS.GROUP_METADATA
+	}),
+
 	recentMessageSentHistory: {
 		// TODO: use sqlite and async mutex
 		get: (from, messageId) => recentMessageSentHistory.get(`${from}:${messageId}`),
@@ -126,10 +141,3 @@ export const MEDIA_KEYS = Object.keys(MEDIA_PATH_MAP) as MediaType[]
 export const MIN_PREKEY_COUNT = 5
 
 export const INITIAL_PREKEY_COUNT = 30
-
-export const DEFAULT_CACHE_TTLS = {
-	SIGNAL_STORE: 5 * 60, // 5 minutes
-	MSG_RETRY: 60 * 60, // 1 hour
-	CALL_OFFER: 5 * 60, // 5 minutes
-	USER_DEVICES: 5 * 60 // 5 minutes
-}

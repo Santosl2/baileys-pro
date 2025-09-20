@@ -57,7 +57,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		generateHighQualityLinkPreview,
 		options: axiosOptions,
 		patchMessageBeforeSending,
-		cachedGroupMetadata,
+		groupMetadataCache,
 		recentMessageSentHistory
 	} = config
 	const sock: NewsletterSocket = makeNewsletterSocket(makeGroupsSocket(config))
@@ -466,11 +466,12 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 			if (isGroup || isStatus) {
 				const [groupData, senderKeyMap] = await Promise.all([
 					(async () => {
-						let groupData = useCachedGroupMetadata && cachedGroupMetadata ? await cachedGroupMetadata(jid) : undefined
+						let groupData = useCachedGroupMetadata && groupMetadataCache ? groupMetadataCache.get(jid) : undefined
 						if (groupData && Array.isArray(groupData?.participants)) {
 							logger.trace({ jid, participants: groupData.participants.length }, 'using cached group metadata')
 						} else if (!isStatus) {
 							groupData = await groupMetadata(jid)
+							groupMetadataCache?.set(jid, groupData)
 						}
 
 						return groupData
