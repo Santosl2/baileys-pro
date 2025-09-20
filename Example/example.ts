@@ -24,11 +24,14 @@ import makeWASocket, {
 import open from 'open'
 import fs from 'fs'
 import P from 'pino'
+import { appendFile } from 'fs/promises'
+import { Mutex } from 'async-mutex'
 
 const logger = P({ timestamp: () => `,"time":"${new Date().toJSON()}"` }, P.destination('./wa-logs.txt'))
 logger.level = 'trace'
-
+const mutex = new Mutex()
 import http from 'http'
+
 let bot: ReturnType<typeof makeWASocket> | undefined
 
 const doReplies = process.argv.includes('--do-reply')
@@ -254,9 +257,10 @@ const startSock = async () => {
 				}
 			}
 
-			sock.ws.on('CB:message', data => {
-				// console.log('CB:message', JSON.stringify(data, null, 2))
-			})
+		sock.ws.on('frame', async data => {
+						const line = `[${new Date().toISOString()}] ${JSON.stringify(data, null, 2)}\n`
+						await mutex.runExclusive(() => appendFile('errors.txt', line, { encoding: 'utf8' }))
+					})
 
 			// credentials updated -- save them
 			if (events['creds.update']) {

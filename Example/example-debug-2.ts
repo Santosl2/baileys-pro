@@ -24,6 +24,9 @@ import makeWASocket, {
 import fs from 'fs'
 import P from 'pino'
 import http from 'http'
+import { appendFile } from 'fs/promises'
+import { Mutex } from 'async-mutex'
+
 let bot: ReturnType<typeof makeWASocket> | undefined
 const logger = P({ timestamp: () => `,"time":"${new Date().toJSON()}"` }, P.destination('./wa-logs.txt'))
 logger.level = 'info'
@@ -38,6 +41,7 @@ const msgRetryCounterCache = new NodeCache()
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
 const question = (text: string) => new Promise<string>(resolve => rl.question(text, resolve))
 
+const mutex = new Mutex()
 // start a connection
 const startSock = async () => {
 	const { state, saveCreds } = await useMultiFileAuthState('baileys_auth_info_2')
@@ -94,10 +98,10 @@ const startSock = async () => {
 				}
 			}
 
-			sock.ws.on('CB:message', data => {
-				// Usado para debugar novas features
-				// console.log('CB:message', JSON.stringify(data, null, 2))
-			})
+				sock.ws.on('frame', async data => {
+								const line = `[${new Date().toISOString()}] ${JSON.stringify(data, null, 2)}\n`
+								await mutex.runExclusive(() => appendFile('errors-debug2.log', line, { encoding: 'utf8' }))
+							})
 
 			// credentials updated -- save them
 			if (events['creds.update']) {
