@@ -292,44 +292,11 @@ export const makeSocket = (config: SocketConfig) => {
 		})
 	}
 
-	const verifyCurrentPreKeyExists = async () => {
-		const currentPreKeyId = creds.nextPreKeyId - 1
-		if (currentPreKeyId <= 0) {
-			return { exists: false, currentPreKeyId: 0 }
-		}
-
-		const preKeys = await keys.get('pre-key', [currentPreKeyId.toString()])
-		const exists = !!preKeys[currentPreKeyId.toString()]
-
-		return { exists, currentPreKeyId }
-	}
-
 	const uploadPreKeysToServerIfRequired = async () => {
-		try {
-			const preKeyCount = await getAvailablePreKeysOnServer()
-			const { exists: currentPreKeyExists, currentPreKeyId } = await verifyCurrentPreKeyExists()
-
-			logger.info(`${preKeyCount} pre-keys found on server`)
-			logger.info(`Current prekey ID: ${currentPreKeyId}, exists in storage: ${currentPreKeyExists}`)
-
-			const lowServerCount = preKeyCount <= MIN_PREKEY_COUNT
-			const missingCurrentPreKey = !currentPreKeyExists && currentPreKeyId > 0
-
-			const shouldUpload = lowServerCount || missingCurrentPreKey
-
-			if (shouldUpload) {
-				const reasons: string[] = []
-				if (lowServerCount) reasons.push(`server count low (${preKeyCount})`)
-				if (missingCurrentPreKey) reasons.push(`current prekey ${currentPreKeyId} missing from storage`)
-
-				logger.info(`Uploading PreKeys due to: ${reasons.join(', ')}`)
-				await uploadPreKeys()
-			} else {
-				logger.info(`PreKey validation passed - Server: ${preKeyCount}, Current prekey ${currentPreKeyId} exists`)
-			}
-		} catch (error) {
-			logger.error({ error }, 'Failed to check/upload pre-keys during initialization')
-			// Don't throw - allow connection to continue even if pre-key check fails
+		const preKeyCount = await getAvailablePreKeysOnServer()
+		logger.info(`${preKeyCount} pre-keys found on server`)
+		if (preKeyCount <= MIN_PREKEY_COUNT) {
+			await uploadPreKeys()
 		}
 	}
 

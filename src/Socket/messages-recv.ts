@@ -178,23 +178,8 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 			return
 		}
 
-		let shouldRecreateSession = false
-
 		retryCount += 1
 		msgRetryCache.set(msgId, retryCount)
-
-		if (isJidGroup(fromJid)) {
-			const sessionId = jidToSignalProtocolAddress(node.attrs.participant)
-			const hasSession = await signalRepository.validateSession(fromJid)
-
-			shouldRecreateSession = retryCount > 1 || !hasSession.exists
-
-			if (shouldRecreateSession) {
-				// Delete existing session to force recreation
-				await authState.keys.set({ session: { [sessionId]: null } })
-				forceIncludeKeys = true
-			}
-		}
 
 		const { account, signedPreKey, signedIdentityKey: identityKey } = authState.creds
 
@@ -239,7 +224,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 				receipt.attrs.participant = node.attrs.participant
 			}
 
-			if (retryCount > 1 || forceIncludeKeys || shouldRecreateSession) {
+			if (retryCount > 1 || forceIncludeKeys) {
 				const { update, preKeys } = await getNextPreKeys(authState, 1)
 
 				const [keyId] = Object.keys(preKeys)
