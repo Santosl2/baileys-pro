@@ -388,8 +388,9 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		}: MessageRelayOptions
 	) => {
 		const meId = authState.creds.me!.id
+		const isRetryResend = Boolean(participant?.jid)
 
-		let shouldIncludeDeviceIdentity = false
+		let shouldIncludeDeviceIdentity = isRetryResend
 
 		const { user, server } = jidDecode(jid)!
 		const statusJid = 'status@broadcast'
@@ -528,7 +529,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				// ensure a connection is established with every device
 				for (const { user, device } of devices) {
 					const jid = jidEncode(user, groupData?.addressingMode === 'lid' ? 'lid' : 's.whatsapp.net', device)
-					if (!senderKeyMap[jid] || !!participant) {
+					if (!senderKeyMap[jid] && !isRetryResend) {
 						senderKeyJids.push(jid)
 						// store that this person has had the sender keys sent to them
 						senderKeyMap[jid] = true
@@ -557,11 +558,16 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				}
 
 				// If participant count is set, include it in the message
-				if (participant?.count) {
+				if (isRetryResend && participant?.count) {
+					const { type, ciphertext: encryptedContent } = await signalRepository.encryptMessage({
+						data: bytes,
+						jid: participant.jid
+					})
+
 					binaryNodeContent.push({
 						tag: 'enc',
-						attrs: { v: '2', type: 'msg', count: participant.count.toString() },
-						content: ciphertext
+						attrs: { v: '2', type, count: participant.count.toString() },
+						content: encryptedContent
 					})
 				} else {
 					binaryNodeContent.push({

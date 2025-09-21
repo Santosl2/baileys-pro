@@ -98,10 +98,6 @@ const startSock = async () => {
 				}
 			}
 
-				sock.ws.on('frame', async data => {
-								const line = `[${new Date().toISOString()}] ${JSON.stringify(data, null, 2)}\n`
-								await mutex.runExclusive(() => appendFile('errors-debug2.log', line, { encoding: 'utf8' }))
-							})
 
 			// credentials updated -- save them
 			if (events['creds.update']) {
