@@ -279,72 +279,17 @@ export const makeSocket = (config: SocketConfig) => {
 		return +countChild!.attrs.value
 	}
 
-	// Pre-key upload state management
-	let uploadPreKeysPromise: Promise<void> | null = null
-	let lastUploadTime = 0
-
 	/** generates and uploads a set of pre-keys to the server */
-	const uploadPreKeys = async (count = INITIAL_PREKEY_COUNT, retryCount = 0) => {
-		// Check minimum interval (except for retries)
-		if (retryCount === 0) {
-			const timeSinceLastUpload = Date.now() - lastUploadTime
-			if (timeSinceLastUpload < MIN_UPLOAD_INTERVAL) {
-				logger.debug(`Skipping upload, only ${timeSinceLastUpload}ms since last upload`)
-				return
-			}
-		}
+	const uploadPreKeys = async (count = INITIAL_PREKEY_COUNT) => {
+		await keys.transaction(async () => {
+			logger.info({ count }, 'uploading pre-keys')
+			const { update, node } = await getNextPreKeysNode({ creds, keys }, count)
 
-		// Prevent multiple concurrent uploads
-		if (uploadPreKeysPromise) {
-			logger.debug('Pre-key upload already in progress, waiting for completion')
-			return uploadPreKeysPromise
-		}
+			await query(node)
+			ev.emit('creds.update', update)
 
-		const uploadLogic = async () => {
-			logger.info({ count, retryCount }, 'uploading pre-keys')
-
-			// Generate and save pre-keys atomically (prevents ID collisions on retry)
-			const node = await keys.transaction(async () => {
-				logger.debug({ requestedCount: count }, 'generating pre-keys with requested count')
-				const { update, node } = await getNextPreKeysNode({ creds, keys }, count)
-				// Update credentials immediately to prevent duplicate IDs on retry
-				ev.emit('creds.update', update)
-				return node // Only return node since update is already used
-			})
-
-			// Upload to server (outside transaction, can fail without affecting local keys)
-			try {
-				await query(node)
-				logger.info({ count }, 'uploaded pre-keys successfully')
-				lastUploadTime = Date.now()
-			} catch (uploadError) {
-				logger.error({ uploadError, count }, 'Failed to upload pre-keys to server')
-
-				// Exponential backoff retry (max 3 retries)
-				if (retryCount < 3) {
-					const backoffDelay = Math.min(1000 * Math.pow(2, retryCount), 10000)
-					logger.info(`Retrying pre-key upload in ${backoffDelay}ms`)
-					await new Promise(resolve => setTimeout(resolve, backoffDelay))
-					return uploadPreKeys(count, retryCount + 1)
-				}
-
-				throw uploadError
-			}
-		}
-
-		// Add timeout protection
-		uploadPreKeysPromise = Promise.race([
-			uploadLogic(),
-			new Promise<void>((_, reject) =>
-				setTimeout(() => reject(new Boom('Pre-key upload timeout', { statusCode: 408 })), UPLOAD_TIMEOUT)
-			)
-		])
-
-		try {
-			await uploadPreKeysPromise
-		} finally {
-			uploadPreKeysPromise = null
-		}
+			logger.info({ count }, 'uploaded pre-keys')
+		})
 	}
 
 	const verifyCurrentPreKeyExists = async () => {
