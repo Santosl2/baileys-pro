@@ -79,7 +79,10 @@ export class SenderKeyMessage extends CiphertextMessage {
 		const part1 = this.serialized.slice(0, this.serialized.length - this.SIGNATURE_LENGTH)
 		const part2 = this.serialized.slice(-1 * this.SIGNATURE_LENGTH)
 		const res = verifySignature(signatureKey, part1, part2)
-		if (!res) throw new Error('Invalid signature!')
+		if (!res) {
+			console.log({ signatureKey, part1, part2, serialized: this.serialized }, 'Invalid signature!')
+			throw new Error('Invalid signature!')
+		}
 	}
 
 	private getSignature(signatureKey: Uint8Array, serialized: Uint8Array): Uint8Array {

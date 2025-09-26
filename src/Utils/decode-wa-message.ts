@@ -106,15 +106,22 @@ export function decodeMessageNode(stanza: BinaryNode, meId: string, meLid: strin
 	const fromMe = (isLidUser(from) ? isMeLid : isMe)(stanza.attrs.participant || stanza.attrs.from)
 	const pushname = stanza?.attrs?.notify
 
+	const senderPn = isJidUser(stanza.attrs.from) ? stanza.attrs.from : stanza.attrs.sender_pn
+	const senderLid = isLidUser(stanza.attrs.from) ? stanza.attrs.from : stanza.attrs.sender_lid
+
+	const participantPn = isJidUser(stanza.attrs.participant) ? stanza.attrs.participant : stanza.attrs.participant_pn
+
+	const participantLid = isLidUser(stanza.attrs.participant) ? stanza.attrs.participant : stanza.attrs.participant_lid
+
 	const key: WAMessageKey = {
 		remoteJid: chatId,
 		fromMe,
 		id: msgId,
-		senderLid: stanza?.attrs?.sender_lid,
-		senderPn: stanza?.attrs?.sender_pn,
+		senderLid,
+		senderPn,
 		participant,
-		participantPn: stanza?.attrs?.participant_pn,
-		participantLid: stanza?.attrs?.participant_lid,
+		participantPn,
+		participantLid,
 		...(msgType === 'newsletter' && stanza.attrs.server_id ? { server_id: stanza.attrs.server_id } : {})
 	}
 
