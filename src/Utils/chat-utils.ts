@@ -25,7 +25,7 @@ import { toNumber } from './generics'
 import type { ILogger } from './logger'
 import { LT_HASH_ANTI_TAMPERING } from './lt-hash'
 import { downloadContentFromMessage } from './messages-media'
-import logger from './logger'
+import { decodeAndHydrate } from './proto-utils'
 
 type FetchAppStateSyncKey = (keyId: string) => Promise<proto.Message.IAppStateSyncKeyData | null | undefined>
 
@@ -235,7 +235,7 @@ export const decodeSyncdMutations = async (
 		}
 
 		const result = aesDecrypt(encContent, key.valueEncryptionKey)
-		const syncAction = proto.SyncActionData.decode(result)
+		const syncAction = decodeAndHydrate(proto.SyncActionData, result)
 
 		if (validateMacs) {
 			const hmac = hmacSign(syncAction.index, key.indexKey)
@@ -329,9 +329,9 @@ export const extractSyncdPatches = async (result: BinaryNode, options: AxiosRequ
 					snapshotNode.content = Buffer.from(Object.values(snapshotNode.content))
 				}
 
-				const blobRef = proto.ExternalBlobReference.decode(snapshotNode.content as Buffer)
+				const blobRef = decodeAndHydrate(proto.ExternalBlobReference, snapshotNode.content as Buffer)
 				const data = await downloadExternalBlob(blobRef, options)
-				snapshot = proto.SyncdSnapshot.decode(data)
+				snapshot = decodeAndHydrate(proto.SyncdSnapshot, data)
 			}
 
 			for (let { content } of patches) {
@@ -340,7 +340,7 @@ export const extractSyncdPatches = async (result: BinaryNode, options: AxiosRequ
 						content = Buffer.from(Object.values(content))
 					}
 
-					const syncd = proto.SyncdPatch.decode(content as Uint8Array)
+					const syncd = decodeAndHydrate(proto.SyncdPatch, content as Uint8Array)
 					if (!syncd.version) {
 						syncd.version = { version: +collectionNode.attrs.version! + 1 }
 					}
@@ -368,7 +368,7 @@ export const downloadExternalBlob = async (blob: proto.IExternalBlobReference, o
 
 export const downloadExternalPatch = async (blob: proto.IExternalBlobReference, options: AxiosRequestConfig<{}>) => {
 	const buffer = await downloadExternalBlob(blob, options)
-	const syncData = proto.SyncdMutations.decode(buffer)
+	const syncData = decodeAndHydrate(proto.SyncdMutations, buffer)
 	return syncData
 }
 

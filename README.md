@@ -140,6 +140,9 @@ git remote remove advanced
 
 - **To get info newsletter**
 
+> [!NOTE]
+> For reliable serialization of the authentication state, especially when storing as JSON, always use the BufferJSON utility.
+
 ```ts
 const metadata = await sock.newsletterMetadata('invite', 'xxxxx')
 // or

@@ -28,11 +28,12 @@ import {
 	getCodeFromWSError,
 	getErrorCodeFromStreamError,
 	getNextPreKeysNode,
-	getPlatformId,
 	makeEventBuffer,
 	makeNoiseHandler,
 	promiseTimeout
 } from '../Utils'
+import { getPlatformId } from '../Utils/browser-utils'
+import { decodeAndHydrate } from '../Utils/proto-utils'
 import {
 	assertNodeErrorFree,
 	type BinaryNode,
@@ -41,6 +42,7 @@ import {
 	getBinaryNodeChild,
 	getBinaryNodeChildren,
 	isLidUser,
+	jidDecode,
 	jidEncode,
 	S_WHATSAPP_NET
 } from '../WABinary'
@@ -257,23 +259,38 @@ export const makeSocket = (config: SocketConfig) => {
 	}
 
 	const onWhatsApp = async (...jids: string[]) => {
-		const usyncQuery = new USyncQuery().withLIDProtocol().withContactProtocol()
+		let usyncQuery = new USyncQuery().withLIDProtocol()
 
+		let contactEnabled = false
 		for (const jid of jids) {
 			if (isLidUser(jid)) {
-				usyncQuery.withUser(new USyncUser().withId(jid)) // intentional
+				// usyncQuery.withUser(new USyncUser().withLid(jid)) // intentional but needs JID too
+				continue
 			} else {
+				if (!contactEnabled) {
+					contactEnabled = true
+					usyncQuery = usyncQuery.withContactProtocol()
+				}
+
 				const phone = `+${jid.replace('+', '').split('@')[0]?.split(':')[0]}`
 				usyncQuery.withUser(new USyncUser().withPhone(phone))
 			}
 		}
 
+		if (usyncQuery.users.length === 0) {
+			return [] // return early without forcing an empty query
+		}
+
 		const results = await executeUSyncQuery(usyncQuery)
 
 		if (results) {
-			if (results.list.filter(a => !!a.lid).length > 0) {
-				const lidOnly = results.list.filter(a => !!a.lid)
-				await signalRepository.lidMapping.storeLIDPNMappings(lidOnly.map(a => ({ pn: a.id, lid: a.lid as string })))
+			const lidOnly = results.list.filter(a => !!a.lid)
+			if (lidOnly.length > 0) {
+				const pairs = lidOnly.map(a => ({ pn: a.id, lid: a.lid as string }))
+				await signalRepository.lidMapping.storeLIDPNMappings(pairs)
+				for (const { pn, lid } of pairs) {
+					await signalRepository.migrateSession(pn, lid)
+				}
 			}
 
 			return results.list
@@ -287,7 +304,7 @@ export const makeSocket = (config: SocketConfig) => {
 	const { creds } = authState
 	// add transaction capability
 	const keys = addTransactionCapability(authState.keys, logger, transactionOpts)
-	const signalRepository = makeSignalRepository({ creds, keys }, onWhatsApp)
+	const signalRepository = makeSignalRepository({ creds, keys }, logger, onWhatsApp)
 
 	let lastDateRecv: Date
 	let epoch = 1
@@ -342,7 +359,7 @@ export const makeSocket = (config: SocketConfig) => {
 		const init = proto.HandshakeMessage.encode(helloMsg).finish()
 
 		const result = await awaitNextMessage<Uint8Array>(init)
-		const handshake = proto.HandshakeMessage.decode(result)
+		const handshake = decodeAndHydrate(proto.HandshakeMessage, result)
 
 		logger.trace({ handshake }, 'handshake recv from WA')
 
@@ -856,8 +873,16 @@ export const makeSocket = (config: SocketConfig) => {
 					// Store our own LID-PN mapping
 					await signalRepository.lidMapping.storeLIDPNMappings([{ lid: myLID, pn: myPN }])
 
-					// Create LID session for ourselves (whatsmeow pattern)
-					await signalRepository.migrateSession([myPN], myLID)
+					// Create device list for our own user (needed for bulk migration)
+					const { user, device } = jidDecode(myPN)!
+					await authState.keys.set({
+						'device-list': {
+							[user]: [device?.toString() || '0']
+						}
+					})
+
+					// migrate our own session
+					await signalRepository.migrateSession(myPN, myLID)
 
 					logger.info({ myPN, myLID }, 'Own LID session created successfully')
 				} catch (error) {
