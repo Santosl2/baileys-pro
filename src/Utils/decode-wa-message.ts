@@ -103,7 +103,9 @@ export function decodeMessageNode(stanza: BinaryNode, meId: string, meLid: strin
 		throw new Boom('Unknown message type', { data: stanza })
 	}
 
-	const fromMe = (isLidUser(from) ? isMeLid : isMe)(stanza.attrs.participant || stanza.attrs.from)
+	const fromMe = (isLidUser(from) || isLidUser(participant) ? isMeLid : isMe)(
+		stanza.attrs.participant || stanza.attrs.from
+	)
 	const pushname = stanza?.attrs?.notify
 
 	const senderPn = isJidUser(stanza.attrs.from) ? stanza.attrs.from : stanza.attrs.sender_pn
@@ -229,7 +231,7 @@ export const decryptMessageNode = (
 							fullMessage.message = msg
 						}
 					} catch (err) {
-						logger.error({ key: fullMessage.key, err }, 'failed to decrypt message')
+						logger.error({ key: fullMessage.key, err, msg: content }, 'failed to decrypt message')
 						fullMessage.messageStubType = proto.WebMessageInfo.StubType.CIPHERTEXT
 						fullMessage.messageStubParameters = [err.message]
 					}
