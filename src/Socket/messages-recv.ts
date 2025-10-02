@@ -1102,7 +1102,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 	const handleMessage = async (node: BinaryNode) => {
 		if (shouldIgnoreJid(node.attrs.from!) && node.attrs.from !== '@s.whatsapp.net') {
 			logger.debug({ key: node.attrs.key }, 'ignored message')
-			await sendMessageAck(node)
+			await sendMessageAck(node, NACK_REASONS.UnhandledError)
 			return
 		}
 
@@ -1121,17 +1121,6 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 			author,
 			decrypt
 		} = decryptMessageNode(node, authState.creds.me!.id, authState.creds.me!.lid || '', signalRepository, logger)
-
-		if (
-			msg.message?.protocolMessage?.type === proto.Message.ProtocolMessage.Type.SHARE_PHONE_NUMBER &&
-			node.attrs.sender_pn
-		) {
-			const lid = jidNormalizedUser(node.attrs.from),
-				pn = jidNormalizedUser(node.attrs.sender_pn)
-			ev.emit('lid-mapping.update', { lid, pn })
-			await signalRepository.lidMapping.storeLIDPNMappings([{ lid, pn }])
-			await signalRepository.migrateSession(pn, lid)
-		}
 
 		const alt = msg.key.participantAlt || msg.key.remoteJidAlt
 		// store new mappings we didn't have before
@@ -1244,8 +1233,6 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 					}
 
 					cleanMessage(msg, authState.creds.me!.id)
-
-					await sendMessageAck(node)
 
 					await upsertMessage(msg, node.attrs.offline ? 'append' : 'notify')
 				})
