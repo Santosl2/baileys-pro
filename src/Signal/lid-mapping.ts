@@ -113,7 +113,7 @@ export class LIDMappingStore {
 				} else {
 					this.logger.trace(`No LID mapping found for PN user ${pnUser}; batch getting from USync`)
 					usyncFetch.push(pn)
-					continue;
+					continue
 				}
 			}
 
@@ -139,7 +139,7 @@ export class LIDMappingStore {
 				this.storeLIDPNMappings(result)
 				for (const pair of result) {
 					const lidUser = jidDecode(pair.lid)?.user
-						if (lidUser) {
+					if (lidUser) {
 						successfulPairs[pair.pn] = pair
 					}
 				}
