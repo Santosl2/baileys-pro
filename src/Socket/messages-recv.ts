@@ -784,7 +784,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 	const handleMessage = async (node: BinaryNode) => {
 		if (shouldIgnoreJid(node.attrs.from) && node.attrs.from !== '@s.whatsapp.net') {
 			logger.debug({ key: node.attrs.key }, 'ignored message')
-			await sendMessageAck(node)
+			await sendMessageAck(node, NACK_REASONS.UnhandledError)
 			return
 		}
 
@@ -906,7 +906,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		} catch (error) {
 			logger.error({ error, node }, 'error in handling message')
 		} finally {
-			await sendMessageAck(node)
+			//await sendMessageAck(node)
 		}
 	}
 
