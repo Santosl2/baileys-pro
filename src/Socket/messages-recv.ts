@@ -11,6 +11,7 @@ import type {
 	SocketConfig,
 	WACallEvent,
 	WACallUpdateType,
+	WAMessage,
 	WAMessageKey,
 	WAPatchName
 } from '../Types'
@@ -39,7 +40,6 @@ import {
 	xmppSignedPreKey
 } from '../Utils'
 import { makeMutex } from '../Utils/make-mutex'
-import { decodeAndHydrate } from '../Utils/proto-utils'
 import {
 	areJidsSameUser,
 	type BinaryNode,
@@ -294,8 +294,8 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 							typeof plaintextNode.content === 'string'
 								? Buffer.from(plaintextNode.content, 'binary')
 								: Buffer.from(plaintextNode.content as Uint8Array)
-						const messageProto = decodeAndHydrate(proto.Message, contentBuf)
-						const fullMessage = proto.WebMessageInfo.create({
+						const messageProto = proto.Message.decode(contentBuf).toJSON()
+						const fullMessage = proto.WebMessageInfo.fromObject({
 							key: {
 								remoteJid: from,
 								id: child.attrs.message_id || child.attrs.server_id,
@@ -303,7 +303,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 							},
 							message: messageProto,
 							messageTimestamp: +child.attrs.t!
-						})
+						}).toJSON() as WAMessage
 						await upsertMessage(fullMessage, 'append')
 						logger.info('Processed plaintext newsletter message')
 					} catch (error) {
@@ -546,7 +546,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		}
 	}
 
-	const handleGroupNotification = (participant: string, child: BinaryNode, msg: Partial<proto.IWebMessageInfo>) => {
+	const handleGroupNotification = (participant: string, child: BinaryNode, msg: Partial<WAMessage>) => {
 		const participantJid = getBinaryNodeChild(child, 'participant')?.attrs?.jid || participant
 		// TODO: Add participant LID
 		switch (child?.tag) {
@@ -658,7 +658,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 	}
 
 	const processNotification = async (node: BinaryNode) => {
-		const result: Partial<proto.IWebMessageInfo> = {}
+		const result: Partial<WAMessage> = {}
 		const [child] = getAllBinaryNodeChildren(node)
 		const nodeType = node.attrs.type
 		const from = jidNormalizedUser(node.attrs.from)
@@ -874,7 +874,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		await msgRetryCache.set(key, newValue)
 	}
 
-	const sendMessagesAgain = async (key: proto.IMessageKey, ids: string[], retryNode: BinaryNode) => {
+	const sendMessagesAgain = async (key: WAMessageKey, ids: string[], retryNode: BinaryNode) => {
 		const remoteJid = key.remoteJid!
 		const participant = key.participant || remoteJid
 
@@ -1089,7 +1089,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 						msg.participant ??= node.attrs.participant
 						msg.messageTimestamp = +node.attrs.t!
 
-						const fullMsg = proto.WebMessageInfo.create(msg as proto.IWebMessageInfo)
+						const fullMsg = proto.WebMessageInfo.fromObject(msg) as WAMessage
 						await upsertMessage(fullMsg, 'append')
 					}
 				})
@@ -1128,15 +1128,13 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 			const altServer = jidDecode(alt)?.server
 			const primaryJid = msg.key.participant || msg.key.remoteJid!
 			if (altServer === 'lid') {
-				if (typeof (await signalRepository.lidMapping.getPNForLID(alt)) === 'string') {
+				if (!(await signalRepository.lidMapping.getPNForLID(alt))) {
 					await signalRepository.lidMapping.storeLIDPNMappings([{ lid: alt, pn: primaryJid }])
 					await signalRepository.migrateSession(primaryJid, alt)
 				}
 			} else {
-				if (typeof (await signalRepository.lidMapping.getLIDForPN(alt)) === 'string') {
-					await signalRepository.lidMapping.storeLIDPNMappings([{ lid: primaryJid, pn: alt }])
-					await signalRepository.migrateSession(alt, primaryJid)
-				}
+				await signalRepository.lidMapping.storeLIDPNMappings([{ lid: primaryJid, pn: alt }])
+				await signalRepository.migrateSession(alt, primaryJid)
 			}
 		}
 
@@ -1447,7 +1445,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 
 		// missed call + group call notification message generation
 		if (call.status === 'timeout' || (call.status === 'offer' && call.isGroup)) {
-			const msg: proto.IWebMessageInfo = {
+			const msg: WAMessage = {
 				key: {
 					remoteJid: call.chatId,
 					id: call.id,
@@ -1467,7 +1465,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 				msg.message = { call: { callKey: Buffer.from(call.id) } }
 			}
 
-			const protoMsg = proto.WebMessageInfo.create(msg)
+			const protoMsg = proto.WebMessageInfo.fromObject(msg) as WAMessage
 			upsertMessage(protoMsg, call.offline ? 'append' : 'notify')
 		}
 	})

@@ -10,6 +10,7 @@ import {
 	type MessageRelayOptions,
 	type MiscMessageGenerationOptions,
 	type SocketConfig,
+	type WAMessage,
 	type WAMessageKey
 } from '../Types'
 import {
@@ -393,16 +394,14 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 
 		if (jidsRequiringFetch.length) {
 			// LID if mapped, otherwise original
-			const wireJids = await Promise.all(
-				jidsRequiringFetch.map(async jid => {
-					if (jid.includes('@s.whatsapp.net')) {
-						const lid = await signalRepository.lidMapping.getLIDForPN(jid)
-						return lid ? lid : jid
-					}
-
-					return jid
-				})
-			)
+			const wireJids = [
+				...jidsRequiringFetch.filter(jid => !!jid.includes('@lid')),
+				...(
+					(await signalRepository.lidMapping.getLIDsForPNs(
+						jidsRequiringFetch.filter(jid => !!jid.includes('@s.whatsapp.net'))
+					)) || []
+				).map(a => a.lid)
+			]
 
 			logger.debug({ jidsRequiringFetch, wireJids }, 'fetching sessions')
 			const result = await query({
@@ -1161,7 +1160,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		createParticipantNodes,
 		getUSyncDevices,
 		messageRetryManager,
-		updateMediaMessage: async (message: proto.IWebMessageInfo) => {
+		updateMediaMessage: async (message: WAMessage) => {
 			const content = assertMediaContent(message.message)
 			const mediaKey = content.mediaKey!
 			const meId = authState.creds.me!.id
@@ -1179,15 +1178,15 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 							try {
 								const media = await decryptMediaRetryData(result.media!, mediaKey, result.key.id!)
 								if (media.result !== proto.MediaRetryNotification.ResultType.SUCCESS) {
-									const resultStr = proto.MediaRetryNotification.ResultType[media.result]
+									const resultStr = proto.MediaRetryNotification.ResultType[media.result!]
 									throw new Boom(`Media re-upload failed by device (${resultStr})`, {
 										data: media,
-										statusCode: getStatusCodeForMediaRetry(media.result) || 404
+										statusCode: getStatusCodeForMediaRetry(media.result!) || 404
 									})
 								}
 
 								content.directPath = media.directPath
-								content.url = getUrlFromDirectPath(content.directPath)
+								content.url = getUrlFromDirectPath(content.directPath!)
 
 								logger.debug({ directPath: media.directPath, key: result.key }, 'media update successful')
 							} catch (err: any) {
