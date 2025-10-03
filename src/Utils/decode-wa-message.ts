@@ -221,7 +221,10 @@ export const decryptMessageNode = (
 									item: msg.senderKeyDistributionMessage
 								})
 							} catch (err) {
-								logger.error({ key: fullMessage.key, err, msg: content }, 'failed to decrypt message')
+								logger.error(
+									{ key: fullMessage.key, err, msg: content },
+									'failed to process sender key distribution message'
+								)
 							}
 						}
 
@@ -231,7 +234,16 @@ export const decryptMessageNode = (
 							fullMessage.message = msg
 						}
 					} catch (err) {
-						logger.error({ key: fullMessage.key, err, msg: content }, 'failed to decrypt message')
+						const errorContext = {
+							key: fullMessage.key,
+							err,
+							messageType: tag === 'plaintext' ? 'plaintext' : attrs.type,
+							sender,
+							author,
+						}
+
+						logger.error(errorContext, 'failed to decrypt message')
+
 						fullMessage.messageStubType = proto.WebMessageInfo.StubType.CIPHERTEXT
 						fullMessage.messageStubParameters = [err.message]
 					}
