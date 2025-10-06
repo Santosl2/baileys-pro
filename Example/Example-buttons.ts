@@ -636,8 +636,8 @@ Selecione e melhor opção:`,
 
 						if (msg.key.fromMe) {
 							console.log('is own message')
-							if (msg.message?.conversation?.startsWith('!')) {
-								const command = msg.message.conversation.slice(1).trim().toLowerCase()
+							if (msg.message?.conversation?.startsWith('!') || msg.message?.extendedTextMessage?.text?.startsWith('!')) {
+								const command = msg.message?.conversation?.slice(1).trim().toLowerCase() || msg.message?.extendedTextMessage?.text?.slice(1).trim().toLowerCase()
 								//
 
 								if (command === 'otp') {
