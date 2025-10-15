@@ -326,7 +326,13 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				category: 'peer',
 				// eslint-disable-next-line camelcase
 				push_priority: 'high_force'
-			}
+			},
+			additionalNodes: [
+				{
+					tag: 'meta',
+					attrs: { appdata: 'default' }
+				}
+			]
 		})
 
 		return msgId
