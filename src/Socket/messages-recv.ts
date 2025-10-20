@@ -833,76 +833,73 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		}
 
 		try {
-			await Promise.all([
-				processingMutex.mutex(async () => {
-					await decrypt()
-					// message failed to decrypt
-					if (msg.messageStubType === proto.WebMessageInfo.StubType.CIPHERTEXT) {
-						if (msg?.messageStubParameters?.[0] === MISSING_KEYS_ERROR_TEXT) {
-							return sendMessageAck(node, NACK_REASONS.ParsingError)
-						}
-
-						const errorMessage = msg?.messageStubParameters?.[0] || ''
-						const isPreKeyError = errorMessage.includes('PreKey')
-
-						logger.debug(`[handleMessage] Attempting retry request for failed decryption`)
-
-						// Handle both pre-key and normal retries in single mutex
-						retryMutex.mutex(async () => {
-							try {
-								if (!ws.isOpen) {
-									logger.debug({ node }, 'Connection closed, skipping retry')
-									return
-								}
-
-								if (getBinaryNodeChild(node, 'unavailable')) {
-									logger.debug('Message unavailable, skipping retry')
-									return
-								}
-
-
-								const encNode = getBinaryNodeChild(node, 'enc')
-								await sendRetryRequest(node, !encNode)
-								if (retryRequestDelayMs) {
-									await delay(retryRequestDelayMs)
-								}
-							} catch (err) {
-								logger.error({ err, isPreKeyError }, 'Failed to handle retry, attempting basic retry')
-							}
-						})
-					} else {
-						// no type in the receipt => message delivered
-						let type: MessageReceiptType = undefined
-						let participant = msg.key.participant
-						if (category === 'peer') {
-							// special peer message
-							type = 'peer_msg'
-						} else if (msg.key.fromMe) {
-							// message was sent by us from a different device
-							type = 'sender'
-							// need to specially handle this case
-							if (isJidUser(msg.key.remoteJid!)) {
-								participant = author
-							}
-						} else if (!sendActiveReceipts) {
-							type = 'inactive'
-						}
-
-						await sendReceipt(msg.key.remoteJid!, participant!, [msg.key.id!], type)
-
-						// send ack for history message
-						const isAnyHistoryMsg = getHistoryMsg(msg.message!)
-						if (isAnyHistoryMsg) {
-							const jid = jidNormalizedUser(msg.key.remoteJid!)
-							await sendReceipt(jid, undefined, [msg.key.id!], 'hist_sync')
-						}
+			processingMutex.mutex(async () => {
+				await decrypt()
+				// message failed to decrypt
+				if (msg.messageStubType === proto.WebMessageInfo.StubType.CIPHERTEXT) {
+					if (msg?.messageStubParameters?.[0] === MISSING_KEYS_ERROR_TEXT) {
+						return sendMessageAck(node, NACK_REASONS.ParsingError)
 					}
 
-					cleanMessage(msg, authState.creds.me!.id)
+					const errorMessage = msg?.messageStubParameters?.[0] || ''
+					const isPreKeyError = errorMessage.includes('PreKey')
 
-					await upsertMessage(msg, node.attrs.offline ? 'append' : 'notify')
-				})
-			])
+					logger.debug(`[handleMessage] Attempting retry request for failed decryption`)
+
+					// Handle both pre-key and normal retries in single mutex
+					retryMutex.mutex(async () => {
+						try {
+							if (!ws.isOpen) {
+								logger.debug({ node }, 'Connection closed, skipping retry')
+								return
+							}
+
+							if (getBinaryNodeChild(node, 'unavailable')) {
+								logger.debug('Message unavailable, skipping retry')
+								return
+							}
+
+							const encNode = getBinaryNodeChild(node, 'enc')
+							await sendRetryRequest(node, !encNode)
+							if (retryRequestDelayMs) {
+								await delay(retryRequestDelayMs)
+							}
+						} catch (err) {
+							logger.error({ err, isPreKeyError }, 'Failed to handle retry, attempting basic retry')
+						}
+					})
+				} else {
+					// no type in the receipt => message delivered
+					let type: MessageReceiptType = undefined
+					let participant = msg.key.participant
+					if (category === 'peer') {
+						// special peer message
+						type = 'peer_msg'
+					} else if (msg.key.fromMe) {
+						// message was sent by us from a different device
+						type = 'sender'
+						// need to specially handle this case
+						if (isJidUser(msg.key.remoteJid!)) {
+							participant = author
+						}
+					} else if (!sendActiveReceipts) {
+						type = 'inactive'
+					}
+
+					await sendReceipt(msg.key.remoteJid!, participant!, [msg.key.id!], type)
+
+					// send ack for history message
+					const isAnyHistoryMsg = getHistoryMsg(msg.message!)
+					if (isAnyHistoryMsg) {
+						const jid = jidNormalizedUser(msg.key.remoteJid!)
+						await sendReceipt(jid, undefined, [msg.key.id!], 'hist_sync')
+					}
+				}
+
+				cleanMessage(msg, authState.creds.me!.id)
+
+				await upsertMessage(msg, node.attrs.offline ? 'append' : 'notify')
+			})
 		} catch (error) {
 			logger.error({ error, node }, 'error in handling message')
 		} finally {
