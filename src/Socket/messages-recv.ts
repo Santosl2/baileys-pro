@@ -6,13 +6,11 @@ import { proto } from '../../WAProto/index.js'
 import { DEFAULT_CACHE_TTLS, KEY_BUNDLE_TYPE, MIN_PREKEY_COUNT } from '../Defaults'
 import type {
 	GroupParticipant,
-	LIDMapping,
 	MessageReceiptType,
 	MessageRelayOptions,
 	MessageUserReceipt,
 	SocketConfig,
 	WACallEvent,
-	WACallUpdateType,
 	WAMessage,
 	WAMessageKey,
 	WAPatchName
@@ -46,6 +44,7 @@ import { makeMutex } from '../Utils/make-mutex'
 import {
 	areJidsSameUser,
 	type BinaryNode,
+	binaryNodeToString,
 	getAllBinaryNodeChildren,
 	getBinaryNodeChild,
 	getBinaryNodeChildBuffer,
@@ -303,7 +302,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 							key: {
 								remoteJid: from,
 								id: child.attrs.message_id || child.attrs.server_id,
-								fromMe: false
+								fromMe: false // TODO: is this really true though
 							},
 							message: messageProto,
 							messageTimestamp: +child.attrs.t!
@@ -435,7 +434,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 				recreateReason = result.reason
 
 				if (shouldRecreateSession) {
-					logger.info({ fromJid, retryCount, reason: recreateReason }, 'recreating session for retry')
+					logger.debug({ fromJid, retryCount, reason: recreateReason }, 'recreating session for retry')
 					// Delete existing session to force recreation
 					await authState.keys.set({ session: { [sessionId]: null } })
 					forceIncludeKeys = true
@@ -629,7 +628,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 					msg.messageStubType = WAMessageStubType.GROUP_PARTICIPANT_LEAVE
 				}
 
-				msg.messageStubParameters = participants
+				msg.messageStubParameters = participants.map(a => JSON.stringify(a))
 				break
 			case 'subject':
 				msg.messageStubType = WAMessageStubType.GROUP_CHANGE_SUBJECT
@@ -673,7 +672,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 			case 'created_membership_requests':
 				msg.messageStubType = WAMessageStubType.GROUP_MEMBERSHIP_JOIN_APPROVAL_REQUEST_NON_ADMIN_ADD
 				msg.messageStubParameters = [
-					{ lid: affectedParticipantLid, pn: affectedParticipantPn } as LIDMapping,
+					JSON.stringify({ lid: affectedParticipantLid, pn: affectedParticipantPn }),
 					'created',
 					child.attrs.request_method!
 				]
@@ -683,7 +682,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 				// TODO: LIDMAPPING SUPPORT
 				msg.messageStubType = WAMessageStubType.GROUP_MEMBERSHIP_JOIN_APPROVAL_REQUEST_NON_ADMIN_ADD
 				msg.messageStubParameters = [
-					{ lid: affectedParticipantLid, pn: affectedParticipantPn } as LIDMapping,
+					JSON.stringify({ lid: affectedParticipantLid, pn: affectedParticipantPn }),
 					isDenied ? 'revoked' : 'rejected'
 				]
 				break
@@ -965,7 +964,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 				recreateReason = result.reason
 
 				if (shouldRecreateSession) {
-					logger.info({ participant, retryCount, reason: recreateReason }, 'recreating session for outgoing retry')
+					logger.debug({ participant, retryCount, reason: recreateReason }, 'recreating session for outgoing retry')
 					await authState.keys.set({ session: { [sessionId]: null } })
 				}
 			} catch (error) {
@@ -1021,7 +1020,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 			participant: attrs.participant
 		}
 
-		if (shouldIgnoreJid(remoteJid!) && remoteJid !== '@s.whatsapp.net') {
+		if (shouldIgnoreJid(remoteJid!) && remoteJid !== S_WHATSAPP_NET) {
 			logger.debug({ remoteJid }, 'ignoring receipt from jid')
 			await sendMessageAck(node)
 			return
@@ -1101,7 +1100,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 
 	const handleNotification = async (node: BinaryNode) => {
 		const remoteJid = node.attrs.from
-		if (shouldIgnoreJid(remoteJid!) && remoteJid !== '@s.whatsapp.net') {
+		if (shouldIgnoreJid(remoteJid!) && remoteJid !== S_WHATSAPP_NET) {
 			logger.debug({ remoteJid, id: node.attrs.id }, 'ignored notification')
 			await sendMessageAck(node)
 			return
@@ -1137,7 +1136,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 	}
 
 	const handleMessage = async (node: BinaryNode) => {
-		if (shouldIgnoreJid(node.attrs.from!) && node.attrs.from !== '@s.whatsapp.net') {
+		if (shouldIgnoreJid(node.attrs.from!) && node.attrs.from !== S_WHATSAPP_NET) {
 			logger.debug({ key: node.attrs.key }, 'ignored message')
 			await sendMessageAck(node, NACK_REASONS.UnhandledError)
 			return
@@ -1187,100 +1186,100 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		}
 
 		try {
-			await Promise.all([
-				processingMutex.mutex(async () => {
-					await decrypt()
-					// message failed to decrypt
-					if (msg.messageStubType === proto.WebMessageInfo.StubType.CIPHERTEXT) {
-						if (msg?.messageStubParameters?.[0] === MISSING_KEYS_ERROR_TEXT) {
-							return sendMessageAck(node, NACK_REASONS.ParsingError)
-						}
-
-						const errorMessage = msg?.messageStubParameters?.[0] || ''
-						const isPreKeyError = errorMessage.includes('PreKey')
-
-						logger.debug(`[handleMessage] Attempting retry request for failed decryption`)
-
-						// Handle both pre-key and normal retries in single mutex
-						retryMutex.mutex(async () => {
-							try {
-								if (!ws.isOpen) {
-									logger.debug({ node }, 'Connection closed, skipping retry')
-									return
-								}
-
-								// Handle pre-key errors with upload and delay
-								if (isPreKeyError) {
-									logger.info({ error: errorMessage }, 'PreKey error detected, uploading and retrying')
-
-									try {
-										logger.debug('Uploading pre-keys for error recovery')
-										await uploadPreKeys(5)
-										logger.debug('Waiting for server to process new pre-keys')
-										await delay(1000)
-									} catch (uploadErr) {
-										logger.error({ uploadErr }, 'Pre-key upload failed, proceeding with retry anyway')
-									}
-								}
-
-								const encNode = getBinaryNodeChild(node, 'enc')
-								await sendRetryRequest(node, !encNode)
-								if (retryRequestDelayMs) {
-									await delay(retryRequestDelayMs)
-								}
-							} catch (err) {
-								logger.error({ err, isPreKeyError }, 'Failed to handle retry, attempting basic retry')
-								// Still attempt retry even if pre-key upload failed
-								try {
-									const encNode = getBinaryNodeChild(node, 'enc')
-									await sendRetryRequest(node, !encNode)
-								} catch (retryErr) {
-									logger.error({ retryErr }, 'Failed to send retry after error handling')
-								}
-							}
-						})
-					} else {
-						// no type in the receipt => message delivered
-						let type: MessageReceiptType = undefined
-						let participant = msg.key.participant
-						if (category === 'peer') {
-							// special peer message
-							type = 'peer_msg'
-						} else if (msg.key.fromMe) {
-							// message was sent by us from a different device
-							type = 'sender'
-							// need to specially handle this case
-							if (isLidUser(msg.key.remoteJid!) || isLidUser(msg.key.remoteJidAlt)) {
-								participant = author // TODO: investigate sending receipts to LIDs and not PNs
-							}
-						} else if (!sendActiveReceipts) {
-							type = 'inactive'
-						}
-
-						await sendReceipt(msg.key.remoteJid!, participant!, [msg.key.id!], type)
-
-						// send ack for history message
-						const isAnyHistoryMsg = getHistoryMsg(msg.message!)
-						if (isAnyHistoryMsg) {
-							const jid = jidNormalizedUser(msg.key.remoteJid!)
-							await sendReceipt(jid, undefined, [msg.key.id!], 'hist_sync')
-						}
+			await processingMutex.mutex(async () => {
+				await decrypt()
+				// message failed to decrypt
+				if (msg.messageStubType === proto.WebMessageInfo.StubType.CIPHERTEXT) {
+					if (msg?.messageStubParameters?.[0] === MISSING_KEYS_ERROR_TEXT) {
+						return sendMessageAck(node, NACK_REASONS.ParsingError)
 					}
 
-					cleanMessage(msg, authState.creds.me!.id)
+					const errorMessage = msg?.messageStubParameters?.[0] || ''
+					const isPreKeyError = errorMessage.includes('PreKey')
 
-					await upsertMessage(msg, node.attrs.offline ? 'append' : 'notify')
-				})
-			])
+					logger.debug(`[handleMessage] Attempting retry request for failed decryption`)
+
+					// Handle both pre-key and normal retries in single mutex
+					retryMutex.mutex(async () => {
+						try {
+							if (!ws.isOpen) {
+								logger.debug({ node }, 'Connection closed, skipping retry')
+								return
+							}
+
+							// Handle pre-key errors with upload and delay
+							if (isPreKeyError) {
+								logger.info({ error: errorMessage }, 'PreKey error detected, uploading and retrying')
+
+								try {
+									logger.debug('Uploading pre-keys for error recovery')
+									await uploadPreKeys(5)
+									logger.debug('Waiting for server to process new pre-keys')
+									await delay(1000)
+								} catch (uploadErr) {
+									logger.error({ uploadErr }, 'Pre-key upload failed, proceeding with retry anyway')
+								}
+							}
+
+							const encNode = getBinaryNodeChild(node, 'enc')
+							await sendRetryRequest(node, !encNode)
+							if (retryRequestDelayMs) {
+								await delay(retryRequestDelayMs)
+							}
+						} catch (err) {
+							logger.error({ err, isPreKeyError }, 'Failed to handle retry, attempting basic retry')
+							// Still attempt retry even if pre-key upload failed
+							try {
+								const encNode = getBinaryNodeChild(node, 'enc')
+								await sendRetryRequest(node, !encNode)
+							} catch (retryErr) {
+								logger.error({ retryErr }, 'Failed to send retry after error handling')
+							}
+						}
+
+						await sendMessageAck(node, NACK_REASONS.UnhandledError)
+					})
+				} else {
+					// no type in the receipt => message delivered
+					let type: MessageReceiptType = undefined
+					let participant = msg.key.participant
+					if (category === 'peer') {
+						// special peer message
+						type = 'peer_msg'
+					} else if (msg.key.fromMe) {
+						// message was sent by us from a different device
+						type = 'sender'
+						// need to specially handle this case
+						if (isLidUser(msg.key.remoteJid!) || isLidUser(msg.key.remoteJidAlt)) {
+							participant = author // TODO: investigate sending receipts to LIDs and not PNs
+						}
+					} else if (!sendActiveReceipts) {
+						type = 'inactive'
+					}
+
+					await sendReceipt(msg.key.remoteJid!, participant!, [msg.key.id!], type)
+
+					// send ack for history message
+					const isAnyHistoryMsg = getHistoryMsg(msg.message!)
+					if (isAnyHistoryMsg) {
+						const jid = jidNormalizedUser(msg.key.remoteJid!)
+						await sendReceipt(jid, undefined, [msg.key.id!], 'hist_sync')
+					}
+				}
+
+				cleanMessage(msg, authState.creds.me!.id, authState.creds.me!.lid!)
+
+				await upsertMessage(msg, node.attrs.offline ? 'append' : 'notify')
+			})
 		} catch (error) {
-			logger.error({ error, node }, 'error in handling message')
+			logger.error({ error, node: binaryNodeToString(node) }, 'error in handling message')
 		}
 	}
 
 	const handleCall = async (node: BinaryNode) => {
-		let status: WACallUpdateType
 		const { attrs } = node
 		const [infoChild] = getAllBinaryNodeChildren(node)
+		const status = getCallStatusFromNode(infoChild!)
 
 		if (!infoChild) {
 			throw new Boom('Missing call info in call node')
@@ -1288,23 +1287,6 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 
 		const callId = infoChild.attrs['call-id']!
 		const from = infoChild.attrs.from! || infoChild.attrs['call-creator']!
-		status = getCallStatusFromNode(infoChild)
-
-		if (isLidUser(from) && infoChild.tag === 'relaylatency') {
-			const verify = await callOfferCache.get(callId)
-			if (!verify) {
-				status = 'offer'
-				const callLid: WACallEvent = {
-					chatId: attrs.from!,
-					from,
-					id: callId,
-					date: new Date(+attrs.t! * 1000),
-					offline: !!attrs.offline,
-					status
-				}
-				await callOfferCache.set(callId, callLid)
-			}
-		}
 
 		const call: WACallEvent = {
 			chatId: attrs.from!,

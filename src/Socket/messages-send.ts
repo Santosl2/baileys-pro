@@ -43,9 +43,9 @@ import {
 	type FullJid,
 	getBinaryNodeChild,
 	getBinaryNodeChildren,
+	isHostedLidUser,
+	isHostedPnUser,
 	isJidGroup,
-	isJidHostedLidUser,
-	isJidHostedPnUser,
 	isLidUser,
 	isPnUser,
 	jidDecode,
@@ -115,6 +115,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 					content: [{ tag: 'media_conn', attrs: {} }]
 				})
 				const mediaConnNode = getBinaryNodeChild(result, 'media_conn')!
+				// TODO: explore full length of data that whatsapp provides
 				const node: MediaConnInfo = {
 					hosts: getBinaryNodeChildren(mediaConnNode, 'host').map(({ attrs }) => ({
 						hostname: attrs.hostname!,
@@ -245,7 +246,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 			})
 			.filter(jid => jid !== null)
 
-		let mgetDevices: undefined | Record<string, JidWithDevice[] | undefined>
+		let mgetDevices: undefined | Record<string, FullJid[] | undefined>
 
 		if (useCache && userDevicesCache.mget) {
 			const usersToFetch = jidsWithUser.map(j => j?.user).filter(Boolean) as string[]
@@ -256,12 +257,11 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 			if (useCache) {
 				const devices =
 					mgetDevices?.[user!] ||
-					(userDevicesCache.mget ? undefined : ((await userDevicesCache.get(user!)) as JidWithDevice[]))
+					(userDevicesCache.mget ? undefined : ((await userDevicesCache.get(user!)) as FullJid[]))
 				if (devices) {
-					const isLidJid = jid.includes('@lid')
 					const devicesWithJid = devices.map(d => ({
 						...d,
-						jid: isLidJid ? jidEncode(d.user, 'lid', d.device) : jidEncode(d.user, 's.whatsapp.net', d.device)
+						jid: jidEncode(d.user, d.server, d.device)
 					}))
 					deviceResults.push(...devicesWithJid)
 
@@ -280,7 +280,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 
 		const requestedLidUsers = new Set<string>()
 		for (const jid of toFetch) {
-			if (jid.includes('@lid')) {
+			if (isLidUser(jid) || isHostedLidUser(jid)) {
 				const user = jidDecode(jid)?.user
 				if (user) requestedLidUsers.add(user)
 			}
@@ -302,7 +302,12 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				await signalRepository.lidMapping.storeLIDPNMappings(lidResults.map(a => ({ lid: a.lid as string, pn: a.id })))
 			}
 
-			const extracted = extractDeviceJids(result?.list, authState.creds.me!.id, ignoreZeroDevices)
+			const extracted = extractDeviceJids(
+				result?.list,
+				authState.creds.me!.id,
+				authState.creds.me!.lid!,
+				ignoreZeroDevices
+			)
 			const deviceMap: { [_: string]: FullJid[] } = {}
 
 			for (const item of extracted) {
@@ -317,8 +322,8 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				// Process all devices for this user
 				for (const item of userDevices) {
 					const finalJid = isLidUser
-						? jidEncode(user, item.server === 'hosted' ? 'hosted.lid' : 'lid', item.device)
-						: jidEncode(item.user, item.server === 'hosted' ? 'hosted' : 's.whatsapp.net', item.device)
+						? jidEncode(user, item.server, item.device)
+						: jidEncode(item.user, item.server, item.device)
 
 					deviceResults.push({
 						...item,
@@ -374,6 +379,8 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		const uniqueJids = [...new Set(jids)] // Deduplicate JIDs
 		const jidsRequiringFetch: string[] = []
 
+		logger.debug({ jids }, 'assertSessions call with jids')
+
 		// Check peerSessionsCache and validate sessions using libsignal loadSession
 		for (const jid of uniqueJids) {
 			const signalId = signalRepository.jidToSignalProtocolAddress(jid)
@@ -397,10 +404,10 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		if (jidsRequiringFetch.length) {
 			// LID if mapped, otherwise original
 			const wireJids = [
-				...jidsRequiringFetch.filter(jid => !!jid.includes('@lid')),
+				...jidsRequiringFetch.filter(jid => !!isLidUser(jid) || !!isHostedLidUser(jid)),
 				...(
 					(await signalRepository.lidMapping.getLIDsForPNs(
-						jidsRequiringFetch.filter(jid => !!jid.includes('@s.whatsapp.net'))
+						jidsRequiringFetch.filter(jid => !!isPnUser(jid) || !!isHostedPnUser(jid))
 					)) || []
 				).map(a => a.lid)
 			]
@@ -459,7 +466,13 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				category: 'peer',
 
 				push_priority: 'high_force'
-			}
+			},
+			additionalNodes: [
+				{
+					tag: 'meta',
+					attrs: { appdata: 'default' }
+				}
+			]
 		})
 
 		return msgId
@@ -700,7 +713,12 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				for (const device of devices) {
 					const deviceJid = device.jid
 					const hasKey = !!senderKeyMap[deviceJid]
-					if ((!hasKey || !!participant) && !isJidHostedLidUser(deviceJid) && !isJidHostedPnUser(deviceJid)) {
+					if (
+						(!hasKey || !!participant) &&
+						!isHostedLidUser(deviceJid) &&
+						!isHostedPnUser(deviceJid) &&
+						device.device !== 99
+					) {
 						//todo: revamp all this logic
 						// the goal is to follow with what I said above for each group, and instead of a true false map of ids, we can set an array full of those the app has already sent pkmsgs
 						senderKeyRecipients.push(deviceJid)
@@ -821,7 +839,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 					}
 
 					// Check if this is our device (could match either PN or LID user)
-					const isMe = user === mePnUser || (meLidUser && user === meLidUser)
+					const isMe = user === mePnUser || user === meLidUser
 
 					if (isMe) {
 						meRecipients.push(jid)

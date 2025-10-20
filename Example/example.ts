@@ -6,6 +6,7 @@ import makeWASocket, { AnyMessageContent, BinaryInfo, CacheStore, delay, Disconn
 import open from 'open'
 import fs from 'fs'
 import P from 'pino'
+import { WAMHandler } from './wam'
 
 const logger = P({
   level: "trace",
@@ -96,6 +97,9 @@ const startSock = async () => {
 		// implement to handle retries & poll updates
 		getMessage
 	})
+
+
+	const wam = new WAMHandler(sock, state)
 
 	// Pairing code for Web clients
 	if (usePairingCode && !sock.authState.creds.registered) {

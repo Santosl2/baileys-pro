@@ -355,6 +355,9 @@ export type AnyMessageContent =
 	| {
 			disappearingMessagesInChat: boolean | number
 	  }
+	| {
+			limitSharing: boolean
+	  }
 
 export type GroupMetadataParticipants = Pick<GroupMetadata, 'participants'>
 

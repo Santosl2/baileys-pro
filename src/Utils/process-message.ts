@@ -19,9 +19,9 @@ import { WAMessageStubType } from '../Types'
 import { getContentType, normalizeMessageContent } from '../Utils/messages'
 import {
 	areJidsSameUser,
+	isHostedLidUser,
+	isHostedPnUser,
 	isJidBroadcast,
-	isJidHostedLidUser,
-	isJidHostedPnUser,
 	isJidStatusBroadcast,
 	jidDecode,
 	jidEncode,
@@ -53,21 +53,21 @@ const REAL_MSG_STUB_TYPES = new Set([
 const REAL_MSG_REQ_ME_STUB_TYPES = new Set([WAMessageStubType.GROUP_PARTICIPANT_ADD])
 
 /** Cleans a received message to further processing */
-export const cleanMessage = (message: WAMessage, meId: string) => {
+export const cleanMessage = (message: WAMessage, meId: string, meLid: string) => {
 	// ensure remoteJid and participant doesn't have device or agent in it
-	if (isJidHostedPnUser(message.key.remoteJid!) || isJidHostedLidUser(message.key.remoteJid!)) {
+	if (isHostedPnUser(message.key.remoteJid!) || isHostedLidUser(message.key.remoteJid!)) {
 		message.key.remoteJid = jidEncode(
 			jidDecode(message.key?.remoteJid!)?.user!,
-			isJidHostedPnUser(message.key.remoteJid!) ? 's.whatsapp.net' : 'lid'
+			isHostedPnUser(message.key.remoteJid!) ? 's.whatsapp.net' : 'lid'
 		)
 	} else {
 		message.key.remoteJid = jidNormalizedUser(message.key.remoteJid!)
 	}
 
-	if (isJidHostedPnUser(message.key.participant!) || isJidHostedLidUser(message.key.participant!)) {
+	if (isHostedPnUser(message.key.participant!) || isHostedLidUser(message.key.participant!)) {
 		message.key.participant = jidEncode(
 			jidDecode(message.key.participant!)?.user!,
-			isJidHostedPnUser(message.key.participant!) ? 's.whatsapp.net' : 'lid'
+			isHostedPnUser(message.key.participant!) ? 's.whatsapp.net' : 'lid'
 		)
 	} else {
 		message.key.participant = jidNormalizedUser(message.key.participant!)
@@ -90,7 +90,8 @@ export const cleanMessage = (message: WAMessage, meId: string) => {
 			// if the sender believed the message being reacted to is not from them
 			// we've to correct the key to be from them, or some other participant
 			msgKey.fromMe = !msgKey.fromMe
-				? areJidsSameUser(msgKey.participant || msgKey.remoteJid!, meId)
+				? areJidsSameUser(msgKey.participant || msgKey.remoteJid!, meId) ||
+					areJidsSameUser(msgKey.participant || msgKey.remoteJid!, meLid)
 				: // if the message being reacted to, was from them
 					// fromMe automatically becomes false
 					false
@@ -229,6 +230,7 @@ const processMessage = async (
 				)
 
 				if (process) {
+					// TODO: investigate
 					if (histNotification.syncType !== proto.HistorySync.HistorySyncType.ON_DEMAND) {
 						ev.emit('creds.update', {
 							processedHistoryMessages: [
@@ -395,12 +397,12 @@ const processMessage = async (
 
 		switch (message.messageStubType) {
 			case WAMessageStubType.GROUP_PARTICIPANT_CHANGE_NUMBER:
-				participants = message.messageStubParameters || []
+				participants = message.messageStubParameters.map((a: any) => JSON.parse(a as string)) || []
 				emitParticipantsUpdate('modify')
 				break
 			case WAMessageStubType.GROUP_PARTICIPANT_LEAVE:
 			case WAMessageStubType.GROUP_PARTICIPANT_REMOVE:
-				participants = message.messageStubParameters || []
+				participants = message.messageStubParameters.map((a: any) => JSON.parse(a as string)) || []
 				emitParticipantsUpdate('remove')
 				// mark the chat read only if you left the group
 				if (participantsIncludesMe()) {
@@ -411,7 +413,7 @@ const processMessage = async (
 			case WAMessageStubType.GROUP_PARTICIPANT_ADD:
 			case WAMessageStubType.GROUP_PARTICIPANT_INVITE:
 			case WAMessageStubType.GROUP_PARTICIPANT_ADD_REQUEST_JOIN:
-				participants = message.messageStubParameters || []
+				participants = message.messageStubParameters.map((a: any) => JSON.parse(a as string)) || []
 				if (participantsIncludesMe()) {
 					chat.readOnly = false
 				}
@@ -419,11 +421,11 @@ const processMessage = async (
 				emitParticipantsUpdate('add')
 				break
 			case WAMessageStubType.GROUP_PARTICIPANT_DEMOTE:
-				participants = message.messageStubParameters || []
+				participants = message.messageStubParameters.map((a: any) => JSON.parse(a as string)) || []
 				emitParticipantsUpdate('demote')
 				break
 			case WAMessageStubType.GROUP_PARTICIPANT_PROMOTE:
-				participants = message.messageStubParameters || []
+				participants = message.messageStubParameters.map((a: any) => JSON.parse(a as string)) || []
 				emitParticipantsUpdate('promote')
 				break
 			case WAMessageStubType.GROUP_CHANGE_ANNOUNCE:
@@ -457,7 +459,7 @@ const processMessage = async (
 				emitGroupUpdate({ joinApprovalMode: approvalMode === 'on' })
 				break
 			case WAMessageStubType.GROUP_MEMBERSHIP_JOIN_APPROVAL_REQUEST_NON_ADMIN_ADD: // TODO: Add other events
-				const participant = message.messageStubParameters?.[0] as LIDMapping
+				const participant = JSON.parse(message.messageStubParameters?.[0]) as LIDMapping
 				const action = message.messageStubParameters?.[1] as RequestJoinAction
 				const method = message.messageStubParameters?.[2] as RequestJoinMethod
 				emitGroupRequestJoin(participant, action, method)
