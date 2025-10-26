@@ -292,6 +292,24 @@ export const makeSocket = (config: SocketConfig) => {
 		})
 	}
 
+	const digestKeyBundle = async (): Promise<void> => {
+		try {
+			const res = await query({
+				tag: 'iq',
+				attrs: { to: S_WHATSAPP_NET, type: 'get', xmlns: 'encrypt' },
+				content: [{ tag: 'digest', attrs: {} }]
+			})
+			const digestNode = getBinaryNodeChild(res, 'digest')
+			if (!digestNode) {
+				await uploadPreKeys()
+				throw new Error('encrypt/get digest returned no digest node')
+			}
+		} catch (err) {
+			await uploadPreKeys()
+			throw err
+		}
+	}
+
 	const uploadPreKeysToServerIfRequired = async () => {
 		const preKeyCount = await getAvailablePreKeysOnServer()
 		logger.info(`${preKeyCount} pre-keys found on server`)
@@ -642,6 +660,11 @@ export const makeSocket = (config: SocketConfig) => {
 		try {
 			await uploadPreKeysToServerIfRequired()
 			await sendPassiveIq('active')
+			try {
+				await digestKeyBundle()
+			} catch (e) {
+				logger.warn({ e }, 'failed to run digest after login')
+			}
 		} catch (error) {
 			logger.error({ error }, 'error in post login tasks')
 		}

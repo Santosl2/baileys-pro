@@ -106,6 +106,10 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 
 	let sendActiveReceipts = false
 
+	const isOwnJid = (jid: string) => {
+		return jid === authState.creds.me!.id
+	}
+
 	const sendMessageAck = async ({ tag, attrs, content }: BinaryNode, errorCode?: number) => {
 		const stanza: BinaryNode = {
 			tag: 'ack',
@@ -1231,6 +1235,12 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 				logger.warn({ node }, 'Unknown newsletter notification')
 				break
 		}
+	}
+
+	// Handles privacy token notifications
+	async function handlePrivacyTokenNotification(node: BinaryNode) {
+		const from = node.attrs.from
+		console.log(from, 'got privacy token notification')
 	}
 
 	// Handles mex newsletter notifications

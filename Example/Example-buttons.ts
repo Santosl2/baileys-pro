@@ -109,7 +109,7 @@ const startSock = async () => {
 
 			sock.ws.on('CB:message', data => {
 				// Usado para debugar novas features
-				// console.log('CB:message', JSON.stringify(data, null, 2))
+				console.log('CB:message', data)
 			})
 
 			async function sendOtp() {
@@ -458,6 +458,54 @@ Selecione e melhor opção:`,
 				)
 			}
 
+			async function sendButtonsWithNewFormat() {
+				await sock.relayMessage(
+					'553185702237@s.whatsapp.net',
+					{
+						buttonsMessage: {
+							contentText: 'Entendi que você quer receber o código de acesso em +5531 9###0-##37. Posso confirmar?',
+							buttons: [
+								{
+									buttonId: 'Sim',
+									buttonText: {
+										displayText: 'Sim'
+									},
+									type: 1 // RESPONSE
+								},
+								{
+									buttonId: 'Outra opção',
+									buttonText: {
+										displayText: 'Outra opção'
+									},
+									type: 1 // RESPONSE
+								},
+								{
+									buttonId: 'Voltar',
+									buttonText: {
+										displayText: 'Voltar'
+									},
+									type: 1 // RESPONSE
+								}
+							]
+						}
+					},
+					{
+						additionalNodes: [
+							{
+								tag: 'biz',
+								attrs: {},
+								content: [
+									{
+										tag: 'buttons',
+										attrs: {}
+									}
+								]
+							}
+						]
+					}
+				)
+			}
+
 			// Ainda em desenvolvimento
 			// Botoes de atualizacao de STATUS do pedido
 			async function sendButtonCode2() {
@@ -627,17 +675,24 @@ Selecione e melhor opção:`,
 				if (upsert.type === 'notify') {
 					for (const msg of upsert.messages) {
 						// Para pegar o botão que o usuário clicou
-						const clickedButton = msg.message?.buttonsResponseMessage?.selectedButtonId || msg.message?.templateButtonReplyMessage?.selectedId
+						const clickedButton =
+							msg.message?.buttonsResponseMessage?.selectedButtonId ||
+							msg.message?.templateButtonReplyMessage?.selectedId
 
 						// console.log(JSONmsg.message?.templateButtonReplyMessage)
-// 
+						//
 						if (clickedButton === 'abc') {
 						}
 
 						if (msg.key.fromMe) {
 							console.log('is own message')
-							if (msg.message?.conversation?.startsWith('!') || msg.message?.extendedTextMessage?.text?.startsWith('!')) {
-								const command = msg.message?.conversation?.slice(1).trim().toLowerCase() || msg.message?.extendedTextMessage?.text?.slice(1).trim().toLowerCase()
+							if (
+								msg.message?.conversation?.startsWith('!') ||
+								msg.message?.extendedTextMessage?.text?.startsWith('!')
+							) {
+								const command =
+									msg.message?.conversation?.slice(1).trim().toLowerCase() ||
+									msg.message?.extendedTextMessage?.text?.slice(1).trim().toLowerCase()
 								//
 
 								if (command === 'otp') {
@@ -647,7 +702,8 @@ Selecione e melhor opção:`,
 								} else if (command === 'pix') {
 									await sendPix()
 								} else if (command === 'buttons') {
-									await sendWithBasicButtons()
+									// await sendWithBasicButtons()
+									await sendButtonsWithNewFormat()
 								} else if (command === 'multiple_buttons') {
 									await sendWithMultipleButtons()
 								} else if (command === 'multiple_buttons_with_image') {
