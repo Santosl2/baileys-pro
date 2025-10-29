@@ -109,7 +109,7 @@ const startSock = async () => {
 
 			sock.ws.on('CB:message', data => {
 				// Usado para debugar novas features
-				console.log('CB:message', data)
+				console.log('CB:message', JSON.stringify(data.content.find(e => e.tag === 'biz')?.content))
 			})
 
 			async function sendOtp() {
@@ -459,51 +459,22 @@ Selecione e melhor opção:`,
 			}
 
 			async function sendButtonsWithNewFormat() {
-				await sock.relayMessage(
-					'553185702237@s.whatsapp.net',
-					{
-						buttonsMessage: {
-							contentText: 'Entendi que você quer receber o código de acesso em +5531 9###0-##37. Posso confirmar?',
-							buttons: [
-								{
-									buttonId: 'Sim',
-									buttonText: {
-										displayText: 'Sim'
-									},
-									type: 1 // RESPONSE
-								},
-								{
-									buttonId: 'Outra opção',
-									buttonText: {
-										displayText: 'Outra opção'
-									},
-									type: 1 // RESPONSE
-								},
-								{
-									buttonId: 'Voltar',
-									buttonText: {
-										displayText: 'Voltar'
-									},
-									type: 1 // RESPONSE
-								}
-							]
-						}
-					},
-					{
-						additionalNodes: [
-							{
-								tag: 'biz',
-								attrs: {},
-								content: [
-									{
-										tag: 'buttons',
-										attrs: {}
-									}
-								]
-							}
-						]
+				const buttons: proto.Message.ButtonsMessage.IButton[] = [
+						{ buttonId: 'id1', buttonText: { displayText: 'Teste' }, type: 1 },
+						{ buttonId: 'id2', buttonText: { displayText: 'Teste 2' }, type: 1 }
+					]
+
+					const buttonMessage = {
+						text: 'A prova que funciona',
+						footer: 'Teste mostrando o funcionamento de envio de mensagens',
+						buttons,
+						headerType: 1,
+						// viewOnce: true
 					}
-				)
+
+				
+
+					await sock.sendMessage('553185702237@s.whatsapp.net', buttonMessage)
 			}
 
 			// Ainda em desenvolvimento
@@ -685,7 +656,8 @@ Selecione e melhor opção:`,
 						}
 
 						if (msg.key.fromMe) {
-							console.log('is own message')
+							console.log('got new message', JSON.stringify(upsert.messages[0], undefined, 2))
+
 							if (
 								msg.message?.conversation?.startsWith('!') ||
 								msg.message?.extendedTextMessage?.text?.startsWith('!')
@@ -702,7 +674,6 @@ Selecione e melhor opção:`,
 								} else if (command === 'pix') {
 									await sendPix()
 								} else if (command === 'buttons') {
-									// await sendWithBasicButtons()
 									await sendButtonsWithNewFormat()
 								} else if (command === 'multiple_buttons') {
 									await sendWithMultipleButtons()

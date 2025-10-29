@@ -749,7 +749,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 	const getButtonType = (message: proto.IMessage) => {
 		if (message.interactiveMessage) {
 			return 'interactive'
-		} else if (message.buttonsMessage) {
+		} else if (message.buttonsMessage || message.documentWithCaptionMessage?.message?.buttonsMessage) {
 			return 'buttons'
 		} else if (message.buttonsResponseMessage) {
 			return 'buttons_response'
@@ -801,7 +801,11 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		// 	}
 		// }
 
-		if (message.interactiveMessage || message.buttonsMessage) {
+		if (
+			message.interactiveMessage ||
+			message.buttonsMessage ||
+			message.documentWithCaptionMessage?.message?.buttonsMessage
+		) {
 			return {
 				tag: 'biz',
 				attrs: {},
@@ -809,7 +813,8 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 					{
 						tag: 'interactive',
 						attrs: {
-							type: 'native_flow'
+							type: 'native_flow',
+							v: '1'
 						},
 						content: [
 							{
