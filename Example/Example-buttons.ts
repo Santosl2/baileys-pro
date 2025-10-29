@@ -408,6 +408,23 @@ Selecione e melhor opção:`,
 				})
 			}
 
+			async function sendButtonsWithNewFormat() {
+				const buttons: proto.Message.ButtonsMessage.IButton[] = [
+					{ buttonId: 'id1', buttonText: { displayText: 'Teste' }, type: 1 },
+					{ buttonId: 'id2', buttonText: { displayText: 'Teste 2' }, type: 1 }
+				]
+
+				const buttonMessage = {
+					text: 'A prova que funciona',
+					footer: 'Teste mostrando o funcionamento de envio de mensagens',
+					buttons,
+					headerType: 1
+					// viewOnce: true
+				}
+
+				await sock.sendMessage(WHATSAPP_NUMBER, buttonMessage)
+			}
+
 			// Em desenvolvimento
 			// Todo: Ainda em desenvolvimento
 			async function sendCarousel() {
@@ -920,7 +937,8 @@ Selecione e melhor opção:`,
 								} else if (command === 'pix') {
 									await sendPix()
 								} else if (command === 'buttons') {
-									await sendWithBasicButtons()
+									// await sendWithBasicButtons() / Não notifica no web wpp
+									await sendButtonsWithNewFormat()
 								} else if (command === 'multiple_buttons') {
 									await sendWithMultipleButtons()
 								} else if (command === 'multiple_buttons_with_image') {
