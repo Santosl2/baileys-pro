@@ -550,7 +550,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				// if there are some participants with whom the session has not been established
 				// if there are, we re-send the senderkey
 				// Send only if participant count is not set
-				if (senderKeyJids.length && !participant?.count) {
+				if (senderKeyJids.length) {
 					logger.debug({ senderKeyJids }, 'sending new sender key')
 
 					const senderKeyMsg: proto.IMessage = {
