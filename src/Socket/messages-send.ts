@@ -40,6 +40,7 @@ import {
 	getBinaryNodeChildren,
 	isJidGroup,
 	isJidUser,
+	isLidUser,
 	jidDecode,
 	jidEncode,
 	jidNormalizedUser,
@@ -397,6 +398,8 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		}: MessageRelayOptions
 	) => {
 		const meId = authState.creds.me!.id
+		const meLid = authState.creds.me!.lid
+
 		const isRetryResend = Boolean(participant?.jid)
 
 		let shouldIncludeDeviceIdentity = isRetryResend
@@ -407,6 +410,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		const isStatus = jid === statusJid
 		const isLid = server === 'lid'
 		const isNewsletter = server === 'newsletter'
+		const isGroupOrStatus = isGroup || isStatus
 
 		msgId = msgId || generateMessageIDV2(sock.user?.id)
 		useUserDevicesCache = useUserDevicesCache !== false
@@ -473,7 +477,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				extraAttrs['decrypt-fail'] = 'hide'
 			}
 
-			if (isGroup || isStatus) {
+			if (isGroupOrStatus && !isRetryResend) {
 				const [groupData, senderKeyMap] = await Promise.all([
 					(async () => {
 						let groupData = useCachedGroupMetadata && groupMetadataCache ? groupMetadataCache.get(jid) : undefined
@@ -548,7 +552,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				// if there are some participants with whom the session has not been established
 				// if there are, we re-send the senderkey
 				// Send only if participant count is not set
-				if (senderKeyJids.length && !participant?.count) {
+				if (senderKeyJids.length) {
 					logger.debug({ senderKeyJids }, 'sending new sender key')
 
 					const senderKeyMsg: proto.IMessage = {
@@ -566,28 +570,14 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 					participants.push(...result.nodes)
 				}
 
-				// If participant count is set, include it in the message
-				if (isRetryResend && participant?.count) {
-					const { type, ciphertext: encryptedContent } = await signalRepository.encryptMessage({
-						data: bytes,
-						jid: participant.jid
-					})
-
-					binaryNodeContent.push({
-						tag: 'enc',
-						attrs: { v: '2', type, count: participant.count.toString() },
-						content: encryptedContent
-					})
-				} else {
-					binaryNodeContent.push({
-						tag: 'enc',
-						attrs: { v: '2', type: 'skmsg' },
-						content: ciphertext
-					})
-				}
+				binaryNodeContent.push({
+					tag: 'enc',
+					attrs: { v: '2', type: 'skmsg' },
+					content: ciphertext
+				})
 
 				await authState.keys.set({ 'sender-key-memory': { [jid]: senderKeyMap } })
-			} else {
+			} else if (!isRetryResend) {
 				const { user: meUser } = jidDecode(meId)!
 
 				if (!participant) {
@@ -649,6 +639,35 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 						content: participants
 					})
 				}
+			}
+
+			if (isRetryResend) {
+				const isParticipantLid = isLidUser(participant!.jid)
+				const isMe = areJidsSameUser(participant!.jid, isParticipantLid ? meLid : meId)
+
+				const encodedMessageToSend = isMe
+					? encodeWAMessage({
+							deviceSentMessage: {
+								destinationJid,
+								message
+							}
+						})
+					: encodeWAMessage(message)
+
+				const { type, ciphertext: encryptedContent } = await signalRepository.encryptMessage({
+					data: encodedMessageToSend,
+					jid: participant!.jid
+				})
+
+				binaryNodeContent.push({
+					tag: 'enc',
+					attrs: {
+						v: '2',
+						type,
+						count: participant!.count.toString()
+					},
+					content: encryptedContent
+				})
 			}
 
 			const stanza: BinaryNode = {
