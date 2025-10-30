@@ -1237,12 +1237,6 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		}
 	}
 
-	// Handles privacy token notifications
-	async function handlePrivacyTokenNotification(node: BinaryNode) {
-		const from = node.attrs.from
-		console.log(from, 'got privacy token notification')
-	}
-
 	// Handles mex newsletter notifications
 	async function handleMexNewsletterNotification(node: BinaryNode) {
 		const mexNode = getBinaryNodeChild(node, 'mex')
