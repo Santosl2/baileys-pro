@@ -18,7 +18,8 @@ import makeWASocket, {
 	WAProductOrderTypeEnum,
 	WAInteractiveMessagesNativeFlowName,
 	WAPixTypes,
-	fetchLatestWaWebVersion
+	fetchLatestWaWebVersion,
+	isJidGroup
 } from '../src'
 //import MAIN_LOGGER from '../src/Utils/logger'
 import fs from 'fs'
@@ -657,6 +658,11 @@ Selecione e melhor opção:`,
 
 						if (msg.key.fromMe) {
 							console.log('got new message', JSON.stringify(upsert.messages[0], undefined, 2))
+
+							if(isJidGroup(msg.key.remoteJid!)) {
+								console.log('mensagem de grupo')
+								await sock.sendMessage(msg.key.remoteJid!, { text: 'Mensagem de grupo detectada!' })
+							}
 
 							if (
 								msg.message?.conversation?.startsWith('!') ||

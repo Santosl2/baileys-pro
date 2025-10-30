@@ -58,7 +58,8 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		options: axiosOptions,
 		patchMessageBeforeSending,
 		groupMetadataCache,
-		recentMessageSentHistory
+		recentMessageSentHistory,
+		useLidForGroupMessages = false
 	} = config
 	const sock: NewsletterSocket = makeNewsletterSocket(makeGroupsSocket(config))
 	const {
@@ -228,7 +229,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 			return deviceResults
 		}
 
-		const query = new USyncQuery().withContext('message').withDeviceProtocol()
+		const query = new USyncQuery().withContext('message').withDeviceProtocol().withLIDProtocol()
 
 		for (const jid of toFetch) {
 			query.withUser(new USyncUser().withId(jid))
@@ -320,9 +321,10 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 			}
 		}
 
-		const meJid = jidNormalizedUser(authState.creds.me.id)
+		// const meJid = jidNormalizedUser(authState.creds.me.id)
+		const meLid = jidNormalizedUser(authState.creds.me.lid)
 
-		const msgId = await relayMessage(meJid, protocolMessage, {
+		const msgId = await relayMessage(meLid, protocolMessage, {
 			additionalAttributes: {
 				category: 'peer',
 				// eslint-disable-next-line camelcase
