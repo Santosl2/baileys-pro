@@ -1,6 +1,7 @@
 import { Boom } from '@hapi/boom'
 import { proto } from '../../WAProto'
 import { BinaryNode } from './types'
+import logger from '../Utils/logger'
 
 // some extra useful utilities
 
@@ -52,6 +53,7 @@ export const getBinaryNodeChildUInt = (node: BinaryNode, childTag: string, lengt
 export const assertNodeErrorFree = (node: BinaryNode) => {
 	const errNode = getBinaryNodeChild(node, 'error')
 	if (errNode) {
+		logger.error({ node, errNode }, 'Signal error node received')
 		throw new Boom(errNode.attrs.text || 'Unknown error', { data: +errNode.attrs.code })
 	}
 }

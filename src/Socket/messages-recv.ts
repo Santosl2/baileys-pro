@@ -733,7 +733,12 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 									await sendMessagesAgain(key, ids, retryNode!)
 								} catch (error: unknown) {
 									logger.error(
-										{ key, ids, trace: error instanceof Error ? error.stack : 'Unknown error' },
+										{
+											key,
+											ids,
+											trace: error instanceof Error ? error.stack : 'Unknown error',
+											boom: error instanceof Boom ? error.output : null
+										},
 										'error in sending message again'
 									)
 								}
@@ -901,7 +906,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 						// message was sent by us from a different device
 						type = 'sender'
 						// need to specially handle this case
-							if (isJidUser(msg.key.remoteJid!)) {
+						if (isJidUser(msg.key.remoteJid!)) {
 							participant = author
 						}
 					} else if (!sendActiveReceipts) {
