@@ -13,7 +13,7 @@ import {
 	WACallUpdateType,
 	WAVersion
 } from '../Types'
-import { BinaryNode, getAllBinaryNodeChildren, jidDecode } from '../WABinary'
+import { BinaryNode, getAllBinaryNodeChildren, jidDecode, jidEncode, JidServer } from '../WABinary'
 
 const PLATFORM_MAP = {
 	aix: 'AIX',
@@ -443,4 +443,8 @@ export function bytesToCrockford(buffer: Buffer): string {
 
 export function encodeNewsletterMessage(message: proto.IMessage): Uint8Array {
 	return proto.Message.encode(message).finish()
+}
+
+export function detectAddressingMode(addrMode = 'lid'): JidServer {
+	return addrMode === 'lid' ? 'lid' : 's.whatsapp.net'
 }

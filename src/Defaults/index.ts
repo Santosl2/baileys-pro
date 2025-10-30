@@ -47,6 +47,7 @@ const recentMessageSentHistory = new Map<string, proto.IMessage>()
 
 export const DEFAULT_CONNECTION_CONFIG: SocketConfig = {
 	version: version as WAVersion,
+	useLidForGroupMessages: true,
 	browser: Browsers.macOS('Chrome'),
 	waWebSocketUrl: 'wss://web.whatsapp.com/ws/chat',
 	connectTimeoutMs: 20_000,

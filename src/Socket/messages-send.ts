@@ -17,6 +17,7 @@ import {
 	assertMediaContent,
 	bindWaitForEvent,
 	decryptMediaRetryData,
+	detectAddressingMode,
 	encodeNewsletterMessage,
 	encodeSignedDeviceIdentity,
 	encodeWAMessage,
@@ -264,10 +265,9 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 
 	const assertSessions = async (jids: string[], force: boolean) => {
 		let didFetchNewSession = false
-		let jidsRequiringFetch: string[] = []
-		if (force) {
-			jidsRequiringFetch = jids
-		} else {
+		const jidsRequiringFetch: string[] = force ? jids : []
+
+		if (!force) {
 			const addrs = jids.map(jid => signalRepository.jidToSignalProtocolAddress(jid))
 			const sessions = await authState.keys.get('session', addrs)
 			for (const jid of jids) {
@@ -293,7 +293,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 						attrs: {},
 						content: jidsRequiringFetch.map(jid => {
 							const attrs: { [key: string]: string } = { jid }
-							if (force) attrs.reason = 'identity'
+							// if (force) attrs.reason = 'identity'
 							return { tag: 'user', attrs }
 						})
 					}
@@ -541,8 +541,8 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				const senderKeyJids: string[] = []
 				// ensure a connection is established with every device
 				for (const { user, device } of devices) {
-					const jid = jidEncode(user, groupData?.addressingMode === 'lid' ? 'lid' : 's.whatsapp.net', device)
-					if (!senderKeyMap[jid] && !isRetryResend) {
+					const jid = jidEncode(user, detectAddressingMode(groupData?.addressingMode), device)
+					if (!senderKeyMap[jid]) {
 						senderKeyJids.push(jid)
 						// store that this person has had the sender keys sent to them
 						senderKeyMap[jid] = true
@@ -578,6 +578,9 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 
 				await authState.keys.set({ 'sender-key-memory': { [jid]: senderKeyMap } })
 			} else if (!isRetryResend) {
+				const { user } = jidDecode(destinationJid)!
+				const meLidUser = jidDecode(meLid)?.user
+				const isMe = areJidsSameUser(user, meLidUser)
 				const { user: meUser } = jidDecode(meId)!
 
 				if (!participant) {
@@ -586,7 +589,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 						devices.push({ user: meUser })
 					}
 
-					if (additionalAttributes?.['category'] !== 'peer') {
+					if (additionalAttributes?.['category'] !== 'peer' && isMe) {
 						const additionalDevices = await getUSyncDevices([meId, jid], !!useUserDevicesCache, true)
 						devices.push(...additionalDevices)
 					}
