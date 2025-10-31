@@ -34,6 +34,8 @@ export enum DisconnectReason {
 	restartRequired = 515,
 	multideviceMismatch = 411,
 	forbidden = 403,
+	possibleBanned = 406,
+	tmpBan = 402,
 	unavailableService = 503
 }
 
