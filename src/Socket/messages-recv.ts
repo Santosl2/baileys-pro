@@ -4,7 +4,6 @@ import { randomBytes } from 'crypto'
 import Long = require('long')
 import { proto } from '../../WAProto'
 import { DEFAULT_CACHE_TTLS, KEY_BUNDLE_TYPE, MIN_PREKEY_COUNT } from '../Defaults'
-import { jidToSignalProtocolAddress } from '../Signal/libsignal'
 import {
 	MessageReceiptType,
 	MessageRelayOptions,
@@ -83,6 +82,8 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 
 	/** this mutex ensures that each retryRequest will wait for the previous one to finish */
 	const retryMutex = makeMutex()
+
+	const identityAssertDebounce = new NodeCache({ stdTTL: 5, useClones: false })
 
 	const msgRetryCache =
 		config.msgRetryCounterCache ||
@@ -271,8 +272,17 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 			const identityNode = getBinaryNodeChild(node, 'identity')
 			if (identityNode) {
 				logger.info({ jid: from }, 'identity changed')
-				// not handling right now
-				// signal will override new identity anyway
+				if (identityAssertDebounce.get(from)) {
+					logger.debug({ jid: from }, 'skipping identity assert (debounced)')
+					return
+				}
+
+				identityAssertDebounce.set(from, true)
+				try {
+					await assertSessions([from], true)
+				} catch (error) {
+					logger.warn({ error, jid: from }, 'failed to assert sessions after identity change')
+				}
 			} else {
 				logger.info({ node }, 'unknown encrypt notification')
 			}
