@@ -10,10 +10,11 @@ import {
 	RequestJoinAction,
 	RequestJoinMethod,
 	SignalKeyStoreWithTransaction,
+	SocketConfig,
 	WAMessageStubType
 } from '../Types'
 import { getContentType, normalizeMessageContent } from '../Utils/messages'
-import { areJidsSameUser, isJidBroadcast, isJidStatusBroadcast, jidNormalizedUser } from '../WABinary'
+import { areJidsSameUser, isJidBroadcast, isJidGroup, isJidStatusBroadcast, jidNormalizedUser } from '../WABinary'
 import { aesDecryptGCM, hmacSign } from './crypto'
 import { toNumber } from './generics'
 import { downloadAndProcessHistorySyncNotification } from './history'
@@ -27,6 +28,7 @@ type ProcessMessageContext = {
 	ev: BaileysEventEmitter
 	logger?: ILogger
 	options: AxiosRequestConfig<{}>
+	config: SocketConfig
 }
 
 const REAL_MSG_STUB_TYPES = new Set([
@@ -143,9 +145,56 @@ export function decryptPollVote(
 	}
 }
 
+const updateGroupMetadata = (
+	groupMetadata: GroupMetadata,
+	action: ParticipantAction,
+	participants: string[]
+): GroupMetadata => {
+	const findParticipant = (id: string) => groupMetadata.participants.find(p => areJidsSameUser(p.id, id))
+
+	switch (action) {
+		case 'add':
+			participants.forEach(id => {
+				if (!findParticipant(id)) {
+					groupMetadata.participants.push({ id, admin: null })
+				}
+			})
+			break
+
+		case 'remove':
+			groupMetadata.participants = groupMetadata.participants.filter(p => !participants.includes(p.id))
+			break
+
+		case 'promote':
+			participants.forEach(id => {
+				const p = findParticipant(id)
+				if (p) p.admin = 'admin'
+			})
+			break
+
+		case 'demote':
+			participants.forEach(id => {
+				const p = findParticipant(id)
+				if (p) p.admin = null
+			})
+			break
+	}
+
+	return groupMetadata
+}
+
 const processMessage = async (
 	message: proto.IWebMessageInfo,
-	{ shouldProcessHistoryMsg, placeholderResendCache, ev, creds, keyStore, logger, options }: ProcessMessageContext
+	{
+		shouldProcessHistoryMsg,
+		placeholderResendCache,
+		ev,
+		creds,
+		keyStore,
+		logger,
+		options,
+		config
+	}: ProcessMessageContext
 ) => {
 	const meId = creds.me!.id
 	const { accountSettings } = creds
@@ -249,6 +298,18 @@ const processMessage = async (
 					ephemeralSettingTimestamp: toNumber(message.messageTimestamp),
 					ephemeralExpiration: protocolMsg.ephemeralExpiration || null
 				})
+
+				if (chat.id && isJidGroup(chat.id)) {
+					const groupMetadata = config.groupMetadataCache?.get(chat.id)
+
+					if (!groupMetadata) break
+
+					config.groupMetadataCache?.set(chat.id, {
+						...groupMetadata,
+						ephemeralDuration: Number(protocolMsg.ephemeralExpiration) || undefined
+					})
+				}
+
 				break
 			case proto.Message.ProtocolMessage.Type.PEER_DATA_OPERATION_REQUEST_RESPONSE_MESSAGE:
 				const response = protocolMsg.peerDataOperationRequestResponseMessage!
@@ -307,10 +368,26 @@ const processMessage = async (
 		const jid = message.key?.remoteJid!
 		//let actor = whatsappID (message.participant)
 		let participants: string[]
-		const emitParticipantsUpdate = (action: ParticipantAction) =>
+		const emitParticipantsUpdate = async (action: ParticipantAction) => {
 			ev.emit('group-participants.update', { id: jid, author: message.participant!, participants, action })
-		const emitGroupUpdate = (update: Partial<GroupMetadata>) => {
-			ev.emit('groups.update', [{ id: jid, ...update, author: message.participant ?? undefined }])
+
+			const groupMetadata = config.groupMetadataCache?.get(jid)
+
+			if (!groupMetadata) return
+
+			const updatedMetadata = updateGroupMetadata(groupMetadata, action, participants)
+
+			config.groupMetadataCache?.set(jid, updatedMetadata)
+		}
+
+		const emitGroupUpdate = async (update: Partial<GroupMetadata>) => {
+			ev.emit('groups.update', [{ id: jid, ...update }])
+
+			const groupMetadata = config.groupMetadataCache?.get(jid)
+
+			if (!groupMetadata) return
+
+			config.groupMetadataCache?.set(jid, { ...groupMetadata, ...update })
 		}
 
 		const emitGroupRequestJoin = (participant: string, action: RequestJoinAction, method: RequestJoinMethod) => {

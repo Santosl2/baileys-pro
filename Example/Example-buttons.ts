@@ -109,7 +109,7 @@ const startSock = async () => {
 
 			sock.ws.on('CB:message', data => {
 				// Usado para debugar novas features
-				// console.log('CB:message', JSON.stringify(data, null, 2))
+				console.log('CB:message', JSON.stringify(data.content.find(e => e.tag === 'biz')?.content))
 			})
 
 			async function sendOtp() {
@@ -458,6 +458,25 @@ Selecione e melhor opção:`,
 				)
 			}
 
+			async function sendButtonsWithNewFormat() {
+				const buttons: proto.Message.ButtonsMessage.IButton[] = [
+						{ buttonId: 'id1', buttonText: { displayText: 'Teste' }, type: 1 },
+						{ buttonId: 'id2', buttonText: { displayText: 'Teste 2' }, type: 1 }
+					]
+
+					const buttonMessage = {
+						text: 'A prova que funciona',
+						footer: 'Teste mostrando o funcionamento de envio de mensagens',
+						buttons,
+						headerType: 1,
+						// viewOnce: true
+					}
+
+				
+
+					await sock.sendMessage('553185702237@s.whatsapp.net', buttonMessage)
+			}
+
 			// Ainda em desenvolvimento
 			// Botoes de atualizacao de STATUS do pedido
 			async function sendButtonCode2() {
@@ -627,17 +646,25 @@ Selecione e melhor opção:`,
 				if (upsert.type === 'notify') {
 					for (const msg of upsert.messages) {
 						// Para pegar o botão que o usuário clicou
-						const clickedButton = msg.message?.buttonsResponseMessage?.selectedButtonId || msg.message?.templateButtonReplyMessage?.selectedId
+						const clickedButton =
+							msg.message?.buttonsResponseMessage?.selectedButtonId ||
+							msg.message?.templateButtonReplyMessage?.selectedId
 
 						// console.log(JSONmsg.message?.templateButtonReplyMessage)
-// 
+						//
 						if (clickedButton === 'abc') {
 						}
 
 						if (msg.key.fromMe) {
-							console.log('is own message')
-							if (msg.message?.conversation?.startsWith('!')) {
-								const command = msg.message.conversation.slice(1).trim().toLowerCase()
+							console.log('got new message', JSON.stringify(upsert.messages[0], undefined, 2))
+
+							if (
+								msg.message?.conversation?.startsWith('!') ||
+								msg.message?.extendedTextMessage?.text?.startsWith('!')
+							) {
+								const command =
+									msg.message?.conversation?.slice(1).trim().toLowerCase() ||
+									msg.message?.extendedTextMessage?.text?.slice(1).trim().toLowerCase()
 								//
 
 								if (command === 'otp') {
@@ -647,7 +674,7 @@ Selecione e melhor opção:`,
 								} else if (command === 'pix') {
 									await sendPix()
 								} else if (command === 'buttons') {
-									await sendWithBasicButtons()
+									await sendButtonsWithNewFormat()
 								} else if (command === 'multiple_buttons') {
 									await sendWithMultipleButtons()
 								} else if (command === 'multiple_buttons_with_image') {

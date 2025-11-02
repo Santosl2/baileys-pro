@@ -103,18 +103,27 @@ export function decodeMessageNode(stanza: BinaryNode, meId: string, meLid: strin
 		throw new Boom('Unknown message type', { data: stanza })
 	}
 
-	const fromMe = (isLidUser(from) ? isMeLid : isMe)(stanza.attrs.participant || stanza.attrs.from)
+	const fromMe = (isLidUser(from) || isLidUser(participant) ? isMeLid : isMe)(
+		stanza.attrs.participant || stanza.attrs.from
+	)
 	const pushname = stanza?.attrs?.notify
+
+	const senderPn = isJidUser(stanza.attrs.from) ? stanza.attrs.from : stanza.attrs.sender_pn
+	const senderLid = isLidUser(stanza.attrs.from) ? stanza.attrs.from : stanza.attrs.sender_lid
+
+	const participantPn = isJidUser(stanza.attrs.participant) ? stanza.attrs.participant : stanza.attrs.participant_pn
+
+	const participantLid = isLidUser(stanza.attrs.participant) ? stanza.attrs.participant : stanza.attrs.participant_lid
 
 	const key: WAMessageKey = {
 		remoteJid: chatId,
 		fromMe,
 		id: msgId,
-		senderLid: stanza?.attrs?.sender_lid,
-		senderPn: stanza?.attrs?.sender_pn,
+		senderLid,
+		senderPn,
 		participant,
-		participantPn: stanza?.attrs?.participant_pn,
-		participantLid: stanza?.attrs?.participant_lid,
+		participantPn,
+		participantLid,
 		...(msgType === 'newsletter' && stanza.attrs.server_id ? { server_id: stanza.attrs.server_id } : {})
 	}
 
@@ -212,7 +221,10 @@ export const decryptMessageNode = (
 									item: msg.senderKeyDistributionMessage
 								})
 							} catch (err) {
-								logger.error({ key: fullMessage.key, err }, 'failed to decrypt message')
+								logger.error(
+									{ key: fullMessage.key, err, msg: content },
+									'failed to process sender key distribution message'
+								)
 							}
 						}
 
@@ -222,7 +234,16 @@ export const decryptMessageNode = (
 							fullMessage.message = msg
 						}
 					} catch (err) {
-						logger.error({ key: fullMessage.key, err }, 'failed to decrypt message')
+						const errorContext = {
+							key: fullMessage.key,
+							err,
+							messageType: tag === 'plaintext' ? 'plaintext' : attrs.type,
+							sender,
+							author,
+						}
+
+						logger.error(errorContext, 'failed to decrypt message')
+
 						fullMessage.messageStubType = proto.WebMessageInfo.StubType.CIPHERTEXT
 						fullMessage.messageStubParameters = [err.message]
 					}

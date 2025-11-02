@@ -4,6 +4,7 @@ import { randomBytes } from 'crypto'
 import Long = require('long')
 import { proto } from '../../WAProto'
 import { DEFAULT_CACHE_TTLS, KEY_BUNDLE_TYPE, MIN_PREKEY_COUNT } from '../Defaults'
+import { jidToSignalProtocolAddress } from '../Signal/libsignal'
 import {
 	MessageReceiptType,
 	MessageRelayOptions,
@@ -59,7 +60,8 @@ import { extractGroupMetadata } from './groups'
 import { makeMessagesSocket } from './messages-send'
 
 export const makeMessagesRecvSocket = (config: SocketConfig) => {
-	const { logger, retryRequestDelayMs, maxMsgRetryCount, getMessage, shouldIgnoreJid } = config
+	const { logger, retryRequestDelayMs, maxMsgRetryCount, getMessage, shouldIgnoreJid, recentMessageSentHistory } =
+		config
 	const sock = makeMessagesSocket(config)
 	const {
 		ev,
@@ -103,6 +105,10 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		})
 
 	let sendActiveReceipts = false
+
+	const isOwnJid = (jid: string) => {
+		return jid === authState.creds.me!.id
+	}
 
 	const sendMessageAck = async ({ tag, attrs, content }: BinaryNode, errorCode?: number) => {
 		const stanza: BinaryNode = {
@@ -167,17 +173,17 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		const { fullMessage } = decodeMessageNode(node, authState.creds.me!.id, authState.creds.me!.lid || '')
 		const { key: msgKey } = fullMessage
 		const msgId = msgKey.id!
+		const fromJid = node.attrs.from
 
-		const key = `${msgId}:${msgKey?.participant}`
-		let retryCount = msgRetryCache.get<number>(key) || 0
-		if (retryCount >= maxMsgRetryCount) {
+		let retryCount = msgRetryCache.get<number>(msgId) || 1
+		if (retryCount > maxMsgRetryCount) {
 			logger.debug({ retryCount, msgId }, 'reached retry limit, clearing')
-			msgRetryCache.del(key)
+			msgRetryCache.del(msgId)
 			return
 		}
 
 		retryCount += 1
-		msgRetryCache.set(key, retryCount)
+		msgRetryCache.set(msgId, retryCount)
 
 		const { account, signedPreKey, signedIdentityKey: identityKey } = authState.creds
 
@@ -595,9 +601,26 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		msgRetryCache.set(key, newValue)
 	}
 
+	const getMessageForRetry = async (key: proto.IMessageKey) => {
+		try {
+			const recentMsg = recentMessageSentHistory.get(key.remoteJid!, key.id!)
+
+			if (recentMsg) {
+				return recentMsg
+			}
+
+			const message = await getMessage({ ...key })
+
+			return message
+		} catch {
+			logger.error({ key }, 'error getting message for retry')
+			return undefined
+		}
+	}
+
 	const sendMessagesAgain = async (key: proto.IMessageKey, ids: string[], retryNode: BinaryNode) => {
-		// todo: implement a cache to store the last 256 sent messages (copy whatsmeow)
-		const msgs = await Promise.all(ids.map(id => getMessage({ ...key, id })))
+		const msgs = await Promise.all(ids.map(id => getMessageForRetry({ ...key, id })))
+
 		const remoteJid = key.remoteJid!
 		const participant = key.participant || remoteJid
 		// if it's the primary jid sending the request
@@ -708,8 +731,11 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 									updateSendMessageAgainCount(ids[0], key.participant)
 									logger.debug({ attrs, key }, 'recv retry request')
 									await sendMessagesAgain(key, ids, retryNode!)
-								} catch (error) {
-									logger.error({ key, ids, trace: error.stack }, 'error in sending message again')
+								} catch (error: unknown) {
+									logger.error(
+										{ key, ids, trace: error instanceof Error ? error.stack : 'Unknown error' },
+										'error in sending message again'
+									)
 								}
 							} else {
 								logger.info({ attrs, key }, 'recv retry for not fromMe message')
@@ -811,67 +837,95 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		}
 
 		try {
-			await Promise.all([
-				processingMutex.mutex(async () => {
-					await decrypt()
-					// message failed to decrypt
-					if (msg.messageStubType === proto.WebMessageInfo.StubType.CIPHERTEXT) {
-						if (msg?.messageStubParameters?.[0] === MISSING_KEYS_ERROR_TEXT) {
-							return sendMessageAck(node, NACK_REASONS.ParsingError)
-						}
-
-						retryMutex.mutex(async () => {
-							if (ws.isOpen) {
-								if (getBinaryNodeChild(node, 'unavailable')) {
-									return
-								}
-
-								const encNode = getBinaryNodeChild(node, 'enc')
-								await sendRetryRequest(node, !encNode)
-								if (retryRequestDelayMs) {
-									await delay(retryRequestDelayMs)
-								}
-							} else {
-								logger.debug({ node }, 'connection closed, ignoring retry req')
-							}
-						})
-					} else {
-						// no type in the receipt => message delivered
-						let type: MessageReceiptType = undefined
-						let participant = msg.key.participant
-						if (category === 'peer') {
-							// special peer message
-							type = 'peer_msg'
-						} else if (msg.key.fromMe) {
-							// message was sent by us from a different device
-							type = 'sender'
-							// need to specially handle this case
-							if (isJidUser(msg.key.remoteJid!)) {
-								participant = author
-							}
-						} else if (!sendActiveReceipts) {
-							type = 'inactive'
-						}
-
-						await sendReceipt(msg.key.remoteJid!, participant!, [msg.key.id!], type)
-
-						// send ack for history message
-						const isAnyHistoryMsg = getHistoryMsg(msg.message!)
-						if (isAnyHistoryMsg) {
-							const jid = jidNormalizedUser(msg.key.remoteJid!)
-							await sendReceipt(jid, undefined, [msg.key.id!], 'hist_sync')
-						}
+			await processingMutex.mutex(async () => {
+				await decrypt()
+				// message failed to decrypt
+				if (msg.messageStubType === proto.WebMessageInfo.StubType.CIPHERTEXT) {
+					if (msg?.messageStubParameters?.[0] === MISSING_KEYS_ERROR_TEXT) {
+						return sendMessageAck(node, NACK_REASONS.ParsingError)
 					}
 
-					cleanMessage(msg, authState.creds.me!.id)
+					const errorMessage = msg?.messageStubParameters?.[0] || ''
+					const isPreKeyError = errorMessage.includes('PreKey')
 
-					await sendMessageAck(node)
+					logger.debug(`[handleMessage] Attempting retry request for failed decryption`)
 
-					await upsertMessage(msg, node.attrs.offline ? 'append' : 'notify')
-				})
-			])
+					// Handle both pre-key and normal retries in single mutex
+					retryMutex.mutex(async () => {
+						try {
+							if (!ws.isOpen) {
+								logger.debug({ node }, 'Connection closed, skipping retry')
+								return
+							}
+
+							// Handle pre-key errors with upload and delay
+							if (isPreKeyError) {
+								logger.info({ error: errorMessage }, 'PreKey error detected, uploading and retrying')
+
+								try {
+									logger.debug('Uploading pre-keys for error recovery')
+									await uploadPreKeys(5)
+									logger.debug('Waiting for server to process new pre-keys')
+									await delay(1000)
+								} catch (uploadErr) {
+									logger.error({ uploadErr }, 'Pre-key upload failed, proceeding with retry anyway')
+								}
+							}
+
+							const encNode = getBinaryNodeChild(node, 'enc')
+							await sendRetryRequest(node, !encNode)
+							if (retryRequestDelayMs) {
+								await delay(retryRequestDelayMs)
+							}
+						} catch (err) {
+							logger.error({ err, isPreKeyError }, 'Failed to handle retry, attempting basic retry')
+							// Still attempt retry even if pre-key upload failed
+							try {
+								const encNode = getBinaryNodeChild(node, 'enc')
+								await sendRetryRequest(node, !encNode)
+							} catch (retryErr) {
+								logger.error({ retryErr }, 'Failed to send retry after error handling')
+							}
+						}
+
+						await sendMessageAck(node, NACK_REASONS.UnhandledError)
+					})
+				} else {
+					// no type in the receipt => message delivered
+					let type: MessageReceiptType = undefined
+					let participant = msg.key.participant
+					if (category === 'peer') {
+						// special peer message
+						type = 'peer_msg'
+					} else if (msg.key.fromMe) {
+						// message was sent by us from a different device
+						type = 'sender'
+						// need to specially handle this case
+							if (isJidUser(msg.key.remoteJid!)) {
+							participant = author
+						}
+					} else if (!sendActiveReceipts) {
+						type = 'inactive'
+					}
+
+					await sendReceipt(msg.key.remoteJid!, participant!, [msg.key.id!], type)
+
+					// send ack for history message
+					const isAnyHistoryMsg = getHistoryMsg(msg.message!)
+					if (isAnyHistoryMsg) {
+						const jid = jidNormalizedUser(msg.key.remoteJid!)
+						await sendReceipt(jid, undefined, [msg.key.id!], 'hist_sync')
+					}
+				}
+
+				cleanMessage(msg, authState.creds.me!.id)
+
+				await upsertMessage(msg, node.attrs.offline ? 'append' : 'notify')
+			})
 		} catch (error) {
 			logger.error({ error, node }, 'error in handling message')
+		} finally {
+			//await sendMessageAck(node)
 		}
 	}
 
@@ -1181,6 +1235,12 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 				logger.warn({ node }, 'Unknown newsletter notification')
 				break
 		}
+	}
+
+	// Handles privacy token notifications
+	async function handlePrivacyTokenNotification(node: BinaryNode) {
+		const from = node.attrs.from
+		console.log(from, 'got privacy token notification')
 	}
 
 	// Handles mex newsletter notifications

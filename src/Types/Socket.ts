@@ -26,9 +26,31 @@ export type CacheStore = {
 	mget?<T>(keys: string[]): Record<string, unknown> | (T | undefined)[]
 }
 
+export type CacheStoreWithGeneric<T> = {
+	/** get a cached key and change the stats */
+	get(key: string): T | undefined
+	/** set a key in the cache */
+	set(key: string, value: T): void
+	/** delete a key from the cache */
+	del(key: string): void
+	/** flush all data */
+	flushAll(): void
+	/** mset multiple values at once */
+	mset?(values: { key: string; value: T }[]): boolean | void
+	/** get multiple values at once */
+	mget?(keys: string[]): Record<string, unknown> | (T | undefined)[]
+}
+
 export type PatchedMessageWithRecipientJID = proto.IMessage & { recipientJid?: string }
 
+export type RecentMessageSentHistoryStore = {
+	get: (from: string, messageId: string) => proto.IMessage | undefined
+	set: (from: string, messageId: string, message: proto.IMessage) => void
+}
+
 export type SocketConfig = {
+	recentMessageSentHistory: RecentMessageSentHistoryStore
+
 	/** the WS url to connect to WA */
 	waWebSocketUrl: string | URL
 	/** Fails the connection if the socket times out in this interval */
@@ -132,8 +154,13 @@ export type SocketConfig = {
 	 * */
 	getMessage: (key: proto.IMessageKey) => Promise<proto.IMessage | undefined>
 
-	/** cached group metadata, use to prevent redundant requests to WA & speed up msg sending */
-	cachedGroupMetadata: (jid: string) => Promise<GroupMetadata | undefined>
+	/** @deprecated use groupMetadataCache instead
+	 *  cached group metadata, use to prevent redundant requests to WA & speed up msg sending
+	 *
+	 */
+	cachedGroupMetadata?: (jid: string) => Promise<GroupMetadata | undefined>
+
+	groupMetadataCache?: CacheStoreWithGeneric<GroupMetadata | undefined>
 
 	makeSignalRepository: (auth: SignalAuthState) => SignalRepository
 }

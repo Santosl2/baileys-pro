@@ -8,7 +8,9 @@ import {
 	DEF_TAG_PREFIX,
 	INITIAL_PREKEY_COUNT,
 	MIN_PREKEY_COUNT,
-	NOISE_WA_HEADER
+	MIN_UPLOAD_INTERVAL,
+	NOISE_WA_HEADER,
+	UPLOAD_TIMEOUT
 } from '../Defaults'
 import { DisconnectReason, SocketConfig } from '../Types'
 import {
@@ -61,6 +63,7 @@ export const makeSocket = (config: SocketConfig) => {
 		defaultQueryTimeoutMs,
 		transactionOpts,
 		qrTimeout,
+		cachedGroupMetadata,
 		makeSignalRepository
 	} = config
 
@@ -68,6 +71,10 @@ export const makeSocket = (config: SocketConfig) => {
 		console.warn(
 			'⚠️ The printQRInTerminal option has been deprecated. You will no longer receive QR codes in the terminal automatically. Please listen to the connection.update event yourself and handle the QR your way. You can remove this message by removing this opttion. This message will be removed in a future version.'
 		)
+	}
+
+	if (cachedGroupMetadata) {
+		console.warn('⚠️ `cachedGroupMetadata` is deprecated. Use `groupMetadataCache` instead.')
 	}
 
 	const url = typeof waWebSocketUrl === 'string' ? new URL(waWebSocketUrl) : waWebSocketUrl
@@ -283,6 +290,24 @@ export const makeSocket = (config: SocketConfig) => {
 
 			logger.info({ count }, 'uploaded pre-keys')
 		})
+	}
+
+	const digestKeyBundle = async (): Promise<void> => {
+		try {
+			const res = await query({
+				tag: 'iq',
+				attrs: { to: S_WHATSAPP_NET, type: 'get', xmlns: 'encrypt' },
+				content: [{ tag: 'digest', attrs: {} }]
+			})
+			const digestNode = getBinaryNodeChild(res, 'digest')
+			if (!digestNode) {
+				await uploadPreKeys()
+				throw new Error('encrypt/get digest returned no digest node')
+			}
+		} catch (err) {
+			await uploadPreKeys()
+			throw err
+		}
 	}
 
 	const uploadPreKeysToServerIfRequired = async () => {
@@ -635,6 +660,11 @@ export const makeSocket = (config: SocketConfig) => {
 		try {
 			await uploadPreKeysToServerIfRequired()
 			await sendPassiveIq('active')
+			try {
+				await digestKeyBundle()
+			} catch (e) {
+				logger.warn({ e }, 'failed to run digest after login')
+			}
 		} catch (error) {
 			logger.error({ error }, 'error in post login tasks')
 		}

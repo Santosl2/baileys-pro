@@ -12,6 +12,24 @@ import { GroupCipher, GroupSessionBuilder, SenderKeyDistributionMessage } from '
 export function makeLibSignalRepository(auth: SignalAuthState): SignalRepository {
 	const storage: SenderKeyStore = signalStorage(auth)
 	return {
+		async validateSession(jid: string) {
+			try {
+				const addr = jidToSignalProtocolAddress(jid)
+				const session = await storage.loadSession(addr.toString())
+
+				if (!session) {
+					return { exists: false, reason: 'no session' }
+				}
+
+				if (!session.haveOpenSession()) {
+					return { exists: false, reason: 'no open session' }
+				}
+
+				return { exists: true }
+			} catch (error) {
+				return { exists: false, reason: 'validation error' }
+			}
+		},
 		decryptGroupMessage({ group, authorJid, msg }) {
 			const senderName = jidToSignalSenderKeyName(group, authorJid)
 			const cipher = new GroupCipher(storage, senderName)
@@ -125,7 +143,7 @@ export function makeLibSignalRepository(auth: SignalAuthState): SignalRepository
 	}
 }
 
-const jidToSignalProtocolAddress = (jid: string) => {
+export const jidToSignalProtocolAddress = (jid: string) => {
 	const { user, device } = jidDecode(jid)!
 	return new libsignal.ProtocolAddress(user, device || 0)
 }

@@ -57,7 +57,8 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		generateHighQualityLinkPreview,
 		options: axiosOptions,
 		patchMessageBeforeSending,
-		cachedGroupMetadata
+		groupMetadataCache,
+		recentMessageSentHistory
 	} = config
 	const sock: NewsletterSocket = makeNewsletterSocket(makeGroupsSocket(config))
 	const {
@@ -288,10 +289,11 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 					{
 						tag: 'key',
 						attrs: {},
-						content: jidsRequiringFetch.map(jid => ({
-							tag: 'user',
-							attrs: { jid }
-						}))
+						content: jidsRequiringFetch.map(jid => {
+							const attrs: { [key: string]: string } = { jid }
+							if (force) attrs.reason = 'identity'
+							return { tag: 'user', attrs }
+						})
 					}
 				]
 			})
@@ -325,7 +327,13 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				category: 'peer',
 				// eslint-disable-next-line camelcase
 				push_priority: 'high_force'
-			}
+			},
+			additionalNodes: [
+				{
+					tag: 'meta',
+					attrs: { appdata: 'default' }
+				}
+			]
 		})
 
 		return msgId
@@ -387,8 +395,9 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		}: MessageRelayOptions
 	) => {
 		const meId = authState.creds.me!.id
+		const isRetryResend = Boolean(participant?.jid)
 
-		let shouldIncludeDeviceIdentity = false
+		let shouldIncludeDeviceIdentity = isRetryResend
 
 		const { user, server } = jidDecode(jid)!
 		const statusJid = 'status@broadcast'
@@ -465,11 +474,12 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 			if (isGroup || isStatus) {
 				const [groupData, senderKeyMap] = await Promise.all([
 					(async () => {
-						let groupData = useCachedGroupMetadata && cachedGroupMetadata ? await cachedGroupMetadata(jid) : undefined
+						let groupData = useCachedGroupMetadata && groupMetadataCache ? groupMetadataCache.get(jid) : undefined
 						if (groupData && Array.isArray(groupData?.participants)) {
 							logger.trace({ jid, participants: groupData.participants.length }, 'using cached group metadata')
 						} else if (!isStatus) {
 							groupData = await groupMetadata(jid)
+							groupMetadataCache?.set(jid, groupData)
 						}
 
 						return groupData
@@ -502,12 +512,12 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				}
 
 				if (groupData?.ephemeralDuration && groupData.ephemeralDuration > 0) {
-						additionalAttributes = {
-							...additionalAttributes,
-							expiration:  groupData.ephemeralDuration.toString()
-						}
+					additionalAttributes = {
+						...additionalAttributes,
+						expiration: groupData.ephemeralDuration.toString()
+					}
 				}
-				
+
 				const patched = await patchMessageBeforeSending(message)
 
 				if (Array.isArray(patched)) {
@@ -526,7 +536,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				// ensure a connection is established with every device
 				for (const { user, device } of devices) {
 					const jid = jidEncode(user, groupData?.addressingMode === 'lid' ? 'lid' : 's.whatsapp.net', device)
-					if (!senderKeyMap[jid] || !!participant) {
+					if (!senderKeyMap[jid] && !isRetryResend) {
 						senderKeyJids.push(jid)
 						// store that this person has had the sender keys sent to them
 						senderKeyMap[jid] = true
@@ -535,7 +545,8 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 
 				// if there are some participants with whom the session has not been established
 				// if there are, we re-send the senderkey
-				if (senderKeyJids.length) {
+				// Send only if participant count is not set
+				if (senderKeyJids.length && !participant?.count) {
 					logger.debug({ senderKeyJids }, 'sending new sender key')
 
 					const senderKeyMsg: proto.IMessage = {
@@ -553,11 +564,25 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 					participants.push(...result.nodes)
 				}
 
-				binaryNodeContent.push({
-					tag: 'enc',
-					attrs: { v: '2', type: 'skmsg' },
-					content: ciphertext
-				})
+				// If participant count is set, include it in the message
+				if (isRetryResend && participant?.count) {
+					const { type, ciphertext: encryptedContent } = await signalRepository.encryptMessage({
+						data: bytes,
+						jid: participant.jid
+					})
+
+					binaryNodeContent.push({
+						tag: 'enc',
+						attrs: { v: '2', type, count: participant.count.toString() },
+						content: encryptedContent
+					})
+				} else {
+					binaryNodeContent.push({
+						tag: 'enc',
+						attrs: { v: '2', type: 'skmsg' },
+						content: ciphertext
+					})
+				}
 
 				await authState.keys.set({ 'sender-key-memory': { [jid]: senderKeyMap } })
 			} else {
@@ -724,7 +749,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 	const getButtonType = (message: proto.IMessage) => {
 		if (message.interactiveMessage) {
 			return 'interactive'
-		} else if (message.buttonsMessage) {
+		} else if (message.buttonsMessage || message.documentWithCaptionMessage?.message?.buttonsMessage) {
 			return 'buttons'
 		} else if (message.buttonsResponseMessage) {
 			return 'buttons_response'
@@ -776,7 +801,11 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		// 	}
 		// }
 
-		if (message.interactiveMessage || message.buttonsMessage) {
+		if (
+			message.interactiveMessage ||
+			message.buttonsMessage ||
+			message.documentWithCaptionMessage?.message?.buttonsMessage
+		) {
 			return {
 				tag: 'biz',
 				attrs: {},
@@ -784,7 +813,8 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 					{
 						tag: 'interactive',
 						attrs: {
-							type: 'native_flow'
+							type: 'native_flow',
+							v: '1'
 						},
 						content: [
 							{
@@ -1024,6 +1054,8 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				// 		]
 				// 	})
 				// }
+
+				recentMessageSentHistory.set(jid, fullMsg.key.id!, fullMsg.message!)
 
 				await relayMessage(jid, fullMsg.message!, {
 					messageId: fullMsg.key.id!,

@@ -24,9 +24,14 @@ import makeWASocket, {
 import open from 'open'
 import fs from 'fs'
 import P from 'pino'
+import { appendFile } from 'fs/promises'
 
 const logger = P({ timestamp: () => `,"time":"${new Date().toJSON()}"` }, P.destination('./wa-logs.txt'))
 logger.level = 'trace'
+
+import http from 'http'
+
+let bot: ReturnType<typeof makeWASocket> | undefined
 
 const doReplies = process.argv.includes('--do-reply')
 const usePairingCode = process.argv.includes('--use-pairing-code')
@@ -155,64 +160,62 @@ const startSock = async () => {
 				// THIS INCLUDES STUFF LIKE ocVersion WHICH IS CRUCIAL FOR THE PREVENTION OF THE WARNING
 				const sendWAMExample = false
 				if (connection === 'open') {
-	const mockReceiptNode: BinaryNode = {
-	tag: 'receipt',
-	attrs: {
-		id: 'ABC12345DEF',
-		from: '12001234567@whatsapp.net',
-		participant: '12007654321@whatsapp.net',
-		type: 'retry',
-		t: `${Math.floor(Date.now() / 1000)}`,
-		// recipient: 'me@whatsapp.net'
-	},
-	content: [
-		{
-			tag: 'list',
-			attrs: {},
-			content: [
-				{
-					tag: 'item',
-					attrs: { id: 'MSGID1' },
-					content: []
-				},
-				{
-					tag: 'item',
-					attrs: { id: 'MSGID2' },
-					content: []
-				}
-			]
-		},
-		{
-			tag: 'retry',
-			attrs: {
-				count: '1',
-				id: 'ABC12345DEF',
-				t: `${Math.floor(Date.now() / 1000)}`,
-				v: '1',
-				phash: 'prekey-hash',
-				recvTimestamp: `${Date.now()}`,
-				// exclusivos de mensagens E2E com cifragem
-				retryId: 'retry-uuid-001',
-				epoch: '1',
-				skey: 'symmetric-key',
-				enc: 'encrypted-payload',
-				version: '2'
-			},
-			content: []
-		},
-		{
-			tag: 'registration',
-			attrs: {
-				id: 'device-registration-id'
-			},
-			content: []
-		}
-	]
-}
+					bot = sock // for easy access in console
+// 	const mockReceiptNode: BinaryNode = {
+// 	tag: 'receipt',
+// 	attrs: {
+// 		id: 'ABC12345DEF',
+// 		from: '12001234567@whatsapp.net',
+// 		participant: '12007654321@whatsapp.net',
+// 		type: 'retry',
+// 		t: `${Math.floor(Date.now() / 1000)}`,
+// 		// recipient: 'me@whatsapp.net'
+// 	},
+// 	content: [
+// 		{
+// 			tag: 'list',
+// 			attrs: {},
+// 			content: [
+// 				{
+// 					tag: 'item',
+// 					attrs: { id: 'MSGID1' },
+// 					content: []
+// 				},
+// 				{
+// 					tag: 'item',
+// 					attrs: { id: 'MSGID2' },
+// 					content: []
+// 				}
+// 			]
+// 		},
+// 		{
+// 			tag: 'retry',
+// 			attrs: {
+// 				count: '1',
+// 				id: 'ABC12345DEF',
+// 				t: `${Math.floor(Date.now() / 1000)}`,
+// 				v: '1',
+// 				phash: 'prekey-hash',
+// 				recvTimestamp: `${Date.now()}`,
+// 				// exclusivos de mensagens E2E com cifragem
+// 				retryId: 'retry-uuid-001',
+// 				epoch: '1',
+// 				skey: 'symmetric-key',
+// 				enc: 'encrypted-payload',
+// 				version: '2'
+// 			},
+// 			content: []
+// 		},
+// 		{
+// 			tag: 'registration',
+// 			attrs: {
+// 				id: 'device-registration-id'
+// 			},
+// 			content: []
+// 		}
+// 	]
+// }
 
-for(let i = 0; i < 10; i++) {
-sock.ws.emit('CB:receipt', mockReceiptNode)
- }
 
 					const buttons: proto.Message.ButtonsMessage.IButton[] = [
 						{ buttonId: 'id1', buttonText: { displayText: 'Teste' }, type: 1 },
@@ -252,10 +255,6 @@ sock.ws.emit('CB:receipt', mockReceiptNode)
 					console.log(result)
 				}
 			}
-
-			sock.ws.on('CB:message', data => {
-				// console.log('CB:message', JSON.stringify(data, null, 2))
-			})
 
 			// credentials updated -- save them
 			if (events['creds.update']) {
@@ -428,7 +427,20 @@ sock.ws.emit('CB:receipt', mockReceiptNode)
 			}
 
 			if (events['chats.update']) {
-			
+				console.log('recv chats.update', events['chats.update'])
+			}
+
+
+			if (events['chats.upsert']) {
+				console.log('recv chats.upsert', events['chats.upsert'])
+			}
+
+			if (events['groups.update']) {
+				console.log('recv groups.update', events['groups.update'])
+			}
+
+			if (events['group-participants.update']) {
+				console.log('recv group-participants.update', events['group-participants.update'])
 			}
 
 			if (events['contacts.update']) {
@@ -459,3 +471,39 @@ sock.ws.emit('CB:receipt', mockReceiptNode)
 }
 
 startSock()
+
+
+const server = http.createServer(async (req, res) => {
+	if (req.method === 'POST' && req.url === '/send-message') {
+		let body = ''
+		req.on('data', chunk => {
+			body += chunk.toString()
+		})
+
+		req.on('end', async () => {
+			try {
+				const { jid, message } = JSON.parse(body)
+
+				if (!jid || !message) {
+					res.writeHead(400, { 'Content-Type': 'application/json' })
+					res.end(JSON.stringify({ error: 'Missing jid or message in request body' }))
+					return
+				}
+
+				await bot!.sendMessage(jid, { text: message })
+				res.writeHead(200, { 'Content-Type': 'application/json' })
+				res.end(JSON.stringify({ success: true }))
+			} catch (error) {
+				res.writeHead(500, { 'Content-Type': 'application/json' })
+				res.end(JSON.stringify({ error: 'Failed to send message', details: error.message }))
+			}
+		})
+	} else {
+		res.writeHead(404, { 'Content-Type': 'application/json' })
+		res.end(JSON.stringify({ error: 'Not Found' }))
+	}
+})
+
+server.listen(3100, () => {
+	console.log('HTTP server running on http://localhost:3100')
+})
