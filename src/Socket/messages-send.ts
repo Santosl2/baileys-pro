@@ -565,20 +565,18 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				const isMe = areJidsSameUser(user, meLidUser)
 				const { user: meUser } = jidDecode(meId)!
 
-				if (!participant) {
-					devices.push({ user })
-					if (user !== meUser) {
-						devices.push({ user: meUser })
-					}
+				devices.push({ user })
+				if (user !== meUser) {
+					devices.push({ user: meUser })
+				}
 
-					if (additionalAttributes?.['category'] !== 'peer') {
-						const additionalDevices = await getUSyncDevices([meId, jid], !!useUserDevicesCache, false)
-						devices.push(...additionalDevices)
-					}
+				if (additionalAttributes?.['category'] !== 'peer') {
+					const additionalDevices = await getUSyncDevices([meId, jid], !!useUserDevicesCache, false)
+					devices.push(...additionalDevices)
+				}
 
-					if (additionalAttributes?.['category'] === 'peer' && isMe && meLidUser) {
-						devices.push({ user: meLidUser })
-					}
+				if (additionalAttributes?.['category'] === 'peer' && isMe && meLidUser) {
+					devices.push({ user: meLidUser })
 				}
 
 				const allJids: string[] = []
@@ -643,10 +641,15 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				}
 
 				const participantDevice = jidDecode(participant!.jid)!.device
+
 				const [{ user: participantUser }] = await getUSyncDevices([participant!.jid], true, false)
 
 				// TODO: use lid and s.whatsapp.net based on participant jid
-				const participantFulLid = jidEncode(participantUser, 'lid', participantDevice)
+				const participantFulLid = jidEncode(
+					participantUser,
+					isParticipantLid ? 'lid' : 's.whatsapp.net',
+					participantDevice
+				)
 
 				await assertSessions([participantFulLid], true)
 
