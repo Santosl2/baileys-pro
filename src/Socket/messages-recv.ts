@@ -174,7 +174,6 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		const { fullMessage } = decodeMessageNode(node, authState.creds.me!.id, authState.creds.me!.lid || '')
 		const { key: msgKey } = fullMessage
 		const msgId = msgKey.id!
-		const fromJid = node.attrs.from
 
 		let retryCount = msgRetryCache.get<number>(msgId) || 1
 		if (retryCount > maxMsgRetryCount) {

@@ -239,7 +239,7 @@ export const decryptMessageNode = (
 							err,
 							messageType: tag === 'plaintext' ? 'plaintext' : attrs.type,
 							sender,
-							author,
+							author
 						}
 
 						logger.error(errorContext, 'failed to decrypt message')

@@ -322,8 +322,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 			}
 		}
 
-		// const meJid = jidNormalizedUser(authState.creds.me.id)
-		const meLid = jidNormalizedUser(authState.creds.me.lid)
+		const meLid = jidNormalizedUser(authState.creds.me.lid) || jidNormalizedUser(authState.creds.me.id)
 
 		const msgId = await relayMessage(meLid, protocolMessage, {
 			additionalAttributes: {
@@ -431,18 +430,6 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 
 		const extraAttrs = {}
 
-		if (participant) {
-			// when the retry request is not for a group
-			// only send to the specific device that asked for a retry
-			// otherwise the message is sent out to every device that should be a recipient
-			if (!isGroup && !isStatus) {
-				additionalAttributes = { ...additionalAttributes, device_fanout: 'false' }
-			}
-
-			const { user, device } = jidDecode(participant.jid)!
-			devices.push({ user, device })
-		}
-
 		await authState.keys.transaction(async () => {
 			const mediaType = getMediaType(message)
 			if (mediaType) {
@@ -491,30 +478,18 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 						return groupData
 					})(),
 					(async () => {
-						if (!participant && !isStatus) {
-							const result = await authState.keys.get('sender-key-memory', [jid])
-							return result[jid] || {}
-						}
-
-						return {}
+						const result = await authState.keys.get('sender-key-memory', [jid])
+						return result[jid] || {}
 					})()
 				])
 
-				if (!participant) {
-					const participantsList = groupData && !isStatus ? groupData.participants.map(p => p.id) : []
-					if (isStatus && statusJidList) {
-						participantsList.push(...statusJidList)
-					}
+				const participantsList = groupData && !isStatus ? groupData.participants.map(p => p.id) : []
 
-					if (!isStatus) {
-						additionalAttributes = {
-							...additionalAttributes,
-							addressing_mode: groupData?.addressingMode || 'pn'
-						}
+				if (!isStatus) {
+					additionalAttributes = {
+						...additionalAttributes,
+						addressing_mode: groupData?.addressingMode || 'pn'
 					}
-
-					const additionalDevices = await getUSyncDevices(participantsList, !!useUserDevicesCache, false)
-					devices.push(...additionalDevices)
 				}
 
 				if (groupData?.ephemeralDuration && groupData.ephemeralDuration > 0) {
@@ -523,6 +498,13 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 						expiration: groupData.ephemeralDuration.toString()
 					}
 				}
+
+				if (isStatus && statusJidList) {
+					participantsList.push(...statusJidList)
+				}
+
+				const additionalDevices = await getUSyncDevices(participantsList, !!useUserDevicesCache, false)
+				devices.push(...additionalDevices)
 
 				const patched = await patchMessageBeforeSending(message)
 

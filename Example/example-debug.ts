@@ -117,9 +117,11 @@ const startSock = async () => {
 			// received a new message
 			if (events['messages.upsert']) {
 				const upsert = events['messages.upsert']
+							console.log('got new message', JSON.stringify(upsert.messages, undefined, 2))
 
 				if (upsert.type === 'notify') {
 					for (const msg of upsert.messages) {
+						
 						if (msg.message?.conversation?.startsWith('!')) {
 							const command = msg.message.conversation.slice(1).trim().toLowerCase()
 							//
