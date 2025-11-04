@@ -561,34 +561,30 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				await authState.keys.set({ 'sender-key-memory': { [jid]: senderKeyMap } })
 			} else if (!isRetryResend) {
 				const { user } = jidDecode(destinationJid)!
-				const meLidUser = jidDecode(meLid)?.user
-				const isMe = areJidsSameUser(user, meLidUser)
-				const { user: meUser } = jidDecode(meId)!
-
-				devices.push({ user })
-				if (user !== meUser) {
-					devices.push({ user: meUser })
-				}
+				const meUserData = jidDecode(meId)?.user
+				const isMe = areJidsSameUser(user, meUserData)
 
 				if (additionalAttributes?.['category'] !== 'peer') {
 					const additionalDevices = await getUSyncDevices([meId, jid], !!useUserDevicesCache, false)
 					devices.push(...additionalDevices)
 				}
 
-				if (additionalAttributes?.['category'] === 'peer' && isMe && meLidUser) {
-					devices.push({ user: meLidUser })
+				if (additionalAttributes?.['category'] === 'peer' && isMe && meUserData) {
+					devices.push({ user: meUserData })
 				}
 
 				const allJids: string[] = []
 				const meJids: string[] = []
 				const otherJids: string[] = []
 				for (const { user, device } of devices) {
-					const isMe = user === meUser
-					const jid = jidEncode(
-						isMe && isLid ? meLid!.split(':')[0] || user : user,
-						isLid ? 'lid' : 's.whatsapp.net',
-						device
-					)
+					const isMe = user === meUserData
+					const jid = jidEncode(user, isLid ? 'lid' : 's.whatsapp.net', device)
+
+					// const jid = jidEncode(
+					// 	isMe && isLid ? meLid!.split(':')[0] || user : user,
+					// 	isLid ? 'lid' : 's.whatsapp.net',
+					// 	device
+					// )
 
 					if (isMe) {
 						meJids.push(jid)
@@ -630,9 +626,6 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 			}
 
 			if (isRetryResend) {
-				const isParticipantLid = isLidUser(participant!.jid)
-				const isMe = areJidsSameUser(participant!.jid, isParticipantLid ? meLid : meId)
-
 				// when the retry request is not for a group
 				// only send to the specific device that asked for a retry
 				// otherwise the message is sent out to every device that should be a recipient
@@ -640,29 +633,20 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 					additionalAttributes = { ...additionalAttributes, device_fanout: 'false' }
 				}
 
-				const participantDevice = jidDecode(participant!.jid)!.device
-
-				const [{ user: participantUser }] = await getUSyncDevices([participant!.jid], true, false)
-
-				// TODO: use lid and s.whatsapp.net based on participant jid
-				const participantFulLid = jidEncode(
-					participantUser,
-					isParticipantLid ? 'lid' : 's.whatsapp.net',
-					participantDevice
-				)
-
-				await assertSessions([participantFulLid], true)
+				await assertSessions([participant!.jid], true)
 
 				if (isGroup) {
 					const result = await authState.keys.get('sender-key-memory', [destinationJid])
 
 					const groupSenderKeyMap = result[destinationJid] || {}
-					groupSenderKeyMap[participantFulLid] = false
+					groupSenderKeyMap[participant!.jid] = false
 
 					await authState.keys.set({
 						'sender-key-memory': { [destinationJid]: groupSenderKeyMap }
 					})
 				}
+
+				const isMe = areJidsSameUser(participant!.jid, meId)
 
 				const encodedMessageToSend = isMe
 					? encodeWAMessage({
