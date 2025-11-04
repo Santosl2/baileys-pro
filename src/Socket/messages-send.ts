@@ -60,8 +60,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		options: axiosOptions,
 		patchMessageBeforeSending,
 		groupMetadataCache,
-		recentMessageSentHistory,
-		useLidForGroupMessages = false
+		recentMessageSentHistory
 	} = config
 	const sock: NewsletterSocket = makeNewsletterSocket(makeGroupsSocket(config))
 	const {

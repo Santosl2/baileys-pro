@@ -50,7 +50,6 @@ export type RecentMessageSentHistoryStore = {
 
 export type SocketConfig = {
 	recentMessageSentHistory: RecentMessageSentHistoryStore
-	useLidForGroupMessages: boolean
 	/** the WS url to connect to WA */
 	waWebSocketUrl: string | URL
 	/** Fails the connection if the socket times out in this interval */
