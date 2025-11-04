@@ -321,9 +321,9 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 			}
 		}
 
-		const meLid = jidNormalizedUser(authState.creds.me.lid) || jidNormalizedUser(authState.creds.me.id)
+		const meJid = jidNormalizedUser(authState.creds.me.id)
 
-		const msgId = await relayMessage(meLid, protocolMessage, {
+		const msgId = await relayMessage(meJid, protocolMessage, {
 			additionalAttributes: {
 				category: 'peer',
 				// eslint-disable-next-line camelcase
