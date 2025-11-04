@@ -180,10 +180,10 @@ export const configureSuccessfulPairing = (
 	const deviceMsg = Buffer.concat([devicePrefix, deviceDetails!, signedIdentityKey.public, accountSignatureKey!])
 	account.deviceSignature = Curve.sign(signedIdentityKey.private, deviceMsg)
 
-	const identity = createSignalIdentity(jid, accountSignatureKey!)
+	const identity = createSignalIdentity(lid || jid, accountSignatureKey!)
 	const accountEnc = encodeSignedDeviceIdentity(account, false)
 
-	const deviceIdentity = proto.ADVDeviceIdentity.decode(account.details!)
+	const deviceIdentity = proto.ADVDeviceIdentity.decode(deviceDetails!)
 
 	const reply: BinaryNode = {
 		tag: 'iq',
