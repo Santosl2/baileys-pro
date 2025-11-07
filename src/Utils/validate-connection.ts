@@ -23,9 +23,9 @@ const getUserAgent = (config: SocketConfig): proto.ClientPayload.IUserAgent => {
 		},
 		platform: proto.ClientPayload.UserAgent.Platform.WEB,
 		releaseChannel: proto.ClientPayload.UserAgent.ReleaseChannel.RELEASE,
-		osVersion: '0.1',
+		osVersion: '0.1.0',
 		device: 'Desktop',
-		osBuildNumber: '0.1',
+		osBuildNumber: '0.1.0',
 		localeLanguageIso6391: 'en',
 		mnc: '000',
 		mcc: '000',
@@ -64,7 +64,7 @@ export const generateLoginNode = (userJid: string, config: SocketConfig): proto.
 	const payload: proto.IClientPayload = {
 		...getClientPayload(config),
 		passive: false,
-		pull: true,
+		pull: false,
 		username: +user,
 		device: device
 	}
