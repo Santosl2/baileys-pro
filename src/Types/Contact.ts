@@ -9,6 +9,8 @@ export interface Contact {
 	name?: string
 	/** name of the contact, the contact has set on their own on WA */
 	notify?: string
+	/** ID in PN format (@s.whatsapp.net)  **/
+	phoneNumber?: string
 	/** I have no idea */
 	verifiedName?: string
 	// Baileys Added

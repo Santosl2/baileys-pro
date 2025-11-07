@@ -11,6 +11,7 @@ import {
 	RequestJoinMethod,
 	SignalKeyStoreWithTransaction,
 	SocketConfig,
+	WAMessage,
 	WAMessageStubType
 } from '../Types'
 import { getContentType, normalizeMessageContent } from '../Utils/messages'
@@ -41,10 +42,10 @@ const REAL_MSG_STUB_TYPES = new Set([
 const REAL_MSG_REQ_ME_STUB_TYPES = new Set([WAMessageStubType.GROUP_PARTICIPANT_ADD])
 
 /** Cleans a received message to further processing */
-export const cleanMessage = (message: proto.IWebMessageInfo, meId: string) => {
+export const cleanMessage = (message: WAMessage, meId: string) => {
 	// ensure remoteJid and participant doesn't have device or agent in it
-	message.key.remoteJid = jidNormalizedUser(message.key.remoteJid!)
-	message.key.participant = message.key.participant ? jidNormalizedUser(message.key.participant) : undefined
+	message.key.remoteJid = jidNormalizedUser(message.key?.remoteJid!)
+	message.key.participant = message.key?.participant ? jidNormalizedUser(message.key.participant) : undefined
 	const content = normalizeMessageContent(message.message)
 	// if the message has a reaction, ensure fromMe & remoteJid are from our perspective
 	if (content?.reactionMessage) {
@@ -58,7 +59,7 @@ export const cleanMessage = (message: proto.IWebMessageInfo, meId: string) => {
 	function normaliseKey(msgKey: proto.IMessageKey) {
 		// if the reaction is from another user
 		// we've to correctly map the key to this user's perspective
-		if (!message.key.fromMe) {
+		if (!message.key?.fromMe) {
 			// if the sender believed the message being reacted to is not from them
 			// we've to correct the key to be from them, or some other participant
 			msgKey.fromMe = !msgKey.fromMe
@@ -67,9 +68,9 @@ export const cleanMessage = (message: proto.IWebMessageInfo, meId: string) => {
 					// fromMe automatically becomes false
 					false
 			// set the remoteJid to being the same as the chat the message came from
-			msgKey.remoteJid = message.key.remoteJid
+			msgKey.remoteJid = message.key?.remoteJid
 			// set participant of the message
-			msgKey.participant = msgKey.participant || message.key.participant
+			msgKey.participant = msgKey.participant || message.key?.participant
 		}
 	}
 }
@@ -90,7 +91,7 @@ export const isRealMessage = (message: proto.IWebMessageInfo, meId: string) => {
 }
 
 export const shouldIncrementChatUnread = (message: proto.IWebMessageInfo) =>
-	!message.key.fromMe && !message.messageStubType
+	!message.key?.fromMe && !message.messageStubType
 
 /**
  * Get the ID of the chat from the given key.
@@ -199,7 +200,7 @@ const processMessage = async (
 	const meId = creds.me!.id
 	const { accountSettings } = creds
 
-	const chat: Partial<Chat> = { id: jidNormalizedUser(getChatId(message.key)) }
+	const chat: Partial<Chat> = { id: jidNormalizedUser(getChatId(message.key!)) }
 	const isRealMsg = isRealMessage(message, meId)
 
 	if (isRealMsg) {
@@ -232,7 +233,7 @@ const processMessage = async (
 					{
 						histNotification,
 						process,
-						id: message.key.id,
+						id: message.key?.id,
 						isLatest
 					},
 					'got history notification'
@@ -289,7 +290,7 @@ const processMessage = async (
 							...message.key,
 							id: protocolMsg.key!.id
 						},
-						update: { message: null, messageStubType: WAMessageStubType.REVOKE, key: message.key }
+						update: { message: null, messageStubType: WAMessageStubType.REVOKE, key: message.key! }
 					}
 				])
 				break
@@ -325,7 +326,7 @@ const processMessage = async (
 							// wait till another upsert event is available, don't want it to be part of the PDO response message
 							setTimeout(() => {
 								ev.emit('messages.upsert', {
-									messages: [webMessageInfo],
+									messages: [webMessageInfo as WAMessage],
 									type: 'notify',
 									requestId: response.stanzaId!
 								})

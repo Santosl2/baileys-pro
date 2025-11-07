@@ -195,12 +195,13 @@ function append<E extends BufferableEvent>(
 	switch (event) {
 		case 'messaging-history.set':
 			for (const chat of eventData.chats as Chat[]) {
+				if (!chat.id) continue
 				const existingChat = data.historySets.chats[chat.id]
 				if (existingChat) {
 					existingChat.endOfHistoryTransferType = chat.endOfHistoryTransferType
 				}
 
-				if (!existingChat && !historyCache.has(chat.id)) {
+				if (chat.id && !existingChat && !historyCache.has(chat.id)) {
 					data.historySets.chats[chat.id] = chat
 					historyCache.add(chat.id)
 
@@ -240,6 +241,8 @@ function append<E extends BufferableEvent>(
 			break
 		case 'chats.upsert':
 			for (const chat of eventData as Chat[]) {
+				if (!chat.id) continue
+
 				let upsert = data.chatUpserts[chat.id]
 				if (!upsert) {
 					upsert = data.historySets.chats[chat.id]
@@ -252,12 +255,14 @@ function append<E extends BufferableEvent>(
 					upsert = concatChats(upsert, chat)
 				} else {
 					upsert = chat
-					data.chatUpserts[chat.id] = upsert
+					if (chat.id) {
+						data.chatUpserts[chat.id] = upsert
+					}
 				}
 
 				absorbingChatUpdate(upsert)
 
-				if (data.chatDeletes.has(chat.id)) {
+				if (chat.id && data.chatDeletes.has(chat.id)) {
 					data.chatDeletes.delete(chat.id)
 				}
 			}
@@ -390,6 +395,7 @@ function append<E extends BufferableEvent>(
 		case 'messages.update':
 			const msgUpdates = eventData as BaileysEventMap['messages.update']
 			for (const { key, update } of msgUpdates) {
+				if (!key) continue
 				const keyStr = stringifyMessageKey(key)
 				const existing = data.historySets.messages[keyStr] || data.messageUpserts[keyStr]?.message
 				if (existing) {
@@ -397,7 +403,7 @@ function append<E extends BufferableEvent>(
 					// if the message was received & read by us
 					// the chat counter must have been incremented
 					// so we need to decrement it
-					if (update.status === WAMessageStatus.READ && !key.fromMe) {
+					if (update.status === WAMessageStatus.READ && !key?.fromMe) {
 						decrementChatReadCounterIfMsgDidUnread(existing)
 					}
 				} else {
@@ -476,17 +482,17 @@ function append<E extends BufferableEvent>(
 
 	function absorbingChatUpdate(existing: Chat) {
 		const chatId = existing.id
-		const update = data.chatUpdates[chatId]
+		const update = data.chatUpdates[chatId!]
 		if (update) {
 			const conditionMatches = update.conditional ? update.conditional(data) : true
 			if (conditionMatches) {
 				delete update.conditional
 				logger.debug({ chatId }, 'absorbed chat update in existing chat')
 				Object.assign(existing, concatChats(update as Chat, existing))
-				delete data.chatUpdates[chatId]
+				delete data.chatUpdates[chatId!]
 			} else if (conditionMatches === false) {
 				logger.debug({ chatId }, 'chat update condition fail, removing')
-				delete data.chatUpdates[chatId]
+				delete data.chatUpdates[chatId!]
 			}
 		}
 	}

@@ -10,6 +10,7 @@ import {
 	MessageUserReceipt,
 	SocketConfig,
 	WACallEvent,
+	WAMessage,
 	WAMessageKey,
 	WAMessageStatus,
 	WAMessageStubType,
@@ -790,7 +791,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 						msg.messageTimestamp = +node.attrs.t
 
 						const fullMsg = proto.WebMessageInfo.fromObject(msg)
-						await upsertMessage(fullMsg, 'append')
+						await upsertMessage(fullMsg as WAMessage, 'append')
 					}
 				})
 			])
@@ -1236,7 +1237,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 							message: messageProto,
 							messageTimestamp: +child.attrs.t
 						})
-						await upsertMessage(fullMessage, 'append')
+						await upsertMessage(fullMessage as WAMessage, 'append')
 						logger.info('Processed plaintext newsletter message')
 					} catch (error) {
 						logger.error({ error }, 'Failed to decode plaintext newsletter message')
@@ -1355,7 +1356,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 			}
 
 			const protoMsg = proto.WebMessageInfo.fromObject(msg)
-			upsertMessage(protoMsg, call.offline ? 'append' : 'notify')
+			upsertMessage(protoMsg as WAMessage, call.offline ? 'append' : 'notify')
 		}
 	})
 

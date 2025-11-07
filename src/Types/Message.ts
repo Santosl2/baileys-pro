@@ -379,7 +379,7 @@ export type MessageUpsertType = 'append' | 'notify'
 
 export type MessageUserReceipt = proto.IUserReceipt
 
-export type WAMessageUpdate = { update: Partial<WAMessage>; key: proto.IMessageKey }
+export type WAMessageUpdate = { update: Partial<WAMessage>; key: proto.IMessageKey | null }
 
 export type WAMessageCursor = { before: WAMessageKey | undefined } | { after: WAMessageKey | undefined }
 

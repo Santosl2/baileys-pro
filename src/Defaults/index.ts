@@ -35,11 +35,13 @@ export const WA_CERT_DETAILS = {
 }
 
 export const PROCESSABLE_HISTORY_TYPES = [
-	proto.Message.HistorySyncNotification.HistorySyncType.INITIAL_BOOTSTRAP,
-	proto.Message.HistorySyncNotification.HistorySyncType.PUSH_NAME,
-	proto.Message.HistorySyncNotification.HistorySyncType.RECENT,
-	proto.Message.HistorySyncNotification.HistorySyncType.FULL,
-	proto.Message.HistorySyncNotification.HistorySyncType.ON_DEMAND
+	proto.HistorySync.HistorySyncType.INITIAL_BOOTSTRAP,
+	proto.HistorySync.HistorySyncType.PUSH_NAME,
+	proto.HistorySync.HistorySyncType.RECENT,
+	proto.HistorySync.HistorySyncType.FULL,
+	proto.HistorySync.HistorySyncType.ON_DEMAND,
+	proto.HistorySync.HistorySyncType.NON_BLOCKING_DATA,
+	proto.HistorySync.HistorySyncType.INITIAL_STATUS_V3
 ]
 
 const MAX_RECENT_MESSAGE_SENT_HISTORY = 256
@@ -138,7 +140,7 @@ export const MEDIA_HKDF_KEY_MAPPING = {
 
 export const MEDIA_KEYS = Object.keys(MEDIA_PATH_MAP) as MediaType[]
 
-export const MIN_PREKEY_COUNT = 5
+export const MIN_PREKEY_COUNT = 812
 
 export const INITIAL_PREKEY_COUNT = 30
 

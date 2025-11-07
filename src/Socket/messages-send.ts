@@ -10,6 +10,7 @@ import {
 	MiscMessageGenerationOptions,
 	SocketConfig,
 	WAInteractiveMessagesNativeFlowName,
+	WAMessage,
 	WAMessageKey
 } from '../Types'
 import {
@@ -922,13 +923,13 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 			const content = assertMediaContent(message.message)
 			const mediaKey = content.mediaKey!
 			const meId = authState.creds.me!.id
-			const node = await encryptMediaRetryRequest(message.key, mediaKey, meId)
+			const node = await encryptMediaRetryRequest(message.key!, mediaKey, meId)
 
 			let error: Error | undefined = undefined
 			await Promise.all([
 				sendNode(node),
 				waitForMsgMediaUpdate(async update => {
-					const result = update.find(c => c.key.id === message.key.id)
+					const result = update.find(c => c.key.id === message.key!.id)
 					if (result) {
 						if (result.error) {
 							error = result.error
@@ -961,7 +962,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				throw error
 			}
 
-			ev.emit('messages.update', [{ key: message.key, update: { message: message.message } }])
+			ev.emit('messages.update', [{ key: message.key!, update: { message: message.message } }])
 
 			return message
 		},
@@ -1078,10 +1079,10 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				// 	})
 				// }
 
-				recentMessageSentHistory.set(jid, fullMsg.key.id!, fullMsg.message!)
+				recentMessageSentHistory.set(jid, fullMsg.key?.id!, fullMsg.message!)
 
 				await relayMessage(jid, fullMsg.message!, {
-					messageId: fullMsg.key.id!,
+					messageId: fullMsg.key?.id!,
 					useCachedGroupMetadata: options.useCachedGroupMetadata,
 					additionalAttributes,
 					statusJidList: options.statusJidList,
@@ -1089,7 +1090,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				})
 				if (config.emitOwnEvents) {
 					process.nextTick(() => {
-						processingMutex.mutex(() => upsertMessage(fullMsg, 'append'))
+						processingMutex.mutex(() => upsertMessage(fullMsg as WAMessage, 'append'))
 					})
 				}
 
