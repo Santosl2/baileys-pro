@@ -574,6 +574,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		const isLid = server === 'lid'
 		const isNewsletter = server === 'newsletter'
 		const finalJid = jid
+    const isGroupOrStatus = isGroup || isStatus;
 
 		msgId = msgId || generateMessageIDV2(meId)
 		useUserDevicesCache = useUserDevicesCache !== false
@@ -584,28 +585,9 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		const binaryNodeContent: BinaryNode[] = []
 		const devices: DeviceWithJid[] = []
 
-		const meMsg: proto.IMessage = {
-			deviceSentMessage: {
-				destinationJid,
-				message
-			},
-			messageContextInfo: message.messageContextInfo
-		}
-
 		const extraAttrs: BinaryNodeAttributes = {}
-
-		if (participant) {
-			if (!isGroup && !isStatus) {
-				additionalAttributes = { ...additionalAttributes, device_fanout: 'false' }
-			}
-
-			const { user, device } = jidDecode(participant.jid)!
-			devices.push({
-				user,
-				device,
-				jid: participant.jid
-			})
-		}
+		
+				const patched = await patchMessageBeforeSending(message)
 
 		await authState.keys.transaction(async () => {
 			const mediaType = getMediaType(message)
@@ -640,7 +622,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				extraAttrs['decrypt-fail'] = 'hide' // todo: expand for reactions and other types
 			}
 
-			if (isGroup || isStatus) {
+      if (isGroupOrStatus && !isRetryResend) {
 				const [groupData, senderKeyMap] = await Promise.all([
 					(async () => {
 						let groupData = useCachedGroupMetadata && cachedGroupMetadata ? await cachedGroupMetadata(jid) : undefined // todo: should we rely on the cache specially if the cache is outdated and the metadata has new fields?
@@ -653,18 +635,15 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 						return groupData
 					})(),
 					(async () => {
-						if (!participant && !isStatus) {
 							// what if sender memory is less accurate than the cached metadata
 							// on participant change in group, we should do sender memory manipulation
 							const result = await authState.keys.get('sender-key-memory', [jid]) // TODO: check out what if the sender key memory doesn't include the LID stuff now?
 							return result[jid] || {}
-						}
+						
 
-						return {}
 					})()
 				])
 
-				if (!participant) {
 					const participantsList = []
 					if (isStatus) {
 						if (statusJidList?.length) participantsList.push(...statusJidList)
@@ -681,7 +660,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 							...additionalAttributes,
 							addressing_mode: groupAddressingMode
 						}
-					}
+					
 
 					const additionalDevices = await getUSyncDevices(participantsList, !!useUserDevicesCache, false)
 					devices.push(...additionalDevices)
@@ -694,7 +673,6 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 					}
 				}
 
-				const patched = await patchMessageBeforeSending(message)
 				if (Array.isArray(patched)) {
 					throw new Boom('Per-jid patching is not supported in groups')
 				}
@@ -745,22 +723,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 					participants.push(...result.nodes)
 				}
 
-				if (isRetryResend) {
-					const { type, ciphertext: encryptedContent } = await signalRepository.encryptMessage({
-						data: bytes,
-						jid: participant?.jid!
-					})
-
-					binaryNodeContent.push({
-						tag: 'enc',
-						attrs: {
-							v: '2',
-							type,
-							count: participant!.count.toString()
-						},
-						content: encryptedContent
-					})
-				} else {
+				
 					binaryNodeContent.push({
 						tag: 'enc',
 						attrs: { v: '2', type: 'skmsg', ...extraAttrs },
@@ -768,8 +731,17 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 					})
 
 					await authState.keys.set({ 'sender-key-memory': { [jid]: senderKeyMap } })
-				}
-			} else {
+				
+			} else if(!isRetryResend) {
+			
+		const meMsg: proto.IMessage = {
+			deviceSentMessage: {
+				destinationJid,
+				message
+			},
+			messageContextInfo: message.messageContextInfo
+		}
+
 				// ADDRESSING CONSISTENCY: Match own identity to conversation context
 				// TODO: investigate if this is true
 				let ownId = meId
@@ -885,6 +857,62 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 					})
 				}
 			}
+
+			if (isRetryResend) {
+        // when the retry request is not for a group
+        // only send to the specific device that asked for a retry
+        // otherwise the message is sent out to every device that should be a recipient
+        if (!isGroup && !isStatus) {
+          additionalAttributes = {
+            ...additionalAttributes,
+            device_fanout: "false"
+          };
+        }
+
+        await assertSessions([participant!.jid]);
+
+        if (isGroup) {
+          const result = await authState.keys.get("sender-key-memory", [
+            destinationJid
+          ]);
+
+          const groupSenderKeyMap = result[destinationJid] || {};
+          groupSenderKeyMap[participant!.jid] = false;
+
+          await authState.keys.set({
+            "sender-key-memory": { [destinationJid]: groupSenderKeyMap }
+          });
+        }
+
+        const isMe = areJidsSameUser(participant!.jid, meId);
+				const bytes = encodeWAMessage(message)
+
+        const encodedMessageToSend = isMe
+          ? encodeWAMessage({
+              deviceSentMessage: {
+                destinationJid,
+                message
+              }
+            })
+          : bytes;
+
+        const { type, ciphertext: encryptedContent } = await signalRepository.encryptMessage(
+          {
+						jid: participant!.jid,
+						data: encodedMessageToSend
+					}
+        );
+
+        binaryNodeContent.push({
+          tag: "enc",
+          attrs: {
+            v: "2",
+            type,
+            count: participant!.count.toString()
+          },
+          content: encryptedContent
+        });
+      }
 
 			const stanza: BinaryNode = {
 				tag: 'message',

@@ -972,11 +972,11 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 			}
 		}
 
-		await assertSessions([participant])
+		// await assertSessions([participant])
 
-		if (isJidGroup(remoteJid)) {
-			await authState.keys.set({ 'sender-key-memory': { [remoteJid]: null } })
-		}
+		// if (isJidGroup(remoteJid)) {
+		// 	await authState.keys.set({ 'sender-key-memory': { [remoteJid]: null } })
+		// }
 
 		logger.debug({ participant, sendToAll, shouldRecreateSession, recreateReason }, 'forced new session for retry recp')
 

@@ -15,7 +15,8 @@ import makeWASocket, {
 	WAPaymentOrderStatusEnum,
 	WAProductOrderTypeEnum,
 	WAInteractiveMessagesNativeFlowName,
-	WAPixTypes
+	WAPixTypes,
+	fetchLatestWaWebVersion
 } from '../src'
 //import MAIN_LOGGER from '../src/Utils/logger'
 import fs from 'fs'
@@ -39,13 +40,11 @@ const WHATSAPP_NUMBER = '553185702237@s.whatsapp.net'
 const startSock = async () => {
 	const { state, saveCreds } = await useMultiFileAuthState('baileys_auth_info')
 	// fetch latest version of WA Web
-	const { version, isLatest } = await fetchLatestBaileysVersion()
+	const { version, isLatest } = await fetchLatestWaWebVersion()
 	console.log(`using WA v${version.join('.')}, isLatest: ${isLatest}`)
 
 	const sock = makeWASocket({
-		// version,
-		version: [2, 3000, 1023979355],
-
+		version,
 		// logger: P({level: 'silent'}),
 		logger,
 		// logger: P({ level: 'debug' }),
@@ -55,7 +54,6 @@ const startSock = async () => {
 			/** caching makes the store faster to send/recv messages */
 			keys: makeCacheableSignalKeyStore(state.keys, logger)
 		},
-		msgRetryCounterCache,
 		generateHighQualityLinkPreview: true
 		// Essa linha abaixo envia listas como viewOnce message
 		// patchMessageBeforeSending: msg => {
@@ -75,11 +73,6 @@ const startSock = async () => {
 		// 	}
 		// 	return msg
 		// }
-		// ignore all broadcast messages -- to receive the same
-		// comment the line below out
-		// shouldIgnoreJid: jid => isJidBroadcast(jid) || isJidNewsletter(jid),
-		// implement to handle retries & poll updates
-		// getMessage,
 	})
 
 	// Pairing code for Web clients
@@ -101,7 +94,7 @@ const startSock = async () => {
 				const update = events['connection.update']
 				const { connection, lastDisconnect, qr } = update
 
-				console.log('connection update', qr)
+				console.log('connection update', {qr, update})
 				if (connection === 'close') {
 					// reconnect if not logged out
 					if ((lastDisconnect?.error as Boom)?.output?.statusCode !== DisconnectReason.loggedOut) {
