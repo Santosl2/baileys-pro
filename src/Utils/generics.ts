@@ -214,7 +214,8 @@ export function bindWaitForEvent<T extends keyof BaileysEventMap>(ev: BaileysEve
 			closeListener = ({ connection, lastDisconnect }) => {
 				if (connection === 'close') {
 					reject(
-						lastDisconnect?.error || new Boom('Connection Closed', { statusCode: DisconnectReason.connectionClosed })
+						lastDisconnect?.error ||
+							new Boom('Connection Closed in bindWaitForEvent', { statusCode: DisconnectReason.connectionClosed })
 					)
 				}
 			}

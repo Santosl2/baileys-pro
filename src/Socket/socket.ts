@@ -120,7 +120,7 @@ export const makeSocket = (config: SocketConfig) => {
 	/** send a raw buffer */
 	const sendRawMessage = async (data: Uint8Array | Buffer) => {
 		if (!ws.isOpen) {
-			throw new Boom('Connection Closed', { statusCode: DisconnectReason.connectionClosed })
+			throw new Boom('Connection Closed in sendRawMessage', { statusCode: DisconnectReason.connectionClosed })
 		}
 
 		const bytes = noise.encodeFrame(data)
@@ -152,7 +152,7 @@ export const makeSocket = (config: SocketConfig) => {
 	/** await the next incoming message */
 	const awaitNextMessage = async <T>(sendMsg?: Uint8Array) => {
 		if (!ws.isOpen) {
-			throw new Boom('Connection Closed', {
+			throw new Boom('Connection Closed in awaitNextMessage', {
 				statusCode: DisconnectReason.connectionClosed
 			})
 		}
@@ -191,7 +191,9 @@ export const makeSocket = (config: SocketConfig) => {
 			const result = await promiseTimeout<T>(timeoutMs, (resolve, reject) => {
 				onRecv = resolve
 				onErr = err => {
-					reject(err || new Boom('Connection Closed', { statusCode: DisconnectReason.connectionClosed }))
+					reject(
+						err || new Boom('Connection Closed in waitForMessage', { statusCode: DisconnectReason.connectionClosed })
+					)
 				}
 
 				ws.on(`TAG:${msgId}`, onRecv)
@@ -398,7 +400,7 @@ export const makeSocket = (config: SocketConfig) => {
 		}
 
 		if (ws.isClosed || ws.isClosing) {
-			throw new Boom('Connection Closed', { statusCode: DisconnectReason.connectionClosed })
+			throw new Boom('Connection Closed in waitForSocketOpen', { statusCode: DisconnectReason.connectionClosed })
 		}
 
 		let onOpen: () => void
@@ -588,7 +590,9 @@ export const makeSocket = (config: SocketConfig) => {
 		}
 	})
 	ws.on('error', mapWebSocketError(end))
-	ws.on('close', () => end(new Boom('Connection Terminated', { statusCode: DisconnectReason.connectionClosed })))
+	ws.on('close', e =>
+		end(new Boom('Connection Terminated in close event', { statusCode: DisconnectReason.connectionClosed, data: e }))
+	)
 	// the server terminated the connection
 	ws.on('CB:xmlstreamend', () =>
 		end(new Boom('Connection Terminated by Server', { statusCode: DisconnectReason.connectionClosed }))
