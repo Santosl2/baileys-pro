@@ -40,7 +40,7 @@ const question = (text: string) => new Promise<string>(resolve => rl.question(te
 
 // start a connection
 const startSock = async () => {
-	const { state, saveCreds } = await useMultiFileAuthState('baileys_auth_info')
+	const { state, saveCreds } = await useMultiFileAuthState('baileys_auth_info_2')
 	// fetch latest version of WA Web
 	const { version, isLatest } = await fetchLatestWaWebVersion({})
 	console.log(`using WA v${version.join('.')}, isLatest: ${isLatest}`)
