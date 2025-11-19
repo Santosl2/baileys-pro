@@ -72204,11 +72204,11 @@ export const proto = $root.proto = (() => {
                         break;
                     }
                 case 64: {
-                        message.privacySettingChannelsPersonalisedRecommendationAction = $root.proto.SyncActionValue.PrivacySettingChannelsPersonalisedRecommendationAction.decode(reader, reader.uint32());
+                        m.privacySettingChannelsPersonalisedRecommendationAction = $root.proto.SyncActionValue.PrivacySettingChannelsPersonalisedRecommendationAction.decode(reader, reader.uint32());
                         break;
                     }
                 case 65: {
-                        message.businessBroadcastAssociationAction = $root.proto.SyncActionValue.BusinessBroadcastAssociationAction.decode(reader, reader.uint32());
+                        m.businessBroadcastAssociationAction = $root.proto.SyncActionValue.BusinessBroadcastAssociationAction.decode(reader, reader.uint32());
                         break;
                     }
                 default:
