@@ -5,22 +5,10 @@
 
 > [!CAUTION]
 > NOTICE OF BREAKING CHANGE.
-> 
+>
 > As of 7.0.0, multiple breaking changes were introduced into the library.
-> 
+>
 > Please check out https://whiskey.so/migrate-latest for more information.
-
-> [!IMPORTANT]
-> I made a survey for users of the project to ask questions, and provide Baileys valuable insights regarding its users. I will be publishing the results of this form (after filtering) as well so we can study and understand where we need to work.
-> 
-> The survey is anonymous and requires no personal info at all. You are required to sign-in with Google to keep responses to one person. You are able to edit your response after you submit. The deadline for this form is September 30, 2025.
-> 
-> I encourage you to put the effort, all it takes is 5-10 minutes and you get to ask me any questions you have.
-> 
-> \- Rajeh (purpshell)
-> 
-> Fill in the survey via the link: https://whiskey.so/survey 
-
 
 # Important Note
 This is a temporary README.md, the new guide is in development and will this file will be replaced with .github/README.md (already a default on GitHub).
@@ -39,8 +27,8 @@ Use at your own discretion. Do not spam people with this. We discourage any stal
 
 ##
 
-- Baileys does not require Selenium or any other browser to be interface with WhatsApp Web, it does so directly using a **WebSocket**. 
-- Not running Selenium or Chromium saves you like **half a gig** of ram :/ 
+- Baileys does not require Selenium or any other browser to be interface with WhatsApp Web, it does so directly using a **WebSocket**.
+- Not running Selenium or Chromium saves you like **half a gig** of ram :/
 - Baileys supports interacting with the multi-device & web versions of WhatsApp.
 - Thank you to [@pokearaujo](https://github.com/pokearaujo/multidevice) for writing his observations on the workings of WhatsApp Multi-Device. Also, thank you to [@Sigalor](https://github.com/sigalor/whatsapp-web-reveng) for writing his observations on the workings of WhatsApp Web and thanks to [@Rhymen](https://github.com/Rhymen/go-whatsapp/) for the __go__ implementation.
 
@@ -48,7 +36,7 @@ Use at your own discretion. Do not spam people with this. We discourage any stal
 > The original repository had to be removed by the original author - we now continue development in this repository here.
 This is the only official repository and is maintained by the community.
 > **Join the Discord [here](https://discord.gg/WeJM5FP9GG)**
- 
+
 ## Example
 
 Do check out & run [example.ts](Example/example.ts) to see an example usage of the library.

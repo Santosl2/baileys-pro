@@ -121,7 +121,7 @@ export const generateRegistrationNode = (
 			supportGroupHistory: false,
 			onDemandReady: undefined,
 			supportGuestChat: undefined
-		} as any,
+		},
 		version: {
 			primary: 10,
 			secondary: 15,
