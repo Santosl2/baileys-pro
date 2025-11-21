@@ -584,9 +584,8 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		const isStatus = jid === statusJid
 		const isLid = server === 'lid'
 		const isNewsletter = server === 'newsletter'
-		const isGroupOrStatus = isGroup || isStatus
 		const finalJid = jid
-    const isGroupOrStatus = isGroup || isStatus;
+		const isGroupOrStatus = isGroup || isStatus
 
 		msgId = msgId || generateMessageIDV2(meId)
 		useUserDevicesCache = useUserDevicesCache !== false
@@ -598,8 +597,16 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		const devices: DeviceWithJid[] = []
 
 		const extraAttrs: BinaryNodeAttributes = {}
-		
-				const patched = await patchMessageBeforeSending(message)
+
+		const meMsg: proto.IMessage = {
+			deviceSentMessage: {
+				destinationJid,
+				message
+			},
+			messageContextInfo: message.messageContextInfo
+		}
+
+		const patched = await patchMessageBeforeSending(message)
 
 		await authState.keys.transaction(async () => {
 			const mediaType = getMediaType(message)
@@ -647,12 +654,10 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 						return groupData
 					})(),
 					(async () => {
-							// what if sender memory is less accurate than the cached metadata
-							// on participant change in group, we should do sender memory manipulation
-							const result = await authState.keys.get('sender-key-memory', [jid]) // TODO: check out what if the sender key memory doesn't include the LID stuff now?
-							return result[jid] || {}
-						
-
+						// what if sender memory is less accurate than the cached metadata
+						// on participant change in group, we should do sender memory manipulation
+						const result = await authState.keys.get('sender-key-memory', [jid]) // TODO: check out what if the sender key memory doesn't include the LID stuff now?
+						return result[jid] || {}
 					})()
 				])
 
@@ -884,60 +889,56 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 			}
 
 			if (isRetryResend) {
-        // when the retry request is not for a group
-        // only send to the specific device that asked for a retry
-        // otherwise the message is sent out to every device that should be a recipient
-        if (!isGroup && !isStatus) {
-          additionalAttributes = {
-            ...additionalAttributes,
-            device_fanout: "false"
-          };
-        }
+				// when the retry request is not for a group
+				// only send to the specific device that asked for a retry
+				// otherwise the message is sent out to every device that should be a recipient
+				if (!isGroup && !isStatus) {
+					additionalAttributes = {
+						...additionalAttributes,
+						device_fanout: 'false'
+					}
+				}
 
-        await assertSessions([participant!.jid]);
+				await assertSessions([participant!.jid])
 
-        if (isGroup) {
-          const result = await authState.keys.get("sender-key-memory", [
-            destinationJid
-          ]);
+				if (isGroup) {
+					const result = await authState.keys.get('sender-key-memory', [destinationJid])
 
-          const groupSenderKeyMap = result[destinationJid] || {};
-          groupSenderKeyMap[participant!.jid] = false;
+					const groupSenderKeyMap = result[destinationJid] || {}
+					groupSenderKeyMap[participant!.jid] = false
 
-          await authState.keys.set({
-            "sender-key-memory": { [destinationJid]: groupSenderKeyMap }
-          });
-        }
+					await authState.keys.set({
+						'sender-key-memory': { [destinationJid]: groupSenderKeyMap }
+					})
+				}
 
-        const isMe = areJidsSameUser(participant!.jid, meId);
+				const isMe = areJidsSameUser(participant!.jid, meId)
 				const bytes = encodeWAMessage(message)
 
-        const encodedMessageToSend = isMe
-          ? encodeWAMessage({
-              deviceSentMessage: {
-                destinationJid,
-                message
-              }
-            })
-          : bytes;
+				const encodedMessageToSend = isMe
+					? encodeWAMessage({
+							deviceSentMessage: {
+								destinationJid,
+								message
+							}
+						})
+					: bytes
 
-        const { type, ciphertext: encryptedContent } = await signalRepository.encryptMessage(
-          {
-						jid: participant!.jid,
-						data: encodedMessageToSend
-					}
-        );
+				const { type, ciphertext: encryptedContent } = await signalRepository.encryptMessage({
+					jid: participant!.jid,
+					data: encodedMessageToSend
+				})
 
-        binaryNodeContent.push({
-          tag: "enc",
-          attrs: {
-            v: "2",
-            type,
-            count: participant!.count.toString()
-          },
-          content: encryptedContent
-        });
-      }
+				binaryNodeContent.push({
+					tag: 'enc',
+					attrs: {
+						v: '2',
+						type,
+						count: participant!.count.toString()
+					},
+					content: encryptedContent
+				})
+			}
 
 			const stanza: BinaryNode = {
 				tag: 'message',
