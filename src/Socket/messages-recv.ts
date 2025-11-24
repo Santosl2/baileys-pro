@@ -875,7 +875,10 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 				await decrypt()
 				// message failed to decrypt
 				if (msg.messageStubType === proto.WebMessageInfo.StubType.CIPHERTEXT) {
-					if (msg?.messageStubParameters?.[0] === MISSING_KEYS_ERROR_TEXT) {
+					if (
+						msg?.messageStubParameters?.[0] === MISSING_KEYS_ERROR_TEXT ||
+						msg.messageStubParameters?.[0] === NO_MESSAGE_FOUND_ERROR_TEXT
+					) {
 						return sendMessageAck(node, NACK_REASONS.ParsingError)
 					}
 
