@@ -1238,9 +1238,34 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 	}
 
 	// Handles privacy token notifications
-	async function handlePrivacyTokenNotification(node: BinaryNode) {
-		const from = node.attrs.from
-		console.log(from, 'got privacy token notification')
+const handlePrivacyTokenNotification = async (node: BinaryNode) => {
+		const tokensNode = getBinaryNodeChild(node, 'tokens')
+		const from = jidNormalizedUser(node.attrs.from)
+
+		if (!tokensNode) return
+
+		const tokenNodes = getBinaryNodeChildren(tokensNode, 'token')
+
+		for (const tokenNode of tokenNodes) {
+			const { attrs, content } = tokenNode
+			const type = attrs.type
+			const timestamp = attrs.t
+
+			if (type === 'trusted_contact' && content instanceof Buffer) {
+				logger.debug(
+					{
+						from,
+						timestamp,
+						tcToken: content
+					},
+					'received trusted contact token'
+				)
+
+				await authState.keys.set({
+					'tc-token': { [from]: { token: content } }
+				})
+			}
+		}
 	}
 
 	// Handles mex newsletter notifications
