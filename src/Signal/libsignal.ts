@@ -1,16 +1,26 @@
-import * as libsignal from 'libsignal'
 import { SignalAuthState, SignalKeyStoreWithTransaction } from '../Types'
 import { SignalRepository } from '../Types/Signal'
 import { generateSignalPubKey } from '../Utils'
 import logger from '../Utils/logger'
 import { jidDecode } from '../WABinary'
 import type { SenderKeyStore } from './Group/group_cipher'
-import { SenderKeyName } from './Group/sender-key-name'
 import { SenderKeyRecord } from './Group/sender-key-record'
-import { GroupCipher, GroupSessionBuilder, SenderKeyDistributionMessage } from './Group'
+import type { SignalStorage } from 'whatsapp-rust-bridge'
+import {
+	GroupCipher,
+	GroupSessionBuilder,
+	ProtocolAddress,
+	SenderKeyDistributionMessage,
+	SenderKeyName,
+	SessionBuilder,
+	SessionCipher,
+	SessionRecord
+} from 'whatsapp-rust-bridge'
 
 export function makeLibSignalRepository(auth: SignalAuthState): SignalRepository {
 	const storage: SenderKeyStore = signalStorage(auth)
+	const parsedKeys = auth.keys as SignalKeyStoreWithTransaction
+
 	return {
 		async validateSession(jid: string) {
 			try {
@@ -31,8 +41,8 @@ export function makeLibSignalRepository(auth: SignalAuthState): SignalRepository
 			}
 		},
 		decryptGroupMessage({ group, authorJid, msg }) {
-			const senderName = jidToSignalSenderKeyName(group, authorJid)
-			const cipher = new GroupCipher(storage, senderName)
+			const senderAddr = jidToSignalProtocolAddress(authorJid)
+			const cipher = new GroupCipher(storage, group, senderAddr)
 
 			// Use transaction to ensure atomicity
 			return (auth.keys as SignalKeyStoreWithTransaction).transaction(async () => {
@@ -46,33 +56,21 @@ export function makeLibSignalRepository(auth: SignalAuthState): SignalRepository
 				throw new Error('Group ID is required for sender key distribution message')
 			}
 
-			const senderName = jidToSignalSenderKeyName(item.groupId, authorJid)
+			const senderAddr = jidToSignalProtocolAddress(authorJid)
 
-			const senderMsg = new SenderKeyDistributionMessage(
-				null,
-				null,
-				null,
-				null,
-				item.axolotlSenderKeyDistributionMessage
-			)
-			const senderNameStr = senderName.toString()
+			const senderName = new SenderKeyName(item.groupId, senderAddr)
+			const senderMsg = SenderKeyDistributionMessage.deserialize(item.axolotlSenderKeyDistributionMessage!)
 
-			return (auth.keys as SignalKeyStoreWithTransaction).transaction(async () => {
-				const { [senderNameStr]: senderKey } = await auth.keys.get('sender-key', [senderNameStr])
-				if (!senderKey) {
-					await storage.storeSenderKey(senderName, new SenderKeyRecord())
-				}
-
+			return parsedKeys.transaction(async () => {
 				await builder.process(senderName, senderMsg)
 			})
 		},
 		async decryptMessage({ jid, type, ciphertext }) {
 			const addr = jidToSignalProtocolAddress(jid)
-			const session = new libsignal.SessionCipher(storage, addr)
+			const session = new SessionCipher(storage, addr)
 
-			// Use transaction to ensure atomicityAdd commentMore actions
-			return (auth.keys as SignalKeyStoreWithTransaction).transaction(async () => {
-				let result: Buffer
+			async function doDecrypt() {
+				let result: Uint8Array
 				switch (type) {
 					case 'pkmsg':
 						result = await session.decryptPreKeyWhisperMessage(ciphertext)
@@ -83,57 +81,47 @@ export function makeLibSignalRepository(auth: SignalAuthState): SignalRepository
 				}
 
 				return result
+			}
+
+			// If it's not a sync message, we need to ensure atomicity
+			// For regular messages, we use a transaction to ensure atomicity
+			return parsedKeys.transaction(async () => {
+				return await doDecrypt()
 			})
 		},
 		async encryptMessage({ jid, data }) {
 			const addr = jidToSignalProtocolAddress(jid)
-			const cipher = new libsignal.SessionCipher(storage, addr)
+			const cipher = new SessionCipher(storage, addr)
 
-			// Use transaction to ensure atomicityAdd commentMore actions
-			return (auth.keys as SignalKeyStoreWithTransaction).transaction(async () => {
-				try {
-					const { type: sigType, body } = await cipher.encrypt(data)
-					const type = sigType === 3 ? 'pkmsg' : 'msg'
-					return { type, ciphertext: Buffer.from(body, 'binary') }
-				} catch (error) {
-					logger.info(`Encryption failed ${error}`)
-					throw error
-				}
+			// Use transaction to ensure atomicity
+			return parsedKeys.transaction(async () => {
+				const { type: sigType, body } = await cipher.encrypt(data)
+				const type = sigType === 3 ? 'pkmsg' : 'msg'
+				return { type, ciphertext: body }
 			})
 		},
 		async encryptGroupMessage({ group, meId, data }) {
-			const senderName = jidToSignalSenderKeyName(group, meId)
 			const builder = new GroupSessionBuilder(storage)
+			const meAddr = jidToSignalProtocolAddress(meId)
+			const senderName = jidToSignalSenderKeyName(group, meId)
 
-			const senderNameStr = senderName.toString()
+			const senderKeyDistributionMessage = await builder.create(senderName)
 
-			// Use transaction to ensure atomicity
-			return (auth.keys as SignalKeyStoreWithTransaction).transaction(async () => {
-				try {
-					const { [senderNameStr]: senderKey } = await auth.keys.get('sender-key', [senderNameStr])
-					if (!senderKey) {
-						await storage.storeSenderKey(senderName, new SenderKeyRecord())
-					}
+			const cipher = new GroupCipher(storage, group, meAddr)
 
-					const senderKeyDistributionMessage = await builder.create(senderName)
-					const session = new GroupCipher(storage, senderName)
-					const ciphertext = await session.encrypt(data)
+			return parsedKeys.transaction(async () => {
+				const ciphertext = await cipher.encrypt(data)
 
-					return {
-						ciphertext,
-						senderKeyDistributionMessage: senderKeyDistributionMessage.serialize()
-					}
-				} catch (error) {
-					logger.info(`Group message encryption failed ${error}`)
-					throw error
+				return {
+					ciphertext,
+					senderKeyDistributionMessage: senderKeyDistributionMessage.serialize()
 				}
 			})
 		},
 		async injectE2ESession({ jid, session }) {
-			const cipher = new libsignal.SessionBuilder(storage, jidToSignalProtocolAddress(jid))
-
-			// Use transaction to ensure atomicity
-			return (auth.keys as SignalKeyStoreWithTransaction).transaction(async () => {
+			logger.trace({ jid }, 'injecting E2EE session')
+			const cipher = new SessionBuilder(storage, jidToSignalProtocolAddress(jid))
+			return parsedKeys.transaction(async () => {
 				await cipher.initOutgoing(session)
 			})
 		},
