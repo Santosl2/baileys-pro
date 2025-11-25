@@ -23,6 +23,7 @@
     "build:all": "tsc && typedoc",
     "build:docs": "typedoc",
     "build:tsc": "tsc",
+    "build": "tsc -P tsconfig.build.json && tsc-esm-fix --tsconfig=tsconfig.build.json --ext=.js",
     "changelog:last": "conventional-changelog -p angular -r 2",
     "changelog:preview": "conventional-changelog -p angular -u",
     "changelog:update": "conventional-changelog -p angular -i CHANGELOG.md -s -r 0",
@@ -76,6 +77,8 @@
     "sharp": "^0.34.2",
     "ts-jest": "^29.3.2",
     "ts-node": "^10.8.1",
+    "tsc-esm-fix": "^3.1.2",
+    "tsx": "^4.20.6",
     "typedoc": "^0.27.9",
     "typedoc-plugin-markdown": "4.4.2",
     "typescript": "^5.8.2"
