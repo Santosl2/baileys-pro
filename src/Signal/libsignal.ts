@@ -2,7 +2,9 @@ import { SignalAuthState, SignalKeyStoreWithTransaction } from '../Types'
 import { SignalRepository } from '../Types/Signal'
 import logger from '../Utils/logger'
 import { jidDecode, WAJIDDomains } from '../WABinary'
+//@ts-ignore
 import type { SignalStorage } from 'whatsapp-rust-bridge'
+
 import {
 	GroupCipher,
 	GroupSessionBuilder,
@@ -12,6 +14,7 @@ import {
 	SessionBuilder,
 	SessionCipher,
 	SessionRecord
+	//@ts-ignore
 } from 'whatsapp-rust-bridge'
 
 export function makeLibSignalRepository(auth: SignalAuthState): SignalRepository {
