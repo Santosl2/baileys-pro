@@ -720,22 +720,22 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 					attrs: {},
 					content: tcTokenBuffer
 				})
-
-				if (additionalNodes && additionalNodes.length > 0) {
-					;(stanza.content as BinaryNode[]).push(...additionalNodes)
-				} else {
-					const buttonType = getButtonType(message)
-					if (buttonType) {
-						;(stanza.content as BinaryNode[]).push(getButtonArgs(message))
-
-						logger.debug({ jid }, 'adding business node')
-					}
-				}
-
-				logger.debug({ msgId }, `sending message to ${participants.length} devices`)
-
-				await sendNode(stanza)
 			}
+
+			if (additionalNodes && additionalNodes.length > 0) {
+				;(stanza.content as BinaryNode[]).push(...additionalNodes)
+			} else {
+				const buttonType = getButtonType(message)
+				if (buttonType) {
+					;(stanza.content as BinaryNode[]).push(getButtonArgs(message))
+
+					logger.debug({ jid }, 'adding business node')
+				}
+			}
+
+			logger.debug({ msgId }, `sending message to ${participants.length} devices`)
+
+			await sendNode(stanza)
 		})
 
 		return msgId
