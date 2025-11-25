@@ -1241,6 +1241,8 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 			const type = attrs.type
 			const timestamp = attrs.t
 
+			console.log({ tokenNode })
+
 			if (type === 'trusted_contact' && content instanceof Buffer) {
 				logger.debug(
 					{
