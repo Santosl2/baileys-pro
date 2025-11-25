@@ -2,8 +2,7 @@ import { Boom } from '@hapi/boom'
 import axios, { AxiosRequestConfig } from 'axios'
 import { createHash, randomBytes } from 'crypto'
 import { platform, release } from 'os'
-import { proto } from '../../WAProto'
-import { version as baileysVersion } from '../Defaults/baileys-version.json'
+import { proto } from '../../WAProto/index.js'
 import {
 	BaileysEventEmitter,
 	BaileysEventMap,
@@ -14,6 +13,7 @@ import {
 	WAVersion
 } from '../Types'
 import { BinaryNode, getAllBinaryNodeChildren, jidDecode } from '../WABinary'
+import { baileysVersion } from '../Defaults/index.js'
 
 const PLATFORM_MAP = {
 	aix: 'AIX',
@@ -253,7 +253,7 @@ export const fetchLatestBaileysVersion = async (options: AxiosRequestConfig<{}> 
 		}
 	} catch (error) {
 		return {
-			version: baileysVersion as WAVersion,
+			version: baileysVersion,
 			isLatest: false,
 			error
 		}

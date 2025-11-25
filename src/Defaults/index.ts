@@ -1,10 +1,11 @@
 import NodeCache from '@cacheable/node-cache'
-import { proto } from '../../WAProto'
+import { proto } from '../../WAProto/index.js'
 import { makeLibSignalRepository } from '../Signal/libsignal'
 import type { AuthenticationState, MediaType, SocketConfig, WAVersion } from '../Types'
 import { Browsers } from '../Utils'
 import logger from '../Utils/logger'
-import { version } from './baileys-version.json'
+
+export const baileysVersion = [2, 3000, 1027934701] as WAVersion
 
 export const DEFAULT_CACHE_TTLS = {
 	SIGNAL_STORE: 5 * 60, // 5 minutes
@@ -35,18 +36,20 @@ export const WA_CERT_DETAILS = {
 }
 
 export const PROCESSABLE_HISTORY_TYPES = [
-	proto.Message.HistorySyncNotification.HistorySyncType.INITIAL_BOOTSTRAP,
-	proto.Message.HistorySyncNotification.HistorySyncType.PUSH_NAME,
-	proto.Message.HistorySyncNotification.HistorySyncType.RECENT,
-	proto.Message.HistorySyncNotification.HistorySyncType.FULL,
-	proto.Message.HistorySyncNotification.HistorySyncType.ON_DEMAND
+	proto.HistorySync.HistorySyncType.INITIAL_BOOTSTRAP,
+	proto.HistorySync.HistorySyncType.PUSH_NAME,
+	proto.HistorySync.HistorySyncType.RECENT,
+	proto.HistorySync.HistorySyncType.FULL,
+	proto.HistorySync.HistorySyncType.ON_DEMAND,
+	proto.HistorySync.HistorySyncType.NON_BLOCKING_DATA,
+	proto.HistorySync.HistorySyncType.INITIAL_STATUS_V3
 ]
 
 const MAX_RECENT_MESSAGE_SENT_HISTORY = 256
 const recentMessageSentHistory = new Map<string, proto.IMessage>()
 
 export const DEFAULT_CONNECTION_CONFIG: SocketConfig = {
-	version: version as WAVersion,
+	version: baileysVersion as WAVersion,
 	browser: Browsers.macOS('Chrome'),
 	waWebSocketUrl: 'wss://web.whatsapp.com/ws/chat',
 	connectTimeoutMs: 20_000,
