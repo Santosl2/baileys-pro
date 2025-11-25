@@ -397,19 +397,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 
 		switch (nodeType) {
 			case 'privacy_token':
-				const tokenList = getBinaryNodeChildren(child, 'token')
-				for (const { attrs, content } of tokenList) {
-					const jid = attrs.jid
-					ev.emit('chats.update', [
-						{
-							id: jid,
-							tcToken: content as Buffer
-						}
-					])
-
-					logger.debug({ jid }, 'got privacy token update')
-				}
-
+				await handlePrivacyTokenNotification(node)
 				break
 			case 'newsletter':
 				await handleNewsletterNotification(node)
@@ -901,7 +889,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 						// message was sent by us from a different device
 						type = 'sender'
 						// need to specially handle this case
-							if (isJidUser(msg.key.remoteJid!)) {
+						if (isJidUser(msg.key.remoteJid!)) {
 							participant = author
 						}
 					} else if (!sendActiveReceipts) {
@@ -1238,7 +1226,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 	}
 
 	// Handles privacy token notifications
-const handlePrivacyTokenNotification = async (node: BinaryNode) => {
+	const handlePrivacyTokenNotification = async (node: BinaryNode) => {
 		const tokensNode = getBinaryNodeChild(node, 'tokens')
 		const from = jidNormalizedUser(node.attrs.from)
 
@@ -1247,6 +1235,8 @@ const handlePrivacyTokenNotification = async (node: BinaryNode) => {
 		const tokenNodes = getBinaryNodeChildren(tokensNode, 'token')
 
 		for (const tokenNode of tokenNodes) {
+			logger.debug({ tokenNodes }, 'got privacy token update')
+
 			const { attrs, content } = tokenNode
 			const type = attrs.type
 			const timestamp = attrs.t
