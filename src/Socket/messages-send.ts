@@ -710,33 +710,32 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 			}
 
 			const contactTcTokenData =
-        !isGroup && !isRetryResend && !isStatus
-          ? await authState.keys.get("contacts-tc-token", [destinationJid])
-          : {};
+				!isGroup && !isRetryResend && !isStatus ? await authState.keys.get('contacts-tc-token', [destinationJid]) : {}
 
-      const tcTokenBuffer = contactTcTokenData[destinationJid]?.token;
+			const tcTokenBuffer = contactTcTokenData[destinationJid]?.token
 
-      if (tcTokenBuffer) {
-        (stanza.content as BinaryNode[]).push({
-          tag: "tctoken",
-          attrs: {},
-          content: tcTokenBuffer
-        });
+			if (tcTokenBuffer) {
+				;(stanza.content as BinaryNode[]).push({
+					tag: 'tctoken',
+					attrs: {},
+					content: tcTokenBuffer
+				})
 
-			if (additionalNodes && additionalNodes.length > 0) {
-				;(stanza.content as BinaryNode[]).push(...additionalNodes)
-			} else {
-				const buttonType = getButtonType(message)
-				if (buttonType) {
-					;(stanza.content as BinaryNode[]).push(getButtonArgs(message))
+				if (additionalNodes && additionalNodes.length > 0) {
+					;(stanza.content as BinaryNode[]).push(...additionalNodes)
+				} else {
+					const buttonType = getButtonType(message)
+					if (buttonType) {
+						;(stanza.content as BinaryNode[]).push(getButtonArgs(message))
 
-					logger.debug({ jid }, 'adding business node')
+						logger.debug({ jid }, 'adding business node')
+					}
 				}
+
+				logger.debug({ msgId }, `sending message to ${participants.length} devices`)
+
+				await sendNode(stanza)
 			}
-
-			logger.debug({ msgId }, `sending message to ${participants.length} devices`)
-
-			await sendNode(stanza)
 		})
 
 		return msgId
