@@ -154,8 +154,8 @@ const startSock = async() => {
 
               // go to an old chat and send this
               if (text == "onDemandHistSync") {
-                const messageId = await sock.fetchMessageHistory(50, msg.key, msg.messageTimestamp!)
-                console.log('requested on-demand sync, id=', messageId)
+                // const messageId = await sock.fetchMessageHistory(50, msg.key, msg.messageTimestamp!)
+                // console.log('requested on-demand sync, id=', messageId)
               }
 
               if (!msg.key.fromMe && doReplies && !isJidNewsletter(msg.key?.remoteJid!)) {
