@@ -239,13 +239,13 @@ export const decryptMessageNode = (
 							err,
 							messageType: tag === 'plaintext' ? 'plaintext' : attrs.type,
 							sender,
-							author,
+							author
 						}
 
 						logger.error(errorContext, 'failed to decrypt message')
 
 						fullMessage.messageStubType = proto.WebMessageInfo.StubType.CIPHERTEXT
-						fullMessage.messageStubParameters = [err.message]
+						fullMessage.messageStubParameters = [safeGetErrorMessage(err)]
 					}
 				}
 			}
@@ -257,4 +257,16 @@ export const decryptMessageNode = (
 			}
 		}
 	}
+}
+
+function safeGetErrorMessage(error: unknown): string {
+	if (error instanceof Error) {
+		return error.message
+	}
+
+	if (typeof error === 'object' && error !== null && 'message' in error) {
+		return String((error as any).message)
+	}
+
+	return String(error)
 }

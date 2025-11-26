@@ -494,6 +494,8 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 						const type = attrs.action === 'block' ? 'add' : 'remove'
 						ev.emit('blocklist.update', { blocklist, type })
 					}
+				} else if (child.tag === 'devices'){
+						// 
 				}
 
 				break
