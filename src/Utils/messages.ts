@@ -264,7 +264,7 @@ export const prepareWAMessageMedia = async (
 					logger?.debug('computed backgroundColor audio status')
 				}
 			} catch (error) {
-				logger?.warn({ trace: error.stack }, 'failed to obtain extra info')
+				logger?.warn({ trace: error.stack, uploadData }, 'failed to obtain extra info')
 			}
 		})()
 	]).finally(async () => {
