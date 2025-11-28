@@ -42,6 +42,9 @@ export const PROCESSABLE_HISTORY_TYPES = [
 	proto.Message.HistorySyncNotification.HistorySyncType.ON_DEMAND
 ]
 
+export const KEEPALIVE_INTERVAL_MIN = 20_000
+export const KEEPALIVE_INTERVAL_MAX = 30_000
+
 const MAX_RECENT_MESSAGE_SENT_HISTORY = 256
 const recentMessageSentHistory = new Map<string, proto.IMessage>()
 

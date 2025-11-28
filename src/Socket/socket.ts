@@ -7,6 +7,8 @@ import {
 	DEF_CALLBACK_PREFIX,
 	DEF_TAG_PREFIX,
 	INITIAL_PREKEY_COUNT,
+	KEEPALIVE_INTERVAL_MAX,
+	KEEPALIVE_INTERVAL_MIN,
 	MIN_PREKEY_COUNT,
 	MIN_UPLOAD_INTERVAL,
 	NOISE_WA_HEADER,
@@ -416,6 +418,7 @@ export const makeSocket = (config: SocketConfig) => {
 		})
 	}
 
+
 	const startKeepAliveRequest = () =>
 		(keepAliveReq = setInterval(() => {
 			if (!lastDateRecv) {
@@ -423,11 +426,16 @@ export const makeSocket = (config: SocketConfig) => {
 			}
 
 			const diff = Date.now() - lastDateRecv.getTime()
+
+			/* randomize the interval a bit to avoid network spikes */
+			const interval =
+				Math.floor(Math.random() * (KEEPALIVE_INTERVAL_MAX - KEEPALIVE_INTERVAL_MIN)) + KEEPALIVE_INTERVAL_MIN
+				
 			/*
 				check if it's been a suspicious amount of time since the server responded with our last seen
 				it could be that the network is down
 			*/
-			if (diff > keepAliveIntervalMs + 5000) {
+			if (diff > interval) {
 				end(new Boom('Connection was lost', { statusCode: DisconnectReason.connectionLost }))
 			} else if (ws.isOpen) {
 				// if its all good, send a keep alive request
@@ -440,6 +448,9 @@ export const makeSocket = (config: SocketConfig) => {
 						xmlns: 'w:p'
 					},
 					content: [{ tag: 'ping', attrs: {} }]
+				}).then(() => {
+					logger.trace('keep alive response received')
+					lastDateRecv = new Date()
 				}).catch(err => {
 					end(new Boom('Connection was lost', { statusCode: DisconnectReason.connectionLost, data: err }))
 					logger.error({ trace: err.stack }, 'error in sending keep alive')
