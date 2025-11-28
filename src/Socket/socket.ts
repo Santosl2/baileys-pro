@@ -369,7 +369,7 @@ export const makeSocket = (config: SocketConfig) => {
 		closed = true
 		logger.info({ trace: error?.stack }, error ? 'connection errored' : 'connection closed')
 
-		clearInterval(keepAliveReq)
+		clearTimeout(keepAliveReq)
 		clearTimeout(qrTimer)
 
 		ws.removeAllListeners('close')
@@ -452,6 +452,7 @@ export const makeSocket = (config: SocketConfig) => {
 						.then(() => {
 							logger.trace('keep alive response received')
 							lastDateRecv = new Date()
+							clearTimeout(keepAliveReq)
 						})
 						.catch(err => {
 							end(new Boom('Connection was lost', { statusCode: DisconnectReason.connectionLost, data: err }))
