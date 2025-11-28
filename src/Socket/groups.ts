@@ -324,6 +324,11 @@ export const extractGroupMetadata = (result: BinaryNode) => {
 	const groupId = group.attrs.id.includes('@') ? group.attrs.id : jidEncode(group.attrs.id, 'g.us')
 	const eph = getBinaryNodeChild(group, 'ephemeral')?.attrs.expiration
 	const memberAddMode = getBinaryNodeChildString(group, 'member_add_mode') === 'all_member_add'
+
+	if(!group.attrs.subject){
+		console.warn(`extractGroupMetadata called on group without subject: ${groupId}`, { groupAttrs: group.attrs })
+	}
+
 	const metadata: GroupMetadata = {
 		id: groupId,
 		addressingMode: group.attrs.addressing_mode as 'pn' | 'lid',
