@@ -422,6 +422,10 @@ export const makeSocket = (config: SocketConfig) => {
 	const startKeepAliveRequest = () => {
 		const scheduleNext = () => {
 			// choose a random delay between MIN and MAX
+			if (keepAliveReq) {
+				clearTimeout(keepAliveReq)
+			}
+
 			const delay =
 				Math.floor(Math.random() * (KEEPALIVE_INTERVAL_MAX - KEEPALIVE_INTERVAL_MIN)) + KEEPALIVE_INTERVAL_MIN
 
@@ -453,7 +457,7 @@ export const makeSocket = (config: SocketConfig) => {
 							logger.trace('keep alive response received sent after' + delay, )
 							lastPingTimeSent = Date.now()
 							lastDateRecv = new Date()
-							clearTimeout(keepAliveReq)
+							
 						})
 						.catch(err => {
 							end(new Boom('Connection was lost', { statusCode: DisconnectReason.connectionLost, data: err }))
