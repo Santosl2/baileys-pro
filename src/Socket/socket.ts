@@ -450,7 +450,8 @@ export const makeSocket = (config: SocketConfig) => {
 						content: [{ tag: 'ping', attrs: {} }]
 					})
 						.then(() => {
-							logger.trace('keep alive response received')
+							logger.trace('keep alive response received sent after' + delay, )
+							lastPingTimeSent = Date.now()
 							lastDateRecv = new Date()
 							clearTimeout(keepAliveReq)
 						})
