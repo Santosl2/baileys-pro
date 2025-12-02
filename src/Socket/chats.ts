@@ -71,6 +71,10 @@ export const makeChatsSocket = (config: SocketConfig) => {
 
 	/** this mutex ensures that the notifications (receipts, messages etc.) are processed in order */
 	const processingMutex = makeMutex()
+
+	/** this mutex ensures that messages are processed in order */
+	const messageMutex = makeMutex()
+
 	let awaitingSyncTimeout: NodeJS.Timeout | undefined
 
 	const placeholderResendCache =
@@ -1123,6 +1127,7 @@ export const makeChatsSocket = (config: SocketConfig) => {
 		...sock,
 		getBotListV2,
 		processingMutex,
+		messageMutex,
 		fetchPrivacySettings,
 		upsertMessage,
 		appPatch,
