@@ -67,6 +67,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		authState,
 		ws,
 		processingMutex,
+		messageMutex,
 		signalRepository,
 		query,
 		upsertMessage,
@@ -839,7 +840,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		}
 
 		try {
-			await processingMutex.mutex(async () => {
+			await messageMutex.mutex(async () => {
 				await decrypt()
 				// message failed to decrypt
 				if (msg.messageStubType === proto.WebMessageInfo.StubType.CIPHERTEXT) {
