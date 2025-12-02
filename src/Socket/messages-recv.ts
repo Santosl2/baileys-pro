@@ -67,8 +67,9 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		ev,
 		authState,
 		ws,
-		processingMutex,
 		messageMutex,
+		receiptMutex,
+		notificationMutex,
 		signalRepository,
 		query,
 		upsertMessage,
@@ -689,7 +690,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 
 		try {
 			await Promise.all([
-				processingMutex.mutex(async () => {
+				receiptMutex.mutex(async () => {
 					const status = getStatusFromReceiptType(attrs.type)
 					if (
 						typeof status !== 'undefined' &&
@@ -763,7 +764,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 
 		try {
 			await Promise.all([
-				processingMutex.mutex(async () => {
+				notificationMutex.mutex(async () => {
 					const msg = await processNotification(node)
 					if (msg) {
 						const fromMe = areJidsSameUser(node.attrs.participant || remoteJid, authState.creds.me!.id)
