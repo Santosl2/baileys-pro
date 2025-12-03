@@ -7,6 +7,8 @@ import {
 	DEF_CALLBACK_PREFIX,
 	DEF_TAG_PREFIX,
 	INITIAL_PREKEY_COUNT,
+	KEEPALIVE_INTERVAL_MAX,
+	KEEPALIVE_INTERVAL_MIN,
 	MIN_PREKEY_COUNT,
 	MIN_UPLOAD_INTERVAL,
 	NOISE_WA_HEADER,
@@ -419,6 +421,10 @@ export const makeSocket = (config: SocketConfig) => {
 	const startKeepAliveRequest = () => {
 		const scheduleNext = () => {
 			// choose a random delay between MIN and MAX
+			if (keepAliveReq) {
+				clearTimeout(keepAliveReq)
+			}
+
 			const delay =
 				Math.floor(Math.random() * (KEEPALIVE_INTERVAL_MAX - KEEPALIVE_INTERVAL_MIN)) + KEEPALIVE_INTERVAL_MIN
 
@@ -447,7 +453,7 @@ export const makeSocket = (config: SocketConfig) => {
 						content: [{ tag: 'ping', attrs: {} }]
 					})
 						.then(() => {
-							logger.trace('keep alive response received')
+							logger.trace('keep alive response received sent after' + delay, )
 							lastDateRecv = new Date()
 						})
 						.catch(err => {

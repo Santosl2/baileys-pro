@@ -35,6 +35,9 @@ export const WA_CERT_DETAILS = {
 	SERIAL: 0
 }
 
+export const KEEPALIVE_INTERVAL_MIN = 20_000
+export const KEEPALIVE_INTERVAL_MAX = 30_000
+
 export const PROCESSABLE_HISTORY_TYPES = [
 	proto.HistorySync.HistorySyncType.INITIAL_BOOTSTRAP,
 	proto.HistorySync.HistorySyncType.PUSH_NAME,
