@@ -63,7 +63,7 @@ export const generateLoginNode = (userJid: string, config: SocketConfig): proto.
 	const { user, device } = jidDecode(userJid)!
 	const payload: proto.IClientPayload = {
 		...getClientPayload(config),
-		passive: false,
+		passive: true,
 		pull: true,
 		username: +user,
 		device: device
@@ -90,9 +90,10 @@ export const generateRegistrationNode = (
 		os: config.browser[0],
 		platformType: getPlatformType(config.browser[1]),
 		requireFullSync: config.syncFullHistory,
-		historySyncConfig: {
-			storageQuotaMb: 569150,
+			historySyncConfig: {
+			storageQuotaMb: 10240,
 			inlineInitialPayloadInE2EeMsg: true,
+			recentSyncDaysLimit: undefined,
 			supportCallLogHistory: false,
 			supportBotUserAgentChatHistory: true,
 			supportCagReactionsAndPolls: true,
@@ -100,8 +101,12 @@ export const generateRegistrationNode = (
 			supportRecentSyncChunkMessageCountTuning: true,
 			supportHostedGroupMsg: true,
 			supportFbidBotChatHistory: true,
-			supportMessageAssociation: true
-		},
+			supportAddOnHistorySyncMigration: undefined,
+			supportMessageAssociation: true,
+			supportGroupHistory: false,
+			onDemandReady: undefined,
+			supportGuestChat: undefined
+		} as any,
 		version: {
 			primary: 10,
 			secondary: 15,
