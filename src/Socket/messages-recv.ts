@@ -1090,46 +1090,98 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 	}
 
 	const makeOfflineNodeProcessor = () => {
-		const nodeProcessorMap: Map<MessageType, (node: BinaryNode) => Promise<void>> = new Map([
-			['message', handleMessage],
-			['call', handleCall],
-			['receipt', handleReceipt],
-			['notification', handleNotification]
-		])
-		const nodes: OfflineNode[] = []
-		let isProcessing = false
+	const nodeProcessorMap: Map<MessageType, (node: BinaryNode) => Promise<void>> = new Map([
+		['message', handleMessage],
+		['call', handleCall],
+		['receipt', handleReceipt],
+		['notification', handleNotification]
+	])
+	const nodes: OfflineNode[] = []
+	let isProcessing = false
 
-		const enqueue = (type: MessageType, node: BinaryNode) => {
-			nodes.push({ type, node })
-
-			if (isProcessing) {
-				return
-			}
-
-			isProcessing = true
-
-			const promise = async () => {
-				while (nodes.length && ws.isOpen) {
-					const { type, node } = nodes.shift()!
-
-					const nodeProcessor = nodeProcessorMap.get(type)
-
-					if (!nodeProcessor) {
-						onUnexpectedError(new Error(`unknown offline node type: ${type}`), 'processing offline node')
-						continue
-					}
-
-					await nodeProcessor(node)
-				}
-
-				isProcessing = false
-			}
-
-			promise().catch(error => onUnexpectedError(error, 'processing offline nodes'))
+	const processNext = () => {
+		if (!nodes.length || !ws.isOpen) {
+			isProcessing = false
+			return
 		}
 
-		return { enqueue }
+		const { type, node } = nodes.shift()!
+		const nodeProcessor = nodeProcessorMap.get(type)
+
+		if (!nodeProcessor) {
+			onUnexpectedError(new Error(`unknown offline node type: ${type}`), 'processing offline node')
+			// Continua para o próximo nó
+			setImmediate(processNext)
+			return
+		}
+
+		nodeProcessor(node)
+			.then(() => {
+				// Libera o event loop antes de processar o próximo
+				setImmediate(processNext)
+			})
+			.catch(error => {
+				onUnexpectedError(error, `processing ${type} node`)
+				// Continua mesmo com erro
+				setImmediate(processNext)
+			})
 	}
+
+	const enqueue = (type: MessageType, node: BinaryNode) => {
+		nodes.push({ type, node })
+
+		if (isProcessing) {
+			return
+		}
+
+		isProcessing = true
+		setImmediate(processNext)
+	}
+
+	return { enqueue }
+}
+
+// const makeOfflineNodeProcessor = () => {
+// 		const nodeProcessorMap: Map<MessageType, (node: BinaryNode) => Promise<void>> = new Map([
+// 			['message', handleMessage],
+// 			['call', handleCall],
+// 			['receipt', handleReceipt],
+// 			['notification', handleNotification]
+// 		])
+// 		const nodes: OfflineNode[] = []
+// 		let isProcessing = false
+
+// 		const enqueue = (type: MessageType, node: BinaryNode) => {
+// 			nodes.push({ type, node })
+
+// 			if (isProcessing) {
+// 				return
+// 			}
+
+// 			isProcessing = true
+
+// 			const promise = async () => {
+// 				while (nodes.length && ws.isOpen) {
+// 					const { type, node } = nodes.shift()!
+
+// 					const nodeProcessor = nodeProcessorMap.get(type)
+
+// 					if (!nodeProcessor) {
+// 						onUnexpectedError(new Error(`unknown offline node type: ${type}`), 'processing offline node')
+// 						continue
+// 					}
+
+// 					await nodeProcessor(node)
+// 				}
+
+// 				isProcessing = false
+// 			}
+
+// 			promise().catch(error => onUnexpectedError(error, 'processing offline nodes'))
+// 		}
+
+// 		return { enqueue }
+// 	}
 
 	const offlineNodeProcessor = makeOfflineNodeProcessor()
 
