@@ -118,8 +118,7 @@ type Buttonable = {
 export interface Carousel {
 	image?: WAMediaUpload
 	video?: WAMediaUpload
-	product?: WASendableProduct
-	title?: string
+	// product?: WASendableProduct
 	body?: string
 	footer?: string
 	buttons?: proto.Message.InteractiveMessage.NativeFlowMessage.INativeFlowButton[]

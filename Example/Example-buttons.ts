@@ -15,11 +15,13 @@ import makeWASocket, {
 	WAPaymentOrderStatusEnum,
 	WAProductOrderTypeEnum,
 	WAInteractiveMessagesNativeFlowName,
-	WAPixTypes
+	WAPixTypes,
+	fetchLatestWaWebVersion
 } from '../src'
 //import MAIN_LOGGER from '../src/Utils/logger'
 import fs from 'fs'
 import P from 'pino'
+import { Mutex } from 'async-mutex'
 
 const logger = P({ timestamp: () => `,"time":"${new Date().toJSON()}"` }, P.destination('./wa-logs.txt'))
 logger.level = 'trace'
@@ -34,17 +36,17 @@ const msgRetryCounterCache = new NodeCache()
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
 const question = (text: string) => new Promise<string>(resolve => rl.question(text, resolve))
 
+const mutex = new Mutex()
 const WHATSAPP_NUMBER = '553185702237@s.whatsapp.net'
 // start a connection
 const startSock = async () => {
 	const { state, saveCreds } = await useMultiFileAuthState('baileys_auth_info')
 	// fetch latest version of WA Web
-	const { version, isLatest } = await fetchLatestBaileysVersion()
+	const { version, isLatest } = await fetchLatestWaWebVersion()
 	console.log(`using WA v${version.join('.')}, isLatest: ${isLatest}`)
 
 	const sock = makeWASocket({
-		// version,
-		version: [2, 3000, 1023979355],
+		version,
 
 		// logger: P({level: 'silent'}),
 		logger,
@@ -143,10 +145,14 @@ const startSock = async () => {
 				}
 			}
 
-			sock.ws.on('CB:message', data => {
-				// Usado para debugar novas features
-				// console.log('CB:message', JSON.stringify(data, null, 2))
-			})
+			// sock.ws.on('CB:message', data => {
+			// 	// Usado para debugar novas features
+			// 	const filePath = './cb-messages.json'
+			// 	mutex.runExclusive(() => {
+			// 		fs.appendFileSync(filePath, JSON.stringify(data, null, 2) + '\n')
+			// 	})
+			// 	console.log('CB:message saved to', filePath)
+			// })
 
 			async function sendOtp() {
 				await sock.sendMessage(WHATSAPP_NUMBER, {
@@ -428,19 +434,200 @@ Selecione e melhor opção:`,
 			// Em desenvolvimento
 			// Todo: Ainda em desenvolvimento
 			async function sendCarousel() {
+				await sock.relayMessage(
+					WHATSAPP_NUMBER,
+					{
+						interactiveMessage: {
+							body: {
+								text: 'interactiveMessage body text'
+							},
+							header: {
+								subtitle: 'interactiveMessage header subtitle',
+								title: 'interactiveMessage header title'
+							},
+							footer: {
+								text: 'interactiveMessage footer text'
+							},
+							carouselMessage: {
+								cards: [
+									{
+										body: {
+											text: 'Confira os detalhes deste imóvel incrível!'
+										},
+										header: {
+											imageMessage: {
+												url: 'https://mmg.whatsapp.net/v/t62.7118-24/594455939_1162743569378730_870142133335658881_n.enc?ccb=11-4&oh=01_Q5Aa3AHwoVxUtNUK3tzxUnBIGfpoCcGqJsHVbyL0l_B214tW5w&oe=69592EF8&_nc_sid=5e03e0&mms3=true',
+												mimetype: 'image/jpeg',
+												fileSha256: 'feQcLN6bS6o7OQSlr4aHlf+8x79Rf1VltDPJ0lDZ7DM=',
+												fileLength: '235495',
+												height: 1200,
+												width: 1600,
+												mediaKey: 'yNIs+8C36tKRBaEevvWtKcc4SSNQWS6LVS74c8OPzho=',
+												fileEncSha256: 'NAkGPgG75UtWqGMh0PiGEsBNN28YCh/tE2xvTOSx+Xs=',
+												directPath:
+													'/v/t62.7118-24/594455939_1162743569378730_870142133335658881_n.enc?ccb=11-4&oh=01_Q5Aa3AHwoVxUtNUK3tzxUnBIGfpoCcGqJsHVbyL0l_B214tW5w&oe=69592EF8&_nc_sid=5e03e0',
+												mediaKeyTimestamp: '1764874342',
+												jpegThumbnail:
+													'/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAFA3PEY8MlBGQUZaVVBfeMiCeG5uePWvuZHI////////////////////////////////////////////////////2wBDAVVaWnhpeOuCguv/////////////////////////////////////////////////////////////////////////wAARCAA2AEgDASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwBlLQOlIM7jnp2oAdmjNSlUKjgZIqEjDYpAPAzS4oVcmlcbT1pgMAopXHA9xSxL82fQZpAMNFObrRTAZS03NM3kt1x7UAWAflX2NI33jUW4gHnFOWTzCcCkBOnQE02RgzcGoGJBPvTlTdggY96AJHOcY7CkikHzDvjFMkG1TzUMZJcDNMCyaKKKAIiME1Gy/NkVORnmjbxQBAEZicnoaniTa2B0xQI8kn1qUDHFABtFL3xRSUgGyqGBFQxxbHzmpzSGgAooopgMXripBRRSAOlLRRQAUUUUAJ3pD0oooASiiimB/9k='
+											},
+											hasMediaAttachment: true
+										},
+										nativeFlowMessage: {
+											buttons: [
+												{
+													name: 'cta_url',
+													buttonParamsJson:
+														'{"display_text":"Ver Detalhes","url":"https:\\/\\/w.meta.me\\/s\\/1QzVhonRRY37yUR","webview_presentation":null,"payment_link_preview":false,"landing_page_url":"https:\\/\\/app.useplaza.com.br\\/public_listings\\/Z2lkOi8vcGxhemEvTGlzdGluZy84MTkxMDI","webview_interaction":false}'
+												},
+												{
+													name: 'quick_reply',
+													buttonParamsJson:
+														'{"display_text":"\\ud83d\\udc49 Quero visitar o Im\\u00f3vel 1","id":"\\ud83d\\udc49 Quero visitar o Im\\u00f3vel 1"}'
+												}
+											]
+										}
+									},
+									{
+										header: {
+											imageMessage: {
+												url: 'https://mmg.whatsapp.net/v/t62.7118-24/548105480_1942483740011072_8801691802776095965_n.enc?ccb=11-4&oh=01_Q5Aa3AEZbubAspW8E1BqMeP8Xu3dfVImOyCC4GOOzEXBbuWcBA&oe=69594090&_nc_sid=5e03e0&mms3=true',
+												mimetype: 'image/jpeg',
+												fileSha256: 'mcncefYx/cmrW/9JpQ88cUfGEEeR8X0PDm5tt+MWdZA=',
+												fileLength: '107620',
+												height: 1600,
+												width: 720,
+												mediaKey: 'XgCsjwKUkajygl69rWJ4sO47IENlJ7q9KoH0/ws9Zss=',
+												fileEncSha256: 'OxRvq2jmme0GUio4XMHNcbk7MgBVXMyVsLtDjmXOfzE=',
+												directPath:
+													'/v/t62.7118-24/548105480_1942483740011072_8801691802776095965_n.enc?ccb=11-4&oh=01_Q5Aa3AEZbubAspW8E1BqMeP8Xu3dfVImOyCC4GOOzEXBbuWcBA&oe=69594090&_nc_sid=5e03e0',
+												mediaKeyTimestamp: '1764874342',
+												jpegThumbnail:
+													'/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAFA3PEY8MlBGQUZaVVBfeMiCeG5uePWvuZHI////////////////////////////////////////////////////2wBDAVVaWnhpeOuCguv/////////////////////////////////////////////////////////////////////////wAARCABIACADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwApaUYPSl20ANoNOKEUh4oATaBnIP1FN81kfHUU3PyZLEfMe9N6sD14oAsNK2wHaOfeo8ljjbj8acfuqPr/ADoQcMfagBuFOcDPOeaVQM5JGRTEjI6nj0ptxgBccUhj5JPmAUjp3FMMvzFSeO+KiU56n6UuBuwP51Qi1Ubru96cDSr1qQK7IAelMIwatSAZ4qJl5pgSDgUA0UUgA800daKKYH//2Q=='
+											},
+											hasMediaAttachment: true
+										},
+										nativeFlowMessage: {
+											buttons: [
+												{
+													name: 'cta_url',
+													buttonParamsJson:
+														'{"display_text":"Ver Detalhes","url":"https:\\/\\/w.meta.me\\/s\\/21SLSmXkLlF6kWu","webview_presentation":null,"payment_link_preview":false,"landing_page_url":"https:\\/\\/app.useplaza.com.br\\/public_listings\\/Z2lkOi8vcGxhemEvTGlzdGluZy85MTM3NTc","webview_interaction":false}'
+												},
+												{
+													name: 'quick_reply',
+													buttonParamsJson:
+														'{"display_text":"\\ud83d\\udc49 Quero visitar o Im\\u00f3vel 2","id":"\\ud83d\\udc49 Quero visitar o Im\\u00f3vel 2"}'
+												}
+											]
+										}
+									},
+									{
+										header: {
+											imageMessage: {
+												url: 'https://mmg.whatsapp.net/v/t62.7118-24/594455961_2558621821191776_6559099629674964160_n.enc?ccb=11-4&oh=01_Q5Aa3AFdf8E44o1tNQWFWUWtVYnIAeqxCJ8EEb9U9snLKdMgvg&oe=69595C24&_nc_sid=5e03e0&mms3=true',
+												mimetype: 'image/jpeg',
+												fileSha256: 'JT6hasQhf/yTXKbu690HOOhZzvMVyRZQbQ/Va1FGyLM=',
+												fileLength: '49032',
+												height: 960,
+												width: 1280,
+												mediaKey: 'S1wTSXWpbuw9Xr64HMfLRc0sJAmQdpTYKVqInfqxTR4=',
+												fileEncSha256: 'VJslVZ/Wvbf2dGKMUWfPmCZC5Sd13zyfvaODct8nj6o=',
+												directPath:
+													'/v/t62.7118-24/594455961_2558621821191776_6559099629674964160_n.enc?ccb=11-4&oh=01_Q5Aa3AFdf8E44o1tNQWFWUWtVYnIAeqxCJ8EEb9U9snLKdMgvg&oe=69595C24&_nc_sid=5e03e0',
+												mediaKeyTimestamp: '1764874342',
+												jpegThumbnail:
+													'/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAFA3PEY8MlBGQUZaVVBfeMiCeG5uePWvuZHI////////////////////////////////////////////////////2wBDAVVaWnhpeOuCguv/////////////////////////////////////////////////////////////////////////wAARCAA2AEgDASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwCQjFJTsZo20ANop22jFADaKa7bDimeZ7UASEim59BTWJFJk+ppXHYcQaKhfpRQBdHWnCmU4UxCmmjrSkgU0EUAQ3H31pAg6nNOm5K45xTDnNIY5+gplK9JUjGPRQ9FUhMuU0sc4zTqjfrTELmkpM0ZoAU03bTqKAGlc00qRUlLRYLlc/fHtRTpuox34opoCUuTTaKKQCUUUUALmjNFFACg06iigCOb7o+tFFFMD//Z'
+											},
+											hasMediaAttachment: true
+										},
+										nativeFlowMessage: {
+											buttons: [
+												{
+													name: 'cta_url',
+													buttonParamsJson:
+														'{"display_text":"Ver Detalhes","url":"https:\\/\\/w.meta.me\\/s\\/1ZVGuG67yrWEqZJ","webview_presentation":null,"payment_link_preview":false,"landing_page_url":"https:\\/\\/app.useplaza.com.br\\/public_listings\\/Z2lkOi8vcGxhemEvTGlzdGluZy84NzIxNzM","webview_interaction":false}'
+												},
+												{
+													name: 'quick_reply',
+													buttonParamsJson:
+														'{"display_text":"\\ud83d\\udc49 Quero visitar o Im\\u00f3vel 3","id":"\\ud83d\\udc49 Quero visitar o Im\\u00f3vel 3"}'
+												}
+											]
+										}
+									}
+								],
+								messageVersion: 1
+							}
+						}
+					},
+					{
+						additionalNodes: [
+							{
+								tag: 'biz',
+								attrs: {},
+								content: [
+									{
+										tag: 'interactive',
+										attrs: {
+											type: 'native_flow',
+											v: '1'
+										},
+										content: [
+											{
+												tag: 'native_flow',
+												attrs: {
+													v: '2',
+													name: 'mixed'
+												}
+											}
+										]
+									}
+								]
+							}
+						]
+					}
+				)
 				await sock.sendMessage(WHATSAPP_NUMBER, {
-					text: 'f',
+					text: 'Teste do matheus',
+					subtitle: 'se quiser vincular um subtítulo',
+					title: 'se quiser vincular um título',
+					footer: 'se quiser vincular um rodapé',
 					cards: [
 						{
+							body: 'fff',
+							image: {
+								url: 'https://cdn.pixabay.com/photo/2024/05/14/11/37/tv-8760950_1280.png'
+							},
 							buttons: [
 								{
-									name: 'cta_call',
-									buttonParamsJson: '{"fix":true,"display_text":"Fale conosco","phone_number":"+5531985702237"}'
+									name: 'cta_url',
+									buttonParamsJson:
+										'{"display_text":"Ver Detalhes","url":"https:\\/\\/w.meta.me\\/s\\/1QzVhonRRY37yUR","webview_presentation":null,"payment_link_preview":false,"landing_page_url":"https:\\/\\/app.useplaza.com.br\\/public_listings\\/Z2lkOi8vcGxhemEvTGlzdGluZy84MTkxMDI","webview_interaction":false}'
+								},
+								{
+									name: 'quick_reply',
+									buttonParamsJson:
+										'{"display_text":"\\ud83d\\udc49 Quero visitar o Im\\u00f3vel 1","id":"\\ud83d\\udc49 Quero visitar o Im\\u00f3vel 1"}'
 								}
-							],
+							]
+						},
+						{
+							body: 'fff',
 							image: {
-								url: 'https://i.redd.it/i-got-bored-so-i-decided-to-draw-a-random-image-on-the-v0-4ig97vv85vjb1.png?width=1280&format=png&auto=webp&s=7177756d1f393b6e093596d06e1ba539f723264b'
-							}
+								url: 'https://cdn.pixabay.com/photo/2024/05/14/11/37/tv-8760950_1280.png'
+							},
+							buttons: [
+								{
+									name: 'cta_url',
+									buttonParamsJson:
+										'{"display_text":"Ver Detalhes","url":"https:\\/\\/w.meta.me\\/s\\/1QzVhonRRY37yUR","webview_presentation":null,"payment_link_preview":false,"landing_page_url":"https:\\/\\/app.useplaza.com.br\\/public_listings\\/Z2lkOi8vcGxhemEvTGlzdGluZy84MTkxMDI","webview_interaction":false}'
+								},
+								{
+									name: 'quick_reply',
+									buttonParamsJson:
+										'{"display_text":"\\ud83d\\udc49 Quero visitar o Im\\u00f3vel 1","id":"\\ud83d\\udc49 Quero visitar o Im\\u00f3vel 1"}'
+								}
+							]
 						}
 					]
 				})
@@ -921,6 +1108,7 @@ Selecione e melhor opção:`,
 				const upsert = events['messages.upsert']
 
 				if (upsert.type === 'notify') {
+					console.log('got messages ', JSON.stringify(upsert.messages, undefined, 2))
 					for (const msg of upsert.messages) {
 						if (msg.key.fromMe) {
 							console.log('is own message')

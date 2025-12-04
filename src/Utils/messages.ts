@@ -611,7 +611,8 @@ export const generateWAMessageContent = async (
 
 		if ('title' in message && !!message.title) {
 			//@ts-ignore
-			;(buttonsMessage.text = message.title), (buttonsMessage.headerType = ButtonType.TEXT)
+			buttonsMessage.text = message.title
+			buttonsMessage.headerType = ButtonType.TEXT
 		}
 
 		if ('footer' in message && !!message.footer) {
@@ -723,41 +724,44 @@ export const generateWAMessageContent = async (
 	if ('cards' in message && !!message.cards) {
 		const slides = await Promise.all(
 			message.cards.map(async slide => {
-				const { image, video, product, title, body, footer, buttons } = slide
+				const { image, video, body, footer, buttons } = slide
 				let header: proto.Message.InteractiveMessage.Header = {} as proto.Message.InteractiveMessage.Header
 
-				if (product) {
-					const { imageMessage } = await prepareWAMessageMedia({ image: product.productImage, ...options }, options)
-					header = WAProto.Message.InteractiveMessage.Header.create({
-						productMessage: {
-							product: {
-								...product,
-								...(imageMessage && { productImage: imageMessage as any })
-							},
-							...slide
-						}
-					})
-				} else if (image) {
+				// if (product) {
+				// 	const { imageMessage } = await prepareWAMessageMedia({ image: product.productImage, ...options }, options)
+				// 	header = WAProto.Message.InteractiveMessage.Header.create({
+				// 		productMessage: {
+				// 			product: {
+				// 				...product,
+				// 				...(imageMessage && { productImage: imageMessage as any })
+				// 			},
+				// 			...slide
+				// 		}
+				// 	})
+				// } else
+				if (image) {
 					header = await prepareWAMessageMedia({ image: image, ...options }, options)
 				} else if (video) {
 					header = await prepareWAMessageMedia({ video: video, ...options }, options)
 				}
 
-				const msg = {
+				const msg: proto.Message.IInteractiveMessage = {
 					header: {
 						...header,
-						title,
 						hasMediaAttachment: true
 					},
-					body: {
-						text: body
-					},
-					footer: {
-						text: footer
-					},
+
 					nativeFlowMessage: {
 						buttons
 					}
+				}
+
+				if (body) {
+					msg['body'] = { text: body }
+				}
+
+				if (footer) {
+					msg['footer'] = { text: footer }
 				}
 
 				return msg
@@ -771,25 +775,22 @@ export const generateWAMessageContent = async (
 		}
 
 		if ('text' in message) {
-			;(interactiveMessage.body = {
+			interactiveMessage.body = {
 				text: message.text as string
-			}),
-				(interactiveMessage.header = {
-					title: message.title,
-					subtitle: message.subtitle,
-					hasMediaAttachment: false
-				})
+			}
+		}
+
+		if ('title' in message && !!message.title) {
+			interactiveMessage.header = {
+				title: message.title,
+				subtitle: message.subtitle
+			}
 		}
 
 		if ('footer' in message && !!message.footer) {
 			interactiveMessage.footer = {
 				text: message.footer
 			}
-		}
-
-		interactiveMessage.contextInfo = {
-			...(message.contextInfo || {}),
-			...(message.mentions ? { mentionedJid: message.mentions } : {})
 		}
 
 		m = { interactiveMessage }
