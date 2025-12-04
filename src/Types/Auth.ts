@@ -89,6 +89,8 @@ export type SignalKeyStore = {
 export type SignalKeyStoreWithTransaction = SignalKeyStore & {
 	isInTransaction: () => boolean
 	transaction<T>(exec: () => Promise<T>): Promise<T>
+	/** dispose resources like mutexes */
+	dispose?: () => void
 }
 
 export type TransactionCapabilityOptions = {

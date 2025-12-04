@@ -47,9 +47,15 @@ export function makeCacheableSignalKeyStore(
 				const data: { [_: string]: SignalDataTypeMap[typeof type] } = {}
 				const idsToFetch: string[] = []
 				for (const id of ids) {
-					const item = cache.get<SignalDataTypeMap[typeof type]>(getUniqueId(type, id))
-					if (typeof item !== 'undefined') {
-						data[id] = item
+					const cacheKey = getUniqueId(type, id)
+					const item = cache.get<SignalDataTypeMap[typeof type]>(cacheKey)
+					// Only consider it a cache hit if we got a non-undefined value
+					// Note: null values are valid (used for deletions), undefined means not in cache
+					if (item !== undefined) {
+						// Skip null values as they represent deletions
+						if (item !== null) {
+							data[id] = item as SignalDataTypeMap[typeof type]
+						}
 					} else {
 						idsToFetch.push(id)
 					}
@@ -94,15 +100,19 @@ export function makeCacheableSignalKeyStore(
 	}
 }
 
-// Module-level specialized mutexes for pre-key operations
-const preKeyMutex = new Mutex()
-const signedPreKeyMutex = new Mutex()
-
 /**
- * Get the appropriate mutex for the key type
+ * Creates pre-key mutexes factory for a specific instance
+ * This avoids global mutex contention between different instances
  */
-const getPreKeyMutex = (keyType: string): Mutex => {
-	return keyType === 'signed-pre-key' ? signedPreKeyMutex : preKeyMutex
+function createPreKeyMutexes(): { getMutex: (keyType: string) => Mutex } {
+	const preKeyMutex = new Mutex()
+	const signedPreKeyMutex = new Mutex()
+
+	return {
+		getMutex: (keyType: string): Mutex => {
+			return keyType === 'signed-pre-key' ? signedPreKeyMutex : preKeyMutex
+		}
+	}
 }
 
 /**
@@ -115,6 +125,7 @@ async function handlePreKeyOperations(
 	mutations: SignalDataSet,
 	logger: ILogger,
 	isInTransaction: boolean,
+	getPreKeyMutex: (keyType: string) => Mutex,
 	state?: SignalKeyStore
 ): Promise<void> {
 	const mutex = getPreKeyMutex(keyType)
@@ -198,7 +209,8 @@ async function processPreKeyDeletions(
 	data: SignalDataSet,
 	keyType: string,
 	state: SignalKeyStore,
-	logger: ILogger
+	logger: ILogger,
+	getPreKeyMutex: (keyType: string) => Mutex
 ): Promise<void> {
 	const mutex = getPreKeyMutex(keyType)
 
@@ -261,7 +273,7 @@ async function withMutexes<T>(
 
 /**
  * Attempts to commit transaction with retry mechanism
- * Uses async-mutex's withTimeout for better timeout handling
+ * Throws error if all retries fail
  */
 async function commitWithRetry(
 	mutations: SignalDataSet,
@@ -272,25 +284,32 @@ async function commitWithRetry(
 	logger: ILogger
 ): Promise<void> {
 	let tries = maxRetries
+	let lastError: Error | undefined
 
 	while (tries > 0) {
 		tries -= 1
 
 		try {
-			// Use basic withMutexes - withTimeout is for decorating mutexes, not functions
 			await withMutexes(Object.keys(mutations), getKeyTypeMutex, async () => {
 				await state.set(mutations)
 				logger.trace('committed transaction')
 			})
-			break
+			return // Sucesso, sair da função
 		} catch (error) {
-			logger.warn(`failed to commit ${Object.keys(mutations).length} mutations, tries left=${tries}`)
+			lastError = error as Error
+			logger.warn(
+				{ error: lastError.message, triesLeft: tries },
+				`failed to commit ${Object.keys(mutations).length} mutations`
+			)
 
 			if (tries > 0) {
 				await delay(delayMs)
 			}
 		}
 	}
+
+	// Lançar erro após todas as tentativas falharem
+	throw new Error(`Failed to commit transaction after ${maxRetries} retries: ${lastError?.message}`)
 }
 
 /**
@@ -300,6 +319,9 @@ async function commitWithRetry(
  * @param logger logger to log events
  * @returns SignalKeyStore with transaction capability
  */
+// Maximum number of sender key mutexes to keep in memory
+const MAX_SENDER_KEY_MUTEXES = 1000
+
 export const addTransactionCapability = (
 	state: SignalKeyStore,
 	logger: ILogger,
@@ -313,6 +335,9 @@ export const addTransactionCapability = (
 
 	// Global transaction mutex
 	const transactionMutex = new Mutex()
+
+	// Instance-specific pre-key mutexes (avoids global contention)
+	const { getMutex: getPreKeyMutex } = createPreKeyMutexes()
 
 	// number of queries made to the DB during the transaction
 	// only there for logging purposes
@@ -335,12 +360,31 @@ export const addTransactionCapability = (
 	}
 
 	// Get or create a mutex for a specific sender key name
+	// Includes cleanup of old mutexes to prevent memory leaks
 	function getSenderKeyMutex(senderKeyName: string): Mutex {
 		let mutex = senderKeyMutexes.get(senderKeyName)
 		if (!mutex) {
 			mutex = new Mutex()
 			senderKeyMutexes.set(senderKeyName, mutex)
-			logger.info({ senderKeyName }, 'created new sender key mutex')
+			logger.trace({ senderKeyName }, 'created new sender key mutex')
+
+			// Cleanup old unlocked mutexes if we exceed the limit
+			if (senderKeyMutexes.size > MAX_SENDER_KEY_MUTEXES) {
+				let cleaned = 0
+				for (const [key, m] of senderKeyMutexes) {
+					if (!m.isLocked() && key !== senderKeyName) {
+						senderKeyMutexes.delete(key)
+						cleaned++
+						// Clean up to 10% of the limit
+						if (cleaned >= MAX_SENDER_KEY_MUTEXES * 0.1) {
+							break
+						}
+					}
+				}
+				if (cleaned > 0) {
+					logger.trace({ cleaned, remaining: senderKeyMutexes.size }, 'cleaned up old sender key mutexes')
+				}
+			}
 		}
 
 		return mutex
@@ -373,28 +417,19 @@ export const addTransactionCapability = (
 						// Batch fetch all sender keys first, then queue individual cache updates
 						const batchResult = await state.get(type, idsRequiringFetch)
 						logger.debug({ fetched: Object.keys(batchResult).length }, 'fetched sender keys in batch')
-						const updatePromises = idsRequiringFetch.map(senderKeyName =>
-							queueSenderKeyOperation(senderKeyName, async () => {
-								transactionCache[type] ||= {}
-								if (batchResult[senderKeyName]) {
-									;(transactionCache[type]! as any)[senderKeyName] = batchResult[senderKeyName]
-								}
-							})
-						)
-						await Promise.allSettled(updatePromises)
-						logger.info({ count: idsRequiringFetch.length }, 'sender keys fetched and cached in transaction')
-
-						// for (const senderKeyName of idsRequiringFetch) {
-						// 	await queueSenderKeyOperation(senderKeyName, async () => {
-						// 		logger.info({ senderKeyName }, 'fetching sender key in transaction')
-						// 		const result = await state.get(type, [senderKeyName])
-						// 		// Update transaction cache
-						// 		transactionCache[type] ||= {}
-						// 		Object.assign(transactionCache[type]!, result)
-						// 		logger.info({ senderKeyName, hasResult: !!result[senderKeyName] }, 'sender key fetch complete')
-						// 	})
-						// }
-					} else {
+							const updatePromises = idsRequiringFetch.map(senderKeyName =>
+								queueSenderKeyOperation(senderKeyName, async () => {
+									if (!transactionCache[type]) {
+										transactionCache[type] = {}
+									}
+									if (batchResult[senderKeyName]) {
+										Object.assign(transactionCache[type]!, { [senderKeyName]: batchResult[senderKeyName] })
+									}
+								})
+							)
+							await Promise.allSettled(updatePromises)
+							logger.trace({ count: idsRequiringFetch.length }, 'sender keys fetched and cached in transaction')
+						} else {
 						// Use runExclusive for cleaner mutex handling
 						await getKeyTypeMutex(type as string).runExclusive(async () => {
 							const result = await state.get(type, idsRequiringFetch)
@@ -441,7 +476,7 @@ export const addTransactionCapability = (
 
 					// Special handling for pre-keys and signed-pre-keys
 					if (key === 'pre-key' || key === 'signed-pre-key') {
-						await handlePreKeyOperations(data, key, transactionCache, mutations, logger, true)
+						await handlePreKeyOperations(data, key, transactionCache, mutations, logger, true, getPreKeyMutex)
 					} else {
 						// Normal handling for other key types
 						handleNormalKeyOperations(data, key, transactionCache, mutations)
@@ -481,7 +516,7 @@ export const addTransactionCapability = (
 							// Process pre-keys and signed-pre-keys separately with specialized mutexes
 							for (const keyType in nonSenderKeyData) {
 								if (keyType === 'pre-key' || keyType === 'signed-pre-key') {
-									await processPreKeyDeletions(nonSenderKeyData, keyType, state, logger)
+									await processPreKeyDeletions(nonSenderKeyData, keyType, state, logger, getPreKeyMutex)
 								}
 							}
 
@@ -495,7 +530,7 @@ export const addTransactionCapability = (
 						// Process pre-keys and signed-pre-keys separately with specialized mutexes
 						for (const keyType in data) {
 							if (keyType === 'pre-key' || keyType === 'signed-pre-key') {
-								await processPreKeyDeletions(data, keyType, state, logger)
+								await processPreKeyDeletions(data, keyType, state, logger, getPreKeyMutex)
 							}
 						}
 
@@ -506,6 +541,12 @@ export const addTransactionCapability = (
 			}
 		},
 		isInTransaction,
+		// Método para limpar recursos (mutexes)
+		dispose: () => {
+			senderKeyMutexes.clear()
+			keyTypeMutexes.clear()
+			logger.trace('disposed transaction capability resources')
+		},
 		...(state.clear ? { clear: state.clear } : {}),
 		async transaction(work) {
 			return transactionMutex.acquire().then(async releaseTxMutex => {
