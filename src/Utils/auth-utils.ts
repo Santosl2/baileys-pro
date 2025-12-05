@@ -307,9 +307,6 @@ async function commitWithRetry(
 			}
 		}
 	}
-
-	// Lançar erro após todas as tentativas falharem
-	throw new Error(`Failed to commit transaction after ${maxRetries} retries: ${lastError?.message}`)
 }
 
 /**
@@ -323,286 +320,275 @@ async function commitWithRetry(
 const MAX_SENDER_KEY_MUTEXES = 1000
 
 export const addTransactionCapability = (
-	state: SignalKeyStore,
-	logger: ILogger,
-	{ maxCommitRetries, delayBetweenTriesMs }: TransactionCapabilityOptions
+    state: SignalKeyStore,
+    logger: ILogger,
+    { maxCommitRetries, delayBetweenTriesMs }: TransactionCapabilityOptions
 ): SignalKeyStoreWithTransaction => {
-	// Mutex for each key type (session, pre-key, etc.)
-	const keyTypeMutexes = new Map<string, Mutex>()
+    const keyTypeMutexes = new Map<string, Mutex>()
+    const senderKeyMutexes = new Map<string, Mutex>()
+    const transactionMutex = new Mutex()
+    const { getMutex: getPreKeyMutex } = createPreKeyMutexes()
 
-	// Per-sender-key-name mutexes for fine-grained serialization
-	const senderKeyMutexes = new Map<string, Mutex>()
+    // Mutex para proteger estado interno da transação
+    const stateMutex = new Mutex()
 
-	// Global transaction mutex
-	const transactionMutex = new Mutex()
+    let dbQueriesInTransaction = 0
+    let transactionCache: SignalDataSet = {}
+    let mutations: SignalDataSet = {}
+    let transactionsInProgress = 0
 
-	// Instance-specific pre-key mutexes (avoids global contention)
-	const { getMutex: getPreKeyMutex } = createPreKeyMutexes()
+    function getKeyTypeMutex(type: string): Mutex {
+        let mutex = keyTypeMutexes.get(type)
+        if (!mutex) {
+            mutex = new Mutex()
+            keyTypeMutexes.set(type, mutex)
+        }
+        return mutex
+    }
 
-	// number of queries made to the DB during the transaction
-	// only there for logging purposes
-	let dbQueriesInTransaction = 0
-	let transactionCache: SignalDataSet = {}
-	let mutations: SignalDataSet = {}
+    // Correção 3: Cleanup thread-safe
+    function getSenderKeyMutex(senderKeyName: string): Mutex {
+        let mutex = senderKeyMutexes.get(senderKeyName)
+        if (!mutex) {
+            mutex = new Mutex()
+            senderKeyMutexes.set(senderKeyName, mutex)
 
-	let transactionsInProgress = 0
+            if (senderKeyMutexes.size > MAX_SENDER_KEY_MUTEXES) {
+                // Agendar cleanup assíncrono para não bloquear
+                setImmediate(() => {
+                    let cleaned = 0
+                    const toDelete: string[] = []
+                    
+                    for (const [key, m] of senderKeyMutexes) {
+                        if (!m.isLocked() && key !== senderKeyName) {
+                            toDelete.push(key)
+                            cleaned++
+                            if (cleaned >= MAX_SENDER_KEY_MUTEXES * 0.1) break
+                        }
+                    }
+                    
+                    // Verificar novamente antes de deletar
+                    for (const key of toDelete) {
+                        const m = senderKeyMutexes.get(key)
+                        if (m && !m.isLocked()) {
+                            senderKeyMutexes.delete(key)
+                        }
+                    }
+                    
+                    if (toDelete.length > 0) {
+                        logger.trace({ cleaned: toDelete.length }, 'cleaned up sender key mutexes')
+                    }
+                })
+            }
+        }
+        return mutex
+    }
 
-	// Get or create a mutex for a specific key type
-	function getKeyTypeMutex(type: string): Mutex {
-		let mutex = keyTypeMutexes.get(type)
-		if (!mutex) {
-			// Create regular mutex, timeout only for critical operations
-			mutex = new Mutex()
-			keyTypeMutexes.set(type, mutex)
-		}
+    function queueSenderKeyOperation<T>(senderKeyName: string, operation: () => Promise<T>): Promise<T> {
+        return getSenderKeyMutex(senderKeyName).runExclusive(operation)
+    }
 
-		return mutex
-	}
+    function isInTransaction() {
+        return transactionsInProgress > 0
+    }
 
-	// Get or create a mutex for a specific sender key name
-	// Includes cleanup of old mutexes to prevent memory leaks
-	function getSenderKeyMutex(senderKeyName: string): Mutex {
-		let mutex = senderKeyMutexes.get(senderKeyName)
-		if (!mutex) {
-			mutex = new Mutex()
-			senderKeyMutexes.set(senderKeyName, mutex)
-			logger.trace({ senderKeyName }, 'created new sender key mutex')
+    // Correção 2: Acesso thread-safe ao cache
+    async function updateTransactionCache(type: string, data: Record<string, unknown>): Promise<void> {
+        await stateMutex.runExclusive(() => {
+            transactionCache[type] = transactionCache[type] || {}
+            Object.assign(transactionCache[type]!, data)
+        })
+    }
 
-			// Cleanup old unlocked mutexes if we exceed the limit
-			if (senderKeyMutexes.size > MAX_SENDER_KEY_MUTEXES) {
-				let cleaned = 0
-				for (const [key, m] of senderKeyMutexes) {
-					if (!m.isLocked() && key !== senderKeyName) {
-						senderKeyMutexes.delete(key)
-						cleaned++
-						// Clean up to 10% of the limit
-						if (cleaned >= MAX_SENDER_KEY_MUTEXES * 0.1) {
-							break
-						}
-					}
-				}
-				if (cleaned > 0) {
-					logger.trace({ cleaned, remaining: senderKeyMutexes.size }, 'cleaned up old sender key mutexes')
-				}
-			}
-		}
+    async function updateMutations(type: string, data: Record<string, unknown>): Promise<void> {
+        await stateMutex.runExclusive(() => {
+            mutations[type] = mutations[type] || {}
+            Object.assign(mutations[type]!, data)
+        })
+    }
 
-		return mutex
-	}
+    async function incrementDbQueries(): Promise<void> {
+        await stateMutex.runExclusive(() => {
+            dbQueriesInTransaction += 1
+        })
+    }
 
-	// Sender key operations with proper mutex sequencing
-	function queueSenderKeyOperation<T>(senderKeyName: string, operation: () => Promise<T>): Promise<T> {
-		return getSenderKeyMutex(senderKeyName).runExclusive(operation)
-	}
+    return {
+        get: async (type, ids) => {
+            if (isInTransaction()) {
+                // Acessar cache de forma thread-safe
+                const { dict, idsRequiringFetch } = await stateMutex.runExclusive(() => {
+                    const d = transactionCache[type]
+                    const toFetch = d ? ids.filter(item => typeof d[item] === 'undefined') : ids
+                    return { dict: d, idsRequiringFetch: toFetch }
+                })
 
-	// Check if we are currently in a transaction
-	function isInTransaction() {
-		return transactionsInProgress > 0
-	}
+                if (idsRequiringFetch.length) {
+                    await incrementDbQueries()
 
-	return {
-		get: async (type, ids) => {
-			if (isInTransaction()) {
-				const dict = transactionCache[type]
-				const idsRequiringFetch = dict ? ids.filter(item => typeof dict[item] === 'undefined') : ids
-				// only fetch if there are any items to fetch
-				if (idsRequiringFetch.length) {
-					dbQueriesInTransaction += 1
+                    if (type === 'sender-key') {
+                        const batchResult = await state.get(type, idsRequiringFetch)
+                        const updatePromises = idsRequiringFetch.map(senderKeyName =>
+                            queueSenderKeyOperation(senderKeyName, async () => {
+                                if (batchResult[senderKeyName]) {
+                                    await updateTransactionCache(type, { [senderKeyName]: batchResult[senderKeyName] })
+                                }
+                            })
+                        )
+                        await Promise.allSettled(updatePromises)
+                    } else {
+                        await getKeyTypeMutex(type as string).runExclusive(async () => {
+                            const result = await state.get(type, idsRequiringFetch)
+                            await updateTransactionCache(type, result)
+                        })
+                    }
+                }
 
-					// Use per-sender-key queue for sender-key operations when possible
-					if (type === 'sender-key') {
-						logger.info({ idsRequiringFetch }, 'processing sender keys in transaction')
-						// For sender keys, process each one with queued operations to maintain serialization
+                // Retornar de forma thread-safe
+                return stateMutex.runExclusive(() => {
+                    return ids.reduce((result, id) => {
+                        const value = transactionCache[type]?.[id]
+                        if (value) {
+                            result[id] = value
+                        }
+                        return result
+                    }, {} as Record<string, SignalDataTypeMap[typeof type]>)
+                })
+            } else {
+                if (type === 'sender-key') {
+                    const results: { [key: string]: SignalDataTypeMap[typeof type] } = {}
+                    for (const senderKeyName of ids) {
+                        const result = await queueSenderKeyOperation(
+                            senderKeyName,
+                            async () => state.get(type, [senderKeyName])
+                        )
+                        Object.assign(results, result)
+                    }
+                    return results
+                } else {
+                    return  getKeyTypeMutex(type as string).runExclusive(() => state.get(type, ids))
+                }
+            }
+        },
 
-						// Batch fetch all sender keys first, then queue individual cache updates
-						const batchResult = await state.get(type, idsRequiringFetch)
-						logger.debug({ fetched: Object.keys(batchResult).length }, 'fetched sender keys in batch')
-							const updatePromises = idsRequiringFetch.map(senderKeyName =>
-								queueSenderKeyOperation(senderKeyName, async () => {
-									if (!transactionCache[type]) {
-										transactionCache[type] = {}
-									}
-									if (batchResult[senderKeyName]) {
-										Object.assign(transactionCache[type]!, { [senderKeyName]: batchResult[senderKeyName] })
-									}
-								})
-							)
-							await Promise.allSettled(updatePromises)
-							logger.trace({ count: idsRequiringFetch.length }, 'sender keys fetched and cached in transaction')
-						} else {
-						// Use runExclusive for cleaner mutex handling
-						await getKeyTypeMutex(type as string).runExclusive(async () => {
-							const result = await state.get(type, idsRequiringFetch)
+        set: async data => {
+            if (isInTransaction()) {
+                logger.trace({ types: Object.keys(data) }, 'caching in transaction')
+                
+                for (const key in data) {
+                    // Inicializar de forma thread-safe
+                    await stateMutex.runExclusive(() => {
+                        transactionCache[key] = transactionCache[key] || {}
+                    })
 
-							// Update transaction cache
-							transactionCache[type] ||= {}
-							Object.assign(transactionCache[type]!, result)
-						})
-					}
-				}
+                    if (key === 'pre-key' || key === 'signed-pre-key') {
+                        // handlePreKeyOperations já tem mutex interno
+                        await handlePreKeyOperations(
+                            data, key, transactionCache, mutations, 
+                            logger, true, getPreKeyMutex
+                        )
+                    } else {
+                        // Atualizar de forma thread-safe
+                        await stateMutex.runExclusive(() => {
+                            Object.assign(transactionCache[key]!, data[key])
+                            mutations[key] = mutations[key] || {}
+                            Object.assign(mutations[key]!, data[key])
+                        })
+                    }
+                }
+            } else {
+                // ...existing code para operações fora de transação...
+                const hasSenderKeys = 'sender-key' in data
+                const senderKeyNames = hasSenderKeys ? Object.keys(data['sender-key'] || {}) : []
 
-				return ids.reduce((dict, id) => {
-					const value = transactionCache[type]?.[id]
-					if (value) {
-						dict[id] = value
-					}
+                if (hasSenderKeys) {
+                    for (const senderKeyName of senderKeyNames) {
+                        await queueSenderKeyOperation(senderKeyName, async () => {
+                            const senderKeyData = {
+                                'sender-key': {
+                                    [senderKeyName]: data['sender-key']![senderKeyName]
+                                }
+                            }
+                            await state.set(senderKeyData)
+                        })
+                    }
 
-					return dict
-				}, {})
-			} else {
-				// Not in transaction, fetch directly with queue protection
-				if (type === 'sender-key') {
-					// For sender keys, use individual queues to maintain per-key serialization
-					const results: { [key: string]: SignalDataTypeMap[typeof type] } = {}
-					for (const senderKeyName of ids) {
-						const result = await queueSenderKeyOperation(
-							senderKeyName,
-							async () => await state.get(type, [senderKeyName])
-						)
-						Object.assign(results, result)
-					}
+                    const nonSenderKeyData = { ...data }
+                    delete nonSenderKeyData['sender-key']
 
-					return results
-				} else {
-					return await getKeyTypeMutex(type as string).runExclusive(() => state.get(type, ids))
-				}
-			}
-		},
-		set: async data => {
-			if (isInTransaction()) {
-				logger.trace({ types: Object.keys(data) }, 'caching in transaction')
-				for (const key in data) {
-					transactionCache[key] = transactionCache[key] || {}
+                    if (Object.keys(nonSenderKeyData).length > 0) {
+                        await withMutexes(Object.keys(nonSenderKeyData), getKeyTypeMutex, async () => {
+                            for (const keyType in nonSenderKeyData) {
+                                if (keyType === 'pre-key' || keyType === 'signed-pre-key') {
+                                    await processPreKeyDeletions(nonSenderKeyData, keyType, state, logger, getPreKeyMutex)
+                                }
+                            }
+                            await state.set(nonSenderKeyData)
+                        })
+                    }
+                } else {
+                    await withMutexes(Object.keys(data), getKeyTypeMutex, async () => {
+                        for (const keyType in data) {
+                            if (keyType === 'pre-key' || keyType === 'signed-pre-key') {
+                                await processPreKeyDeletions(data, keyType, state, logger, getPreKeyMutex)
+                            }
+                        }
+                        await state.set(data)
+                    })
+                }
+            }
+        },
 
-					// Special handling for pre-keys and signed-pre-keys
-					if (key === 'pre-key' || key === 'signed-pre-key') {
-						await handlePreKeyOperations(data, key, transactionCache, mutations, logger, true, getPreKeyMutex)
-					} else {
-						// Normal handling for other key types
-						handleNormalKeyOperations(data, key, transactionCache, mutations)
-					}
-				}
-			} else {
-				// Not in transaction, apply directly with mutex protection
-				const hasSenderKeys = 'sender-key' in data
-				const senderKeyNames = hasSenderKeys ? Object.keys(data['sender-key'] || {}) : []
+        isInTransaction,
 
-				if (hasSenderKeys) {
-					logger.info({ senderKeyNames }, 'processing sender key set operations')
-					// Handle sender key operations with per-key queues
+        dispose: () => {
+            senderKeyMutexes.clear()
+            keyTypeMutexes.clear()
+            logger.trace('disposed transaction capability resources')
+        },
 
-					for (const senderKeyName of senderKeyNames) {
-						await queueSenderKeyOperation(senderKeyName, async () => {
-							// Create data subset for this specific sender key
-							const senderKeyData = {
-								'sender-key': {
-									[senderKeyName]: data['sender-key']![senderKeyName]
-								}
-							}
+        ...(state.clear ? { clear: state.clear } : {}),
 
-							logger.trace({ senderKeyName }, 'storing sender key')
-							// Apply changes to the store
-							await state.set(senderKeyData)
-							logger.trace({ senderKeyName }, 'sender key stored')
-						})
-					}
+        // Correção 1: Transação completamente protegida
+        async transaction(work) {
+            // Manter o mutex durante TODA a transação
+            return transactionMutex.runExclusive(async () => {
+                transactionsInProgress += 1
+                const isOutermost = transactionsInProgress === 1
 
-					// Handle any non-sender-key data with regular mutexes
-					const nonSenderKeyData = { ...data }
-					delete nonSenderKeyData['sender-key']
+                if (isOutermost) {
+                    logger.trace('entering transaction')
+                }
 
-					if (Object.keys(nonSenderKeyData).length > 0) {
-						await withMutexes(Object.keys(nonSenderKeyData), getKeyTypeMutex, async () => {
-							// Process pre-keys and signed-pre-keys separately with specialized mutexes
-							for (const keyType in nonSenderKeyData) {
-								if (keyType === 'pre-key' || keyType === 'signed-pre-key') {
-									await processPreKeyDeletions(nonSenderKeyData, keyType, state, logger, getPreKeyMutex)
-								}
-							}
+                try {
+                    const result = await work()
 
-							// Apply changes to the store
-							await state.set(nonSenderKeyData)
-						})
-					}
-				} else {
-					// No sender keys - use original logic
-					await withMutexes(Object.keys(data), getKeyTypeMutex, async () => {
-						// Process pre-keys and signed-pre-keys separately with specialized mutexes
-						for (const keyType in data) {
-							if (keyType === 'pre-key' || keyType === 'signed-pre-key') {
-								await processPreKeyDeletions(data, keyType, state, logger, getPreKeyMutex)
-							}
-						}
+                    if (isOutermost) {
+                        const mutationKeys = Object.keys(mutations)
+                        if (mutationKeys.length > 0) {
+                            logger.trace('committing transaction')
+                            await commitWithRetry(
+                                mutations, state, getKeyTypeMutex,
+                                maxCommitRetries, delayBetweenTriesMs, logger
+                            )
+                            logger.trace({ dbQueriesInTransaction }, 'transaction completed')
+                        } else {
+                            logger.trace('no mutations in transaction')
+                        }
+                    }
 
-						// Apply changes to the store
-						await state.set(data)
-					})
-				}
-			}
-		},
-		isInTransaction,
-		// Método para limpar recursos (mutexes)
-		dispose: () => {
-			senderKeyMutexes.clear()
-			keyTypeMutexes.clear()
-			logger.trace('disposed transaction capability resources')
-		},
-		...(state.clear ? { clear: state.clear } : {}),
-		async transaction(work) {
-			return transactionMutex.acquire().then(async releaseTxMutex => {
-				let result: Awaited<ReturnType<typeof work>>
-				let released = false
-				try {
-					transactionsInProgress += 1
-					if (transactionsInProgress === 1) {
-						logger.trace('entering transaction')
-					}
-
-					// Release the transaction mutex now that we've updated the counter
-					// This allows other transactions to start preparing
-					releaseTxMutex()
-					released = true
-
-					try {
-						result = await work()
-						// commit if this is the outermost transaction
-						if (transactionsInProgress === 1) {
-							const hasMutations = Object.keys(mutations).length > 0
-
-							if (hasMutations) {
-								logger.trace('committing transaction')
-								await commitWithRetry(mutations, state, getKeyTypeMutex, maxCommitRetries, delayBetweenTriesMs, logger)
-								logger.trace({ dbQueriesInTransaction }, 'transaction completed')
-							} else {
-								logger.trace('no mutations in transaction')
-							}
-						}
-					} finally {
-						transactionsInProgress -= 1
-						if (transactionsInProgress === 0) {
-							transactionCache = {}
-							mutations = {}
-							dbQueriesInTransaction = 0
-						}
-					}
-
-					return result
-				} catch (error) {
-					// If we haven't released the transaction mutex yet, release it
-					if (!released) {
-						releaseTxMutex()
-					}
-
-					throw error
-				} finally {
-					//
-					if (!released) {
-						releaseTxMutex()
-					}
-				}
-			})
-		}
-	}
+                    return result
+                } finally {
+                    transactionsInProgress -= 1
+                    if (transactionsInProgress === 0) {
+                        transactionCache = {}
+                        mutations = {}
+                        dbQueriesInTransaction = 0
+                    }
+                }
+            })
+        }
+    }
 }
 
 export const initAuthCreds = (): AuthenticationCreds => {
