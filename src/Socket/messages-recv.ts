@@ -275,7 +275,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 			const identityNode = getBinaryNodeChild(node, 'identity')
 			if (identityNode) {
 				logger.info({ jid: from }, 'identity changed')
-				
+
 				if (identityAssertDebounce.get(from)) {
 					logger.debug({ jid: from }, 'skipping identity assert (debounced)')
 					return
@@ -1089,6 +1089,12 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		node: BinaryNode
 	}
 
+	const yieldToEventLoop = (): Promise<void> => {
+		return new Promise(resolve => setImmediate(resolve))
+	}
+
+	const BATCH_SIZE = 10
+
 	const makeOfflineNodeProcessor = () => {
 		const nodeProcessorMap: Map<MessageType, (node: BinaryNode) => Promise<void>> = new Map([
 			['message', handleMessage],
@@ -1109,6 +1115,8 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 			isProcessing = true
 
 			const promise = async () => {
+				let processedInBatch = 0
+				
 				while (nodes.length && ws.isOpen) {
 					const { type, node } = nodes.shift()!
 
@@ -1120,6 +1128,14 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 					}
 
 					await nodeProcessor(node)
+					processedInBatch++
+
+					// Yield to event loop after processing a batch
+					// This prevents blocking the event loop for too long when there are many offline nodes
+					if (processedInBatch >= BATCH_SIZE) {
+						processedInBatch = 0
+						await yieldToEventLoop()
+					}
 				}
 
 				isProcessing = false
@@ -1256,7 +1272,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 			const type = attrs.type
 			const timestamp = attrs.t
 
-			console.log('New token node - TCTOKEN',{ tokenNode })
+			console.log('New token node - TCTOKEN', { tokenNode })
 
 			if (type === 'trusted_contact' && content instanceof Buffer) {
 				logger.debug(
