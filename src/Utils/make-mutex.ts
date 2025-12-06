@@ -1,29 +1,10 @@
+import { Mutex as AsyncMutex } from 'async-mutex'
+
 export const makeMutex = () => {
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	let task = Promise.resolve() as Promise<any>
-
-	let taskTimeout: NodeJS.Timeout | undefined
-
+	const mutex = new AsyncMutex()
 	return {
 		mutex<T>(code: () => Promise<T> | T): Promise<T> {
-			task = (async () => {
-				// wait for the previous task to complete
-				// if there is an error, we swallow so as to not block the queue
-				try {
-					await task
-				} catch {}
-
-				try {
-					// execute the current task
-					const result = await code()
-					return result
-				} finally {
-					clearTimeout(taskTimeout)
-				}
-			})()
-			// we replace the existing task, appending the new piece of execution to it
-			// so the next task will have to wait for this one to finish
-			return task
+			return mutex.runExclusive(code)
 		}
 	}
 }
@@ -31,15 +12,34 @@ export const makeMutex = () => {
 export type Mutex = ReturnType<typeof makeMutex>
 
 export const makeKeyedMutex = () => {
-	const map: { [id: string]: Mutex } = {}
+	const map: { [id: string]: AsyncMutex } = {}
+	const refCounts: { [id: string]: number } = {}
 
 	return {
-		mutex<T>(key: string, task: () => Promise<T> | T): Promise<T> {
+		async mutex<T>(key: string, task: () => Promise<T> | T): Promise<T> {
+			// Create mutex if it doesn't exist
 			if (!map[key]) {
-				map[key] = makeMutex()
+				map[key] = new AsyncMutex()
+				refCounts[key] = 0
 			}
 
-			return map[key].mutex(task)
+			// Increment reference count
+			refCounts[key]++
+
+			try {
+				return await map[key].runExclusive(task)
+			} finally {
+				// Decrement reference count
+				refCounts[key]--
+
+				// Clean up if no one is waiting and mutex is not locked
+				if (refCounts[key] === 0 && !map[key].isLocked()) {
+					delete map[key]
+					delete refCounts[key]
+				}
+			}
 		}
 	}
 }
+
+export type KeyedMutex = ReturnType<typeof makeKeyedMutex>
