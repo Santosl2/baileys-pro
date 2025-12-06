@@ -9402,12 +9402,6 @@ export namespace proto {
                 USER_VIDEO = 0,
                 AI_GENERATED = 1
             }
-
-            /** VideoSourceType enum. */
-            enum VideoSourceType {
-                USER_VIDEO = 0,
-                AI_GENERATED = 1
-            }
         }
     }
 
