@@ -12,30 +12,26 @@ export const makeMutex = () => {
 export type Mutex = ReturnType<typeof makeMutex>
 
 export const makeKeyedMutex = () => {
-	const map: { [id: string]: AsyncMutex } = {}
-	const refCounts: { [id: string]: number } = {}
+	const map = new Map<string, { mutex: AsyncMutex; refCount: number }>()
 
 	return {
 		async mutex<T>(key: string, task: () => Promise<T> | T): Promise<T> {
-			// Create mutex if it doesn't exist
-			if (!map[key]) {
-				map[key] = new AsyncMutex()
-				refCounts[key] = 0
+			let entry = map.get(key)
+
+			if (!entry) {
+				entry = { mutex: new AsyncMutex(), refCount: 0 }
+				map.set(key, entry)
 			}
 
-			// Increment reference count
-			refCounts[key]++
+			entry.refCount++
 
 			try {
-				return await map[key].runExclusive(task)
+				return await entry.mutex.runExclusive(task)
 			} finally {
-				// Decrement reference count
-				refCounts[key]--
-
-				// Clean up if no one is waiting and mutex is not locked
-				if (refCounts[key] === 0 && !map[key].isLocked()) {
-					delete map[key]
-					delete refCounts[key]
+				entry.refCount--
+				// only delete if this is still the current entry
+				if (entry.refCount === 0 && map.get(key) === entry) {
+					map.delete(key)
 				}
 			}
 		}
