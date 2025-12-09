@@ -1094,6 +1094,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 	}
 
 	const BATCH_SIZE = 10
+	const PARALLEL_WORKERS = 5
 
 	const makeOfflineNodeProcessor = () => {
 		const nodeProcessorMap: Map<MessageType, (node: BinaryNode) => Promise<void>> = new Map([
@@ -1116,19 +1117,27 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 
 			const promise = async () => {
 				let processedInBatch = 0
-				
+
 				while (nodes.length && ws.isOpen) {
-					const { type, node } = nodes.shift()!
+					const mapData = nodes.splice(0, PARALLEL_WORKERS)
+					const data = mapData
+						.map(({ type, node }) => {
+							const nodeProcessor = nodeProcessorMap.get(type)
+							if (!nodeProcessor) {
+								onUnexpectedError(new Error(`unknown offline node type: ${type}`), 'processing offline node')
+								return null
+							}
+							return { nodeProcessor, node }
+						})
+						.filter(item => item !== null) as { nodeProcessor: (node: BinaryNode) => Promise<void>; node: BinaryNode }[]
 
-					const nodeProcessor = nodeProcessorMap.get(type)
+					await Promise.all(
+						data.map(({ nodeProcessor, node }) =>
+							nodeProcessor(node).catch(error => onUnexpectedError(error, `processing offline node`))
+						)
+					)
 
-					if (!nodeProcessor) {
-						onUnexpectedError(new Error(`unknown offline node type: ${type}`), 'processing offline node')
-						continue
-					}
-
-					await nodeProcessor(node)
-					processedInBatch++
+					processedInBatch += data.length
 
 					// Yield to event loop after processing a batch
 					// This prevents blocking the event loop for too long when there are many offline nodes
