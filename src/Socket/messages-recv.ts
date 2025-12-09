@@ -1,10 +1,9 @@
 import NodeCache from '@cacheable/node-cache'
 import { Boom } from '@hapi/boom'
 import { randomBytes } from 'crypto'
-import Long = require('long')
+import Long from 'long'
 import { proto } from '../../WAProto'
 import { DEFAULT_CACHE_TTLS, KEY_BUNDLE_TYPE, MIN_PREKEY_COUNT } from '../Defaults'
-import { jidToSignalProtocolAddress } from '../Signal/libsignal'
 import {
 	MessageReceiptType,
 	MessageRelayOptions,
@@ -1094,7 +1093,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 	}
 
 	const BATCH_SIZE = 10
-	const PARALLEL_WORKERS = 5
+	const PARALLEL_WORKERS = 3
 
 	const makeOfflineNodeProcessor = () => {
 		const nodeProcessorMap: Map<MessageType, (node: BinaryNode) => Promise<void>> = new Map([

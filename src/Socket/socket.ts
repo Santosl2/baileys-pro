@@ -454,10 +454,9 @@ export const makeSocket = (config: SocketConfig) => {
 						content: [{ tag: 'ping', attrs: {} }]
 					})
 						.then(() => {
-							logger.trace('keep alive response received sent after' + delay, )
+							logger.trace('keep alive response received sent after' + delay)
 							lastPingTimeSent = Date.now()
 							lastDateRecv = new Date()
-							
 						})
 						.catch(err => {
 							end(new Boom('Connection was lost', { statusCode: DisconnectReason.connectionLost, data: err }))
@@ -684,13 +683,11 @@ export const makeSocket = (config: SocketConfig) => {
 	// login complete
 	ws.on('CB:success', async (node: BinaryNode) => {
 		try {
-			await uploadPreKeysToServerIfRequired()
-			await sendPassiveIq('active')
-			try {
-				await digestKeyBundle()
-			} catch (e) {
-				logger.warn({ e }, 'failed to run digest after login')
-			}
+			await Promise.all([
+				uploadPreKeysToServerIfRequired(),
+				sendPassiveIq('active'),
+				digestKeyBundle().catch(e => logger.warn({ e }, 'failed to run digest after login'))
+			])
 		} catch (error) {
 			logger.error({ error }, 'error in post login tasks')
 		}
