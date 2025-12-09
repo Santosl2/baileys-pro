@@ -325,10 +325,6 @@ export const extractGroupMetadata = (result: BinaryNode) => {
 	const eph = getBinaryNodeChild(group, 'ephemeral')?.attrs.expiration
 	const memberAddMode = getBinaryNodeChildString(group, 'member_add_mode') === 'all_member_add'
 
-	if(!group.attrs.subject){
-		console.warn(`extractGroupMetadata called on group without subject: ${groupId}`, { groupAttrs: group.attrs, result })
-	}
-
 	const metadata: GroupMetadata = {
 		id: groupId,
 		addressingMode: group.attrs.addressing_mode as 'pn' | 'lid',
