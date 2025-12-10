@@ -305,7 +305,7 @@ type PaymentSettings =
 	  }
 
 export type PaymentOrder = {
-	paymentOrder: {
+	paymentOrder?: {
 		currency?: string
 		referral?: "chat_attachment";
 		// used in new pix format
