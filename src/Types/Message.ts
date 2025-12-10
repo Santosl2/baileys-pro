@@ -219,7 +219,7 @@ type RequestPhoneNumber = {
 	requestPhoneNumber: boolean
 }
 
-export type ListButtonsTypes = Buttonable & Templatable & Interactiveable & Cardsable & Shopable
+export type ListButtonsTypes = Buttonable & Templatable & Interactiveable & Cardsable & Shopable & PaymentOrder
 
 export type AnyMediaMessageContent = (
 	| ({
@@ -349,6 +349,7 @@ export type AnyRegularMessageContent = (
 			Interactiveable &
 			Shopable &
 			PaymentRequest &
+			PaymentOrder &
 			Editable)
 	| {
 			contacts: {
