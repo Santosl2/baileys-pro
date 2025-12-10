@@ -10,7 +10,8 @@ import {
 	MiscMessageGenerationOptions,
 	SocketConfig,
 	WAInteractiveMessagesNativeFlowName,
-	WAMessageKey
+	WAMessageKey,
+	WANativeFlowButtonEnum
 } from '../Types'
 import {
 	aggregateMessageKeysNotFromMe,
@@ -50,6 +51,7 @@ import {
 import { USyncQuery, USyncUser } from '../WAUSync'
 import { makeGroupsSocket } from './groups'
 import { makeNewsletterSocket, NewsletterSocket } from './newsletter'
+import { getMessageReportingToken, shouldIncludeReportingToken } from '../Utils/reporting-utils'
 
 export const makeMessagesSocket = (config: SocketConfig) => {
 	const {
@@ -639,6 +641,8 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				}
 			}
 
+			const encodedMessage = encodeWAMessage(message)
+
 			if (isRetryResend) {
 				const isParticipantLid = isLidUser(participant!.jid)
 				const isMe = areJidsSameUser(participant!.jid, isParticipantLid ? meLid : meId)
@@ -650,7 +654,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 								message
 							}
 						})
-					: encodeWAMessage(message)
+					: encodedMessage
 
 				const { type, ciphertext: encryptedContent } = await signalRepository.encryptMessage({
 					data: encodedMessageToSend,
@@ -707,10 +711,10 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 			const contactTcTokenData =
 				!isGroup && !isRetryResend && !isStatus ? await authState.keys.get('tc-token', [destinationJid]) : {}
 
-			const tcTokenBuffer = contactTcTokenData[destinationJid]?.token;
+			const tcTokenBuffer = contactTcTokenData[destinationJid]?.token
 
 			if (tcTokenBuffer) {
-				(stanza.content as BinaryNode[]).push({
+				;(stanza.content as BinaryNode[]).push({
 					tag: 'tctoken',
 					attrs: {},
 					content: tcTokenBuffer
@@ -725,6 +729,27 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 					;(stanza.content as BinaryNode[]).push(getButtonArgs(message))
 
 					logger.debug({ jid }, 'adding business node')
+				}
+			}
+
+			// Add reporting token if required
+			if (!isNewsletter) {
+				if (message && shouldIncludeReportingToken(message) && message.messageContextInfo?.messageSecret && msgId) {
+					try {
+						const reportingKey: WAMessageKey = {
+							id: msgId,
+							fromMe: true,
+							remoteJid: destinationJid,
+							participant: participant?.jid
+						}
+						const reportingNode = await getMessageReportingToken(encodedMessage, message, reportingKey)
+						if (reportingNode) {
+							;(stanza.content as BinaryNode[]).push(reportingNode)
+							logger.trace({ jid }, 'added reporting token to message')
+						}
+					} catch (error: any) {
+						logger.warn({ jid, trace: error?.stack }, 'failed to attach reporting token')
+					}
 				}
 			}
 
@@ -795,18 +820,36 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 	}
 
 	const getButtonArgs = (message: proto.IMessage): BinaryNode => {
-		// if (
-		// 	message.interactiveMessage?.nativeFlowMessage &&
-		// 	//@ts-ignore
-		// 	message.interactiveMessage?.nativeFlowMessage?.buttons?.length > 0
-		// ) {
-		// 	return {
-		// 		tag: 'biz',
-		// 		attrs: {
-		// 			native_flow_name: 'order_details'
-		// 		}
-		// 	}
-		// }
+		if (
+			message.interactiveMessage?.nativeFlowMessage &&
+			//@ts-ignore
+			message.interactiveMessage?.nativeFlowMessage?.buttons?.length > 0 &&
+			message.interactiveMessage.nativeFlowMessage.buttons?.find(
+				btn => btn.name === WANativeFlowButtonEnum.REVIEW_AND_PAY
+			)
+		) {
+			return {
+				tag: 'biz',
+				attrs: {},
+				content: [
+					{
+						tag: 'interactive',
+						attrs: {
+							v: '1',
+							type: 'native_flow'
+						},
+						content: [
+							{
+								tag: 'native_flow',
+								attrs: {
+									name: 'order_details'
+								}
+							}
+						]
+					}
+				]
+			}
+		}
 
 		// if (message.buttonsMessage) {
 		// 	return {

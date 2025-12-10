@@ -225,11 +225,50 @@ export type WASendableProduct = Omit<proto.Message.ProductMessage.IProductSnapsh
 	productImage: WAMediaUpload
 }
 
+type PaymentSettings =
+	| {
+			type: 'boleto'
+			boleto: {
+				digitable_line: string
+			}
+	  }
+	| {
+			type: 'pix_static_code'
+			pix_static_code: {
+				merchant_name: string
+				key: string
+				key_type: WAPixTypes
+			}
+	  }
+	| {
+			type: 'cards'
+			cards: {
+				enabled: boolean
+			}
+	  }
+
+export type WAPaymentOrder = {
+	paymentOrder: {
+		items: {
+			name: string
+			quantity: number
+			retailer_id?: string
+			amount: {
+				offset: number
+				value: number
+			}
+		}[]
+		paymentSettings: PaymentSettings
+		referenceId: string
+	}
+}
+
 export type AnyRegularMessageContent = (
 	| ({
 			text: string
 			linkPreview?: WAUrlInfo | null
 	  } & Mentionable &
+			WAPaymentOrder &
 			Buttonable &
 			Templatable &
 			Interactiveable &

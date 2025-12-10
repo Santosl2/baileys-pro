@@ -19,6 +19,7 @@ import {
 	WAMessage,
 	WAMessageContent,
 	WAMessageStatus,
+	WANativeFlowButtonEnum,
 	WAProto,
 	WATextMessage
 } from '../Types'
@@ -35,6 +36,8 @@ import {
 	getRawMediaUploadData,
 	MediaDownloadOptions
 } from './messages-media'
+import { shouldIncludeReportingToken } from './reporting-utils'
+import { PaymentOrderFunctions } from './payment-order'
 
 type MediaUploadData = {
 	media: WAMediaUpload
@@ -357,6 +360,8 @@ export const generateForwardMessageContent = (message: WAMessage, forceForward?:
 	return content
 }
 
+
+
 export const generateWAMessageContent = async (
 	message: AnyMessageContent,
 	options: MessageContentGenerationOptions
@@ -562,7 +567,7 @@ export const generateWAMessageContent = async (
 
 		if ('title' in message && !!message.title) {
 			//@ts-ignore
-			;(buttonsMessage.text = message.title), (buttonsMessage.headerType = ButtonType.TEXT)
+			;((buttonsMessage.text = message.title), (buttonsMessage.headerType = ButtonType.TEXT))
 		}
 
 		if ('footer' in message && !!message.footer) {
@@ -604,6 +609,59 @@ export const generateWAMessageContent = async (
 				hydratedTemplate: msg
 			}
 		}
+	}
+
+	if ('paymentOrder' in message && !!message.paymentOrder) {
+		const items = message.paymentOrder.items || []
+
+		if (items.length === 0) {
+			throw new Boom('Atleast one item is required in payment order', { statusCode: 400 })
+		}
+
+		const formattedItems = items.map(e => {
+			return {
+				...e,
+				retailer_id: e.retailer_id || PaymentOrderFunctions.generateCustomRetailerId()
+			}
+		})
+
+		const totalAmount = formattedItems.reduce((acc, item) => acc + item.amount.value * item.quantity, 0)
+
+		if (totalAmount < 1 || totalAmount > 5000) {
+			throw new Boom('Total amount must be between 1 and 5000', { statusCode: 400 })
+		}
+
+		const paymentOrderMessage: proto.Message.IInteractiveMessage = {
+			nativeFlowMessage: WAProto.Message.InteractiveMessage.NativeFlowMessage.fromObject({
+				buttons: [
+					{
+						name: WANativeFlowButtonEnum.REVIEW_AND_PAY,
+						buttonParamsJson: JSON.stringify({
+							type: 'physical-goods',
+							additional_note: '',
+							payment_settings: message.paymentOrder.paymentSettings,
+							total_amount: {
+								offset: 1,
+								value: totalAmount
+							},
+							order: {
+								subtotal: {
+									value: totalAmount,
+									offset: 1
+								},
+								items,
+								order_type: 'ORDER',
+								status: 'payment_requested'
+							},
+							reference_id: message.paymentOrder.referenceId || PaymentOrderFunctions.generateReferenceId(),
+							currency: 'BRL'
+						})
+					}
+				]
+			})
+		}
+
+		m = { interactiveMessage: paymentOrderMessage }
 	}
 
 	if ('sections' in message && !!message.sections) {
@@ -722,14 +780,14 @@ export const generateWAMessageContent = async (
 		}
 
 		if ('text' in message) {
-			;(interactiveMessage.body = {
+			;((interactiveMessage.body = {
 				text: message.text as string
 			}),
 				(interactiveMessage.header = {
 					title: message.title,
 					subtitle: message.subtitle,
 					hasMediaAttachment: false
-				})
+				}))
 		}
 
 		if ('footer' in message && !!message.footer) {
@@ -771,6 +829,13 @@ export const generateWAMessageContent = async (
 		const [messageType] = Object.keys(m)
 		m[messageType] = m[messageType] || {}
 		m[messageType].contextInfo = message.contextInfo
+	}
+
+	if (shouldIncludeReportingToken(m)) {
+		m.messageContextInfo = m.messageContextInfo || {}
+		if (!m.messageContextInfo.messageSecret) {
+			m.messageContextInfo.messageSecret = randomBytes(32)
+		}
 	}
 
 	return WAProto.Message.fromObject(m)
