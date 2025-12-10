@@ -26,7 +26,7 @@ import type {
 	WAMessageKey,
 	WATextMessage
 } from '../Types'
-import { WAMessageStatus, WAProto } from '../Types'
+import { WAMessageStatus, WAProto, WAWebInteractiveMessagesNativeFlowNameEnum } from '../Types'
 import { isJidGroup, isJidNewsletter, isJidStatusBroadcast, jidNormalizedUser } from '../WABinary'
 import { sha256 } from './crypto'
 import { generateMessageIDV2, getKeyAuthor, unixTimestampSeconds } from './generics'
@@ -40,6 +40,7 @@ import {
 	getRawMediaUploadData,
 	type MediaDownloadOptions
 } from './messages-media'
+import { PaymentOrderFunctions } from './payment-order.js'
 
 type MediaUploadData = {
 	media: WAMediaUpload
@@ -654,6 +655,80 @@ export const generateWAMessageContent = async (
 				hydratedTemplate: msg
 			}
 		}
+	}
+
+	if ('paymentOrder' in message && !!message.paymentOrder) {
+		const items = message.paymentOrder.items || []
+		const hasReferral = !!message.paymentOrder.referral
+		let paramsJson: any = {
+			total_amount: {
+				offset: 1,
+				value: message.paymentOrder.amount || 0
+			}
+		}
+
+		// If there is no referral, validate items and total amount
+		if (!hasReferral) {
+			if (items.length === 0) {
+				throw new Boom('At least one item is required in payment order', { statusCode: 400 })
+			}
+
+			const formattedItems = items.map(e => {
+				return {
+					...e,
+					retailer_id: e.retailer_id || PaymentOrderFunctions.generateCustomRetailerId()
+				}
+			})
+
+			const totalAmount = formattedItems.reduce((acc, item) => acc + item.amount.value * item.quantity, 0)
+
+			if (totalAmount < 1 || totalAmount > 5000) {
+				throw new Boom('Total amount must be between 1 and 5000', { statusCode: 400 })
+			}
+
+			paramsJson = {
+				total_amount: {
+					offset: 1,
+					value: totalAmount
+				},
+				order: {
+					subtotal: {
+						value: totalAmount,
+						offset: 1
+					},
+					items,
+					order_type: 'ORDER',
+					status: 'payment_requested'
+				}
+			}
+		}
+
+		const cardItem = message.paymentOrder.paymentSettings.find(e => e.type === 'cards')
+		const othersPayments = message.paymentOrder.paymentSettings.filter(e => ['boleto'].includes(e.type))
+
+		if (hasReferral && (cardItem?.cards.enabled || othersPayments.length > 0)) {
+			throw new Boom('Referral cannot be used with cards enabled or boleto payment methods', { statusCode: 400 })
+		}
+
+		const paymentOrderMessage: proto.Message.IInteractiveMessage = {
+			nativeFlowMessage: WAProto.Message.InteractiveMessage.NativeFlowMessage.fromObject({
+				buttons: [
+					{
+						name: WAWebInteractiveMessagesNativeFlowNameEnum.REVIEW_AND_PAY,
+						buttonParamsJson: JSON.stringify({
+							type: 'physical-goods',
+							additional_note: '',
+							payment_settings: message.paymentOrder.paymentSettings,
+							reference_id: message.paymentOrder.referenceId || PaymentOrderFunctions.generateReferenceId(),
+							currency: message.paymentOrder.currency || 'BRL',
+							...paramsJson
+						})
+					}
+				]
+			})
+		}
+
+		m = { interactiveMessage: paymentOrderMessage }
 	}
 
 	if ('sections' in message && !!message.sections) {

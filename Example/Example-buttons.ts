@@ -22,6 +22,7 @@ import makeWASocket, {
 import fs from 'fs'
 import P from 'pino'
 import { Mutex } from 'async-mutex'
+import { PaymentOrderFunctions } from '../src/Utils/payment-order'
 
 const logger = P({ timestamp: () => `,"time":"${new Date().toJSON()}"` }, P.destination('./wa-logs.txt'))
 logger.level = 'trace'
@@ -822,6 +823,323 @@ Selecione e melhor opção:`,
 				)
 			}
 
+			const items: Array<{
+				name: string
+				quantity: number
+				retailer_id: string
+				amount: {
+					offset: number
+					value: number
+				}
+			}> = [
+				{
+					name: 'pagamento api',
+					quantity: 1,
+					retailer_id: PaymentOrderFunctions.generateCustomRetailerId(),
+					amount: {
+						offset: 1,
+						value: 4000
+					}
+				},
+				{
+					name: 'serviço api',
+					quantity: 1,
+					retailer_id: PaymentOrderFunctions.generateCustomRetailerId(),
+					amount: {
+						offset: 1,
+						value: 1000
+					}
+				}
+			]
+
+			const totalAmount = items.reduce((acc, item) => acc + item.amount.value * item.quantity, 0)
+
+			type PaymentSettings =
+				| {
+						type: 'boleto'
+						boleto: {
+							digitable_line: string
+						}
+				  }
+				| {
+						type: 'pix_static_code'
+						pix_static_code: {
+							merchant_name: string
+							key: string
+							key_type: WAPixTypes
+						}
+				  }
+				| {
+						type: 'cards'
+						cards: {
+							enabled: true
+						}
+				  }
+
+			const paymentSettings: PaymentSettings[] = [
+				{ type: 'cards', cards: { enabled: true } },
+				{
+					type: 'boleto',
+					boleto: {
+						digitable_line: '03399026944140000002628346101018898510000008848'
+					}
+				},
+				{
+					type: 'pix_static_code',
+					pix_static_code: {
+						key: 'mfilype2019@gmail.com',
+						key_type: WAPixTypes.EMAIL,
+						merchant_name: 'Matheus Filype'
+					}
+				}
+			]
+
+			async function sendCustomPaymentOrder(title: string) {
+				await sock.sendMessage('553185702237@s.whatsapp.net', {
+					text: '',
+					paymentOrder: {
+						referenceId: PaymentOrderFunctions.generateReferenceId(),
+						paymentSettings: [
+							{
+								type: 'pix_static_code',
+								pix_static_code: {
+									key: 'mfilype2019@gmail.com',
+									key_type: WAPixTypes.EMAIL,
+									merchant_name: 'Matheus Filype'
+								}
+							},
+							{
+								type: 'boleto',
+								boleto: {
+									digitable_line: '03399026944140000002628346101018898510000008848'
+								}
+							}
+						],
+						items: [
+							{
+								amount: {
+									offset: 1,
+									value: 2500
+								},
+								name: title,
+								quantity: 2
+							}
+						]
+					}
+				})
+			}
+
+			async function sendNewPixPaymentFormat() {
+				await sock.sendMessage('553185702237@s.whatsapp.net', {
+					text: '',
+					paymentOrder: {
+						referenceId: PaymentOrderFunctions.generateReferenceId(),
+						referral: 'chat_attachment',
+						amount: 100,
+						paymentSettings: [
+							{
+								type: 'pix_static_code',
+								pix_static_code: {
+									key: 'mfilype2019@gmail.com',
+									key_type: WAPixTypes.EMAIL,
+									merchant_name: 'Matheus Filype'
+								}
+							},
+							{
+								type: 'cards',
+								cards: {
+									enabled: false
+								}
+							}
+						]
+					}
+				})
+			}
+
+			async function sendCustomPaymentOrderComplete(title: string, amount: number) {
+				if (amount > 5000) {
+					throw new Error('Amount too high. Max is 5000')
+				}
+
+				if (amount < 1) {
+					throw new Error('Amount too low. Min is 1')
+				}
+
+				const referenceId = generateReferenceId()
+
+				await sock.relayMessage(
+					'553185702237@s.whatsapp.net',
+					{
+						interactiveMessage: {
+							nativeFlowMessage: {
+								buttons: [
+									{
+										name: WAWebInteractiveMessagesNativeFlowNameEnum.REVIEW_AND_PAY,
+										// Seguir o exemplo do sendButtonCode1 para entender cada campo
+										buttonParamsJson: JSON.stringify({
+											type: 'physical-goods',
+											additional_note: '',
+											payment_settings: paymentSettings,
+											total_amount: {
+												offset: 1,
+												value: totalAmount
+											},
+											order: {
+												subtotal: {
+													value: totalAmount,
+													offset: 1
+												},
+												items,
+												order_type: 'ORDER',
+												status: 'payment_requested'
+											},
+											reference_id: referenceId,
+											currency: 'BRL'
+										})
+									}
+								]
+							}
+						}
+					},
+					{
+						additionalNodes: [
+							{
+								tag: 'biz',
+								attrs: {},
+								content: [
+									{
+										tag: 'interactive',
+										attrs: {
+											v: '1',
+											type: 'native_flow'
+										},
+										content: [
+											{
+												tag: 'native_flow',
+												attrs: {
+													name: 'order_details'
+												}
+											}
+										]
+									}
+								]
+							}
+						]
+					}
+				)
+
+				// await sendOrderStatusChange(referenceId)
+				// TODO: Para que ele consiga enviar as outras etapas, é necessário que a mensagem do pedido esteja como `quoted`
+				// await delay(2000)
+				// await sendOrderStatusChange(referenceId, WAPaymentOrderStatusEnum.PROCESSING)
+				// await delay(2000)
+				// await sendOrderStatusChange(referenceId, WAPaymentOrderStatusEnum.OUT_FOR_DELIVERY)
+				// await delay(2000)
+				// await sendOrderStatusChange(referenceId, WAPaymentOrderStatusEnum.COMPLETE)
+				// await delay(2000)
+				// await sendOrderPaymentChange(referenceId, 'captured')
+			}
+
+			// Enviado quando o status do pedido muda
+			async function sendOrderStatusChange(
+				referenceId: string,
+				status: WAPaymentOrderStatusEnum = WAPaymentOrderStatusEnum.CONFIRMED
+			) {
+				await sock.relayMessage(
+					'553185702237@s.whatsapp.net',
+					{
+						// messageContextInfo: contextInfo,
+						interactiveMessage: {
+							nativeFlowMessage: {
+								buttons: [
+									{
+										name: WAWebInteractiveMessagesNativeFlowNameEnum.REVIEW_ORDER,
+										buttonParamsJson: JSON.stringify({
+											order: {
+												status
+											},
+											reference_id: referenceId
+										})
+									}
+								]
+							}
+						}
+					},
+					{
+						additionalNodes: [
+							{
+								tag: 'biz',
+								attrs: {},
+								content: [
+									{
+										tag: 'interactive',
+										attrs: {
+											v: '1',
+											type: 'native_flow'
+										},
+										content: [
+											{
+												tag: 'native_flow',
+												attrs: {
+													name: 'order_status'
+												}
+											}
+										]
+									}
+								]
+							}
+						]
+					}
+				)
+			}
+
+			async function sendOrderPaymentChange(referenceId: string, status: 'pending' | 'captured' = 'captured') {
+				await sock.relayMessage(
+					'553185702237@s.whatsapp.net',
+					{
+						interactiveMessage: {
+							nativeFlowMessage: {
+								buttons: [
+									{
+										name: WAWebInteractiveMessagesNativeFlowNameEnum.PAYMENT_STATUS,
+										buttonParamsJson: JSON.stringify({
+											reference_id: referenceId,
+											payment_status: status,
+											payment_timestamp: new Date().getTime()
+										})
+									}
+								]
+							}
+						}
+					},
+					{
+						additionalNodes: [
+							{
+								tag: 'biz',
+								attrs: {},
+								content: [
+									{
+										tag: 'interactive',
+										attrs: {
+											v: '1',
+											type: 'native_flow'
+										},
+										content: [
+											{
+												tag: 'native_flow',
+												attrs: {
+													name: 'payment_status'
+												}
+											}
+										]
+									}
+								]
+							}
+						]
+					}
+				)
+			}
+
 			// Ainda em desenvolvimento
 			// Botoes de criacao de pedido
 			async function sendButtonCode1() {
@@ -1112,11 +1430,20 @@ Selecione e melhor opção:`,
 					for (const msg of upsert.messages) {
 						if (msg.key.fromMe) {
 							console.log('is own message')
-							if (msg.message?.conversation?.startsWith('!')) {
-								const command = msg.message.conversation.slice(1).trim().toLowerCase()
+							if (
+								msg.message?.conversation?.startsWith('!') ||
+								msg.message?.extendedTextMessage?.text?.startsWith('!')
+							) {
+								const command =
+									msg.message.conversation?.slice(1).trim().toLowerCase() ||
+									msg.message?.extendedTextMessage?.text?.slice(1).trim().toLowerCase()
 								// msg.message.buttonsResponseMessage?.selectedButtonId
 
-								if (command === 'otp') {
+								if (command === 'pix_new') {
+									await sendNewPixPaymentFormat()
+								} else if (command === 'pay') {
+									await sendCustomPaymentOrder('teste')
+								} else if (command === 'otp') {
 									await sendOtp()
 								} else if (command === 'list') {
 									await sendList()

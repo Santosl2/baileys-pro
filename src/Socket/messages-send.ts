@@ -4,6 +4,7 @@ import { proto } from '../../WAProto/index.js'
 import { DEFAULT_CACHE_TTLS, WA_DEFAULT_EPHEMERAL } from '../Defaults'
 import {
 	WAInteractiveMessagesNativeFlowName,
+	WAWebInteractiveMessagesNativeFlowNameEnum,
 	type AnyMessageContent,
 	type MediaConnInfo,
 	type MessageReceiptType,
@@ -1059,20 +1060,35 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 			attrs: {},
 			content: undefined
 		}
-		// if (
-		// 	message.interactiveMessage?.nativeFlowMessage &&
-		// 	//@ts-ignore
-		// 	message.interactiveMessage?.nativeFlowMessage?.buttons?.length > 0 &&
-		// 	message.interactiveMessage?.nativeFlowMessage?.buttons?.[0]?.name ===
-		// 		WAWebInteractiveMessagesNativeFlowNameEnum.REVIEW_AND_PAY
-		// ) {
-		// 	return {
-		// 		tag: 'biz',
-		// 		attrs: {
-		// 			native_flow_name: 'order_details'
-		// 		}
-		// 	}
-		// }
+		if (
+			message.interactiveMessage?.nativeFlowMessage &&
+			//@ts-ignore
+			message.interactiveMessage?.nativeFlowMessage?.buttons?.length > 0 &&
+			message.interactiveMessage?.nativeFlowMessage?.buttons?.[0]?.name ===
+				WAWebInteractiveMessagesNativeFlowNameEnum.REVIEW_AND_PAY
+		) {
+			return {
+				tag: 'biz',
+				attrs: {},
+				content: [
+					{
+						tag: 'interactive',
+						attrs: {
+							v: '1',
+							type: 'native_flow'
+						},
+						content: [
+							{
+								tag: 'native_flow',
+								attrs: {
+									name: 'order_details'
+								}
+							}
+						]
+					}
+				]
+			}
+		}
 
 		// if (message.buttonsMessage) {
 		// 	return {
