@@ -657,6 +657,49 @@ export const generateWAMessageContent = async (
 		}
 	}
 
+	if ('orderChangeStatus' in message && !!message.orderChangeStatus) {
+		const { status, referenceId } = message.orderChangeStatus
+
+		const orderChangeStatus: proto.Message.IInteractiveMessage = {
+			nativeFlowMessage: WAProto.Message.InteractiveMessage.NativeFlowMessage.fromObject({
+				buttons: [
+					{
+						name: WAWebInteractiveMessagesNativeFlowNameEnum.REVIEW_ORDER,
+						buttonParamsJson: JSON.stringify({
+							order: {
+								status
+							},
+							reference_id: referenceId
+						})
+					}
+				]
+			})
+		}
+
+		m = { interactiveMessage: orderChangeStatus }
+	}
+
+	if ('orderPaymentChangeStatus' in message && !!message.orderPaymentChangeStatus) {
+		const { status, referenceId } = message.orderPaymentChangeStatus
+
+		const orderChangeStatus: proto.Message.IInteractiveMessage = {
+			nativeFlowMessage: WAProto.Message.InteractiveMessage.NativeFlowMessage.fromObject({
+				buttons: [
+					{
+						name: WAWebInteractiveMessagesNativeFlowNameEnum.PAYMENT_STATUS,
+						buttonParamsJson: JSON.stringify({
+							reference_id: referenceId,
+							payment_status: status,
+							payment_timestamp: new Date().getTime()
+						})
+					}
+				]
+			})
+		}
+
+		m = { interactiveMessage: orderChangeStatus }
+	}
+
 	if ('paymentOrder' in message && !!message.paymentOrder) {
 		const items = message.paymentOrder.items || []
 		const hasReferral = !!message.paymentOrder.referral

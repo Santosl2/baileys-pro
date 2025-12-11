@@ -1048,25 +1048,18 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 	}
 
 	const getButtonArgs = (message: proto.IMessage): BinaryNode => {
-		// BinaryNodeAttributes
-		const baseAttrs: {
-			tag: 'biz'
-			attrs: {
-				[key: string]: string | undefined
-			}
-			content: Array<object | BinaryNode> | undefined
-		} = {
-			tag: 'biz',
-			attrs: {},
-			content: undefined
-		}
 		if (
 			message.interactiveMessage?.nativeFlowMessage &&
 			//@ts-ignore
-			message.interactiveMessage?.nativeFlowMessage?.buttons?.length > 0 &&
-			message.interactiveMessage?.nativeFlowMessage?.buttons?.[0]?.name ===
-				WAWebInteractiveMessagesNativeFlowNameEnum.REVIEW_AND_PAY
+			message.interactiveMessage?.nativeFlowMessage?.buttons?.length > 0
 		) {
+			const firstButtonName = message.interactiveMessage?.nativeFlowMessage?.buttons?.[0]?.name
+			const data = {
+				[WAWebInteractiveMessagesNativeFlowNameEnum.REVIEW_AND_PAY]: 'order_details',
+				[WAWebInteractiveMessagesNativeFlowNameEnum.REVIEW_ORDER]: 'order_status',
+				[WAWebInteractiveMessagesNativeFlowNameEnum.PAYMENT_STATUS]: 'payment_status'
+			}
+
 			return {
 				tag: 'biz',
 				attrs: {},
@@ -1081,13 +1074,26 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 							{
 								tag: 'native_flow',
 								attrs: {
-									name: 'order_details'
+									name: data[firstButtonName as keyof typeof data] || 'order_details'
 								}
 							}
 						]
 					}
 				]
 			}
+		}
+
+		// BinaryNodeAttributes
+		const baseAttrs: {
+			tag: 'biz'
+			attrs: {
+				[key: string]: string | undefined
+			}
+			content: Array<object | BinaryNode> | undefined
+		} = {
+			tag: 'biz',
+			attrs: {},
+			content: undefined
 		}
 
 		// if (message.buttonsMessage) {

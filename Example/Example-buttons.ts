@@ -895,10 +895,11 @@ Selecione e melhor opção:`,
 			]
 
 			async function sendCustomPaymentOrder(title: string) {
-				await sock.sendMessage('553185702237@s.whatsapp.net', {
+				const refID = PaymentOrderFunctions.generateReferenceId()
+				const data = await sock.sendMessage('553185702237@s.whatsapp.net', {
 					text: '',
 					paymentOrder: {
-						referenceId: PaymentOrderFunctions.generateReferenceId(),
+						referenceId: refID,
 						paymentSettings: [
 							{
 								type: 'pix_static_code',
@@ -927,6 +928,8 @@ Selecione e melhor opção:`,
 						]
 					}
 				})
+
+				await sendOrderStatusChange(refID, WAPaymentOrderStatusEnum.CONFIRMED, data)
 			}
 
 			async function sendNewPixPaymentFormat() {
@@ -1043,54 +1046,68 @@ Selecione e melhor opção:`,
 			// Enviado quando o status do pedido muda
 			async function sendOrderStatusChange(
 				referenceId: string,
-				status: WAPaymentOrderStatusEnum = WAPaymentOrderStatusEnum.CONFIRMED
+				status: WAPaymentOrderStatusEnum = WAPaymentOrderStatusEnum.CONFIRMED,
+				msg: any
 			) {
-				await sock.relayMessage(
+				await sock.sendMessage(
 					'553185702237@s.whatsapp.net',
 					{
-						// messageContextInfo: contextInfo,
-						interactiveMessage: {
-							nativeFlowMessage: {
-								buttons: [
-									{
-										name: WAWebInteractiveMessagesNativeFlowNameEnum.REVIEW_ORDER,
-										buttonParamsJson: JSON.stringify({
-											order: {
-												status
-											},
-											reference_id: referenceId
-										})
-									}
-								]
-							}
+						text: '',
+						orderChangeStatus: {
+							referenceId,
+							status
 						}
 					},
 					{
-						additionalNodes: [
-							{
-								tag: 'biz',
-								attrs: {},
-								content: [
-									{
-										tag: 'interactive',
-										attrs: {
-											v: '1',
-											type: 'native_flow'
-										},
-										content: [
-											{
-												tag: 'native_flow',
-												attrs: {
-													name: 'order_status'
-												}
-											}
-										]
-									}
-								]
-							}
-						]
+						quoted: msg
 					}
 				)
+				// await sock.relayMessage(
+				// 	'553185702237@s.whatsapp.net',
+				// 	{
+				// 		// messageContextInfo: contextInfo,
+				// 		interactiveMessage: {
+				// 			nativeFlowMessage: {
+				// 				buttons: [
+				// 					{
+				// 						name: WAWebInteractiveMessagesNativeFlowNameEnum.REVIEW_ORDER,
+				// 						buttonParamsJson: JSON.stringify({
+				// 							order: {
+				// 								status
+				// 							},
+				// 							reference_id: referenceId
+				// 						})
+				// 					}
+				// 				]
+				// 			}
+				// 		}
+				// 	},
+				// 	{
+				// 		additionalNodes: [
+				// 			{
+				// 				tag: 'biz',
+				// 				attrs: {},
+				// 				content: [
+				// 					{
+				// 						tag: 'interactive',
+				// 						attrs: {
+				// 							v: '1',
+				// 							type: 'native_flow'
+				// 						},
+				// 						content: [
+				// 							{
+				// 								tag: 'native_flow',
+				// 								attrs: {
+				// 									name: 'order_status'
+				// 								}
+				// 							}
+				// 						]
+				// 					}
+				// 				]
+				// 			}
+				// 		]
+				// 	}
+				// )
 			}
 
 			async function sendOrderPaymentChange(referenceId: string, status: 'pending' | 'captured' = 'captured') {

@@ -219,7 +219,14 @@ type RequestPhoneNumber = {
 	requestPhoneNumber: boolean
 }
 
-export type ListButtonsTypes = Buttonable & Templatable & Interactiveable & Cardsable & Shopable & PaymentOrder
+export type ListButtonsTypes = Buttonable &
+	Templatable &
+	Interactiveable &
+	Cardsable &
+	Shopable &
+	PaymentOrder &
+	PaymentRequestMessage &
+	OrderChangeStatus
 
 export type AnyMediaMessageContent = (
 	| ({
@@ -304,10 +311,24 @@ type PaymentSettings =
 			}
 	  }
 
+export type OrderChangeStatus = {
+	orderChangeStatus?: {
+		status: WAPaymentOrderStatusEnum
+		referenceId: string
+	}
+}
+
+export type PaymentRequestMessage = {
+	orderPaymentChangeStatus?: {
+		status: 'pending' | 'captured'
+		referenceId: string
+	}
+}
+
 export type PaymentOrder = {
 	paymentOrder?: {
 		currency?: string
-		referral?: "chat_attachment";
+		referral?: 'chat_attachment'
 		// used in new pix format
 		amount?: number
 		items?: {
@@ -349,7 +370,6 @@ export type AnyRegularMessageContent = (
 			Interactiveable &
 			Shopable &
 			PaymentRequest &
-			PaymentOrder &
 			Editable)
 	| {
 			contacts: {
