@@ -1059,7 +1059,7 @@ export const makeChatsSocket = (config: SocketConfig) => {
 			}
 		}
 
-		const doAppStateSync = async () => {
+		const doAppStateSync = () => {
 			if (syncState === SyncState.Syncing) {
 				logger.info('Doing app state sync')
 
@@ -1078,29 +1078,26 @@ export const makeChatsSocket = (config: SocketConfig) => {
 			}
 		}
 
-		await Promise.all([
-			(async () => {
-				if (shouldProcessHistoryMsg) {
-					await doAppStateSync()
-				}
-			})(),
-			processMessage(msg, {
-				signalRepository,
-				shouldProcessHistoryMsg,
-				placeholderResendCache,
-				ev,
-				creds: authState.creds,
-				keyStore: authState.keys,
-				logger,
-				options: config.options,
-				getMessage
-			})
-		])
+		if (shouldProcessHistoryMsg) {
+			doAppStateSync()
+		}
+
+		await processMessage(msg, {
+			signalRepository,
+			shouldProcessHistoryMsg,
+			placeholderResendCache,
+			ev,
+			creds: authState.creds,
+			keyStore: authState.keys,
+			logger,
+			options: config.options,
+			getMessage
+		})
 
 		// If the app state key arrives and we are waiting to sync, trigger the sync now.
 		if (msg.message?.protocolMessage?.appStateSyncKeyShare && syncState === SyncState.Syncing) {
 			logger.info('App state sync key arrived, triggering app state sync')
-			await doAppStateSync()
+			doAppStateSync()
 		}
 	})
 
