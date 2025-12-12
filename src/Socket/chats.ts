@@ -1074,7 +1074,7 @@ export const makeChatsSocket = (config: SocketConfig) => {
 			}
 		}
 
-		await Promise.all([
+		await Promise.allSettled([
 			(async () => {
 				if (shouldProcessHistoryMsg) {
 					await doAppStateSync()
