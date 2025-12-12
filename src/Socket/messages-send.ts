@@ -33,6 +33,7 @@ import {
 	unixTimestampSeconds
 } from '../Utils'
 import { getUrlInfo } from '../Utils/link-preview'
+import { getMessageReportingToken, shouldIncludeReportingToken } from '../Utils/reporting-utils'
 import {
 	areJidsSameUser,
 	BinaryNode,
@@ -51,7 +52,6 @@ import {
 import { USyncQuery, USyncUser } from '../WAUSync'
 import { makeGroupsSocket } from './groups'
 import { makeNewsletterSocket, NewsletterSocket } from './newsletter'
-import { getMessageReportingToken, shouldIncludeReportingToken } from '../Utils/reporting-utils'
 
 export const makeMessagesSocket = (config: SocketConfig) => {
 	const {
@@ -734,7 +734,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 
 			// Add reporting token if required
 			if (!isNewsletter) {
-				if (message && shouldIncludeReportingToken(message) && message.messageContextInfo?.messageSecret && msgId) {
+				if (message && config.sendReportingTag && shouldIncludeReportingToken(message) && message.messageContextInfo?.messageSecret && msgId) {
 					try {
 						const reportingKey: WAMessageKey = {
 							id: msgId,

@@ -85,6 +85,8 @@ export const DEFAULT_CONNECTION_CONFIG: SocketConfig = {
 		stdTTL: DEFAULT_CACHE_TTLS.GROUP_METADATA
 	}),
 
+	sendReportingTag: true,
+
 	recentMessageSentHistory: {
 		// TODO: use sqlite and async mutex
 		get: (from, messageId) => recentMessageSentHistory.get(`${from}:${messageId}`),

@@ -163,4 +163,6 @@ export type SocketConfig = {
 	groupMetadataCache?: CacheStoreWithGeneric<GroupMetadata | undefined>
 
 	makeSignalRepository: (auth: SignalAuthState) => SignalRepository
+
+	sendReportingTag?: boolean
 }
