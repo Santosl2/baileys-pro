@@ -454,7 +454,6 @@ export const makeSocket = (config: SocketConfig) => {
 					})
 						.then(() => {
 							logger.trace('keep alive response received sent after' + delay)
-							lastPingTimeSent = Date.now()
 							lastDateRecv = new Date()
 						})
 						.catch(err => {
