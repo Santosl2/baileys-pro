@@ -112,7 +112,6 @@ export const makeSocket = (config: SocketConfig) => {
 	let lastDateRecv: Date
 	let epoch = 1
 	let keepAliveReq: NodeJS.Timeout
-	let lastPingTimeSent = 0
 	let qrTimer: NodeJS.Timeout
 	let closed = false
 

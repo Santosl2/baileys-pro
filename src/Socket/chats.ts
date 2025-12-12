@@ -7,6 +7,7 @@ import {
 	BotListInfo,
 	ChatModification,
 	ChatMutation,
+	DisconnectReason,
 	LTHashState,
 	MessageUpsertType,
 	PresenceData,
@@ -637,6 +638,10 @@ export const makeChatsSocket = (config: SocketConfig) => {
 	}
 
 	const sendPresenceUpdate = async (type: WAPresence, toJid?: string) => {
+		if (!ws.isOpen) {
+			throw new Boom('Connection Closed', { statusCode: DisconnectReason.connectionClosed })
+		}
+
 		const me = authState.creds.me!
 		if (type === 'available' || type === 'unavailable') {
 			if (!me.name) {
@@ -677,7 +682,11 @@ export const makeChatsSocket = (config: SocketConfig) => {
 	 * @param toJid the jid to subscribe to
 	 * @param tcToken token for subscription, use if present
 	 */
-	const presenceSubscribe = (toJid: string, tcToken?: Buffer) =>
+	const presenceSubscribe = (toJid: string, tcToken?: Buffer) => {
+		if (!ws.isOpen) {
+			throw new Boom('Connection Closed', { statusCode: DisconnectReason.connectionClosed })
+		}
+
 		sendNode({
 			tag: 'presence',
 			attrs: {
@@ -695,6 +704,7 @@ export const makeChatsSocket = (config: SocketConfig) => {
 					]
 				: undefined
 		})
+	}
 
 	const handlePresenceUpdate = ({ tag, attrs, content }: BinaryNode) => {
 		let presence: PresenceData | undefined
