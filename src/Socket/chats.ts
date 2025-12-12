@@ -1059,45 +1059,44 @@ export const makeChatsSocket = (config: SocketConfig) => {
 			}
 		}
 
-		const doAppStateSync = () => {
+		const doAppStateSync = async () => {
 			if (syncState === SyncState.Syncing) {
 				logger.info('Doing app state sync')
+				await resyncAppState(ALL_WA_PATCH_NAMES, true)
 
+				// Sync is complete, go online and flush everything
 				syncState = SyncState.Online
+				logger.info('App state sync complete, transitioning to Online state and flushing buffer')
 				ev.flush()
 
-				resyncAppState(ALL_WA_PATCH_NAMES, true)
-					.then(() => {
-						logger.info('App state sync complete')
-						const accountSyncCounter = (authState.creds.accountSyncCounter || 0) + 1
-						ev.emit('creds.update', { accountSyncCounter })
-					})
-					.catch(err => {
-						logger.error({ err }, 'App state sync failed')
-					})
+				const accountSyncCounter = (authState.creds.accountSyncCounter || 0) + 1
+				ev.emit('creds.update', { accountSyncCounter })
 			}
 		}
 
-		if (shouldProcessHistoryMsg) {
-			doAppStateSync()
-		}
-
-		await processMessage(msg, {
-			signalRepository,
-			shouldProcessHistoryMsg,
-			placeholderResendCache,
-			ev,
-			creds: authState.creds,
-			keyStore: authState.keys,
-			logger,
-			options: config.options,
-			getMessage
-		})
+		await Promise.all([
+			(async () => {
+				if (shouldProcessHistoryMsg) {
+					await doAppStateSync()
+				}
+			})(),
+			processMessage(msg, {
+				signalRepository,
+				shouldProcessHistoryMsg,
+				placeholderResendCache,
+				ev,
+				creds: authState.creds,
+				keyStore: authState.keys,
+				logger,
+				options: config.options,
+				getMessage
+			})
+		])
 
 		// If the app state key arrives and we are waiting to sync, trigger the sync now.
 		if (msg.message?.protocolMessage?.appStateSyncKeyShare && syncState === SyncState.Syncing) {
 			logger.info('App state sync key arrived, triggering app state sync')
-			doAppStateSync()
+			await doAppStateSync()
 		}
 	})
 
