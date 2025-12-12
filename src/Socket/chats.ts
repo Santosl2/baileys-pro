@@ -1063,6 +1063,9 @@ export const makeChatsSocket = (config: SocketConfig) => {
 			if (syncState === SyncState.Syncing) {
 				logger.info('Doing app state sync')
 
+				syncState = SyncState.Online
+				ev.flush()
+
 				resyncAppState(ALL_WA_PATCH_NAMES, true)
 					.then(() => {
 						logger.info('App state sync complete')
