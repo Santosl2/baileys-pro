@@ -248,7 +248,7 @@ type PaymentSettings =
 	  }
 
 export type WAPaymentOrder = {
-	paymentOrder: {
+	paymentOrder?: {
 		items: {
 			name: string
 			quantity: number
