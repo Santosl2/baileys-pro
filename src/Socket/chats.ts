@@ -1062,15 +1062,16 @@ export const makeChatsSocket = (config: SocketConfig) => {
 		const doAppStateSync = async () => {
 			if (syncState === SyncState.Syncing) {
 				logger.info('Doing app state sync')
-				await resyncAppState(ALL_WA_PATCH_NAMES, true)
 
-				// Sync is complete, go online and flush everything
-				syncState = SyncState.Online
-				logger.info('App state sync complete, transitioning to Online state and flushing buffer')
-				ev.flush()
-
-				const accountSyncCounter = (authState.creds.accountSyncCounter || 0) + 1
-				ev.emit('creds.update', { accountSyncCounter })
+				resyncAppState(ALL_WA_PATCH_NAMES, true)
+					.then(() => {
+						logger.info('App state sync complete')
+						const accountSyncCounter = (authState.creds.accountSyncCounter || 0) + 1
+						ev.emit('creds.update', { accountSyncCounter })
+					})
+					.catch(err => {
+						logger.error({ err }, 'App state sync failed')
+					})
 			}
 		}
 
