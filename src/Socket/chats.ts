@@ -687,7 +687,7 @@ export const makeChatsSocket = (config: SocketConfig) => {
 			throw new Boom('Connection Closed', { statusCode: DisconnectReason.connectionClosed })
 		}
 
-		sendNode({
+		return sendNode({
 			tag: 'presence',
 			attrs: {
 				to: toJid,
