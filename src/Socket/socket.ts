@@ -10,9 +10,7 @@ import {
 	KEEPALIVE_INTERVAL_MAX,
 	KEEPALIVE_INTERVAL_MIN,
 	MIN_PREKEY_COUNT,
-	MIN_UPLOAD_INTERVAL,
-	NOISE_WA_HEADER,
-	UPLOAD_TIMEOUT
+	NOISE_WA_HEADER
 } from '../Defaults'
 import { DisconnectReason, SocketConfig } from '../Types'
 import {
@@ -471,6 +469,7 @@ export const makeSocket = (config: SocketConfig) => {
 
 		scheduleNext()
 	}
+
 	/** i have no idea why this exists. pls enlighten me */
 	const sendPassiveIq = (tag: 'passive' | 'active') =>
 		query({

@@ -4,6 +4,7 @@ import { proto } from '../../WAProto'
 import { DEFAULT_CACHE_TTLS, WA_DEFAULT_EPHEMERAL } from '../Defaults'
 import {
 	AnyMessageContent,
+	DisconnectReason,
 	MediaConnInfo,
 	MessageReceiptType,
 	MessageRelayOptions,
@@ -734,7 +735,13 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 
 			// Add reporting token if required
 			if (!isNewsletter) {
-				if (message && config.sendReportingTag && shouldIncludeReportingToken(message) && message.messageContextInfo?.messageSecret && msgId) {
+				if (
+					message &&
+					config.sendReportingTag &&
+					shouldIncludeReportingToken(message) &&
+					message.messageContextInfo?.messageSecret &&
+					msgId
+				) {
 					try {
 						const reportingKey: WAMessageKey = {
 							id: msgId,
@@ -1013,6 +1020,10 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 			return message
 		},
 		sendMessage: async (jid: string, content: AnyMessageContent, options: MiscMessageGenerationOptions = {}) => {
+			if (!sock.ws.isOpen) {
+				throw new Boom('Connection Closed', { statusCode: DisconnectReason.connectionClosed })
+			}
+
 			const userJid = authState.creds.me!.id
 			if (
 				typeof content === 'object' &&
