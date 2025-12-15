@@ -169,7 +169,7 @@ export const makeEventBuffer = (logger: ILogger): BaileysBufferableEventEmitter 
 				const { type } = evData as BaileysEventMap['messages.upsert']
 				const existingUpserts = Object.values(data.messageUpserts)
 				if (existingUpserts.length > 0) {
-					const bufferedType = existingUpserts[0].type
+					const bufferedType = existingUpserts[0]!.type
 					if (bufferedType !== type) {
 						logger.debug({ bufferedType, newType: type }, 'messages.upsert type mismatch, emitting buffered messages')
 						// Emit the buffered messages with their correct type
