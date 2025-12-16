@@ -1048,18 +1048,22 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 	}
 
 	const getButtonArgs = (message: proto.IMessage): BinaryNode => {
+		// Payment Orders - Native Flows
+		const data = {
+			[WAWebInteractiveMessagesNativeFlowNameEnum.REVIEW_AND_PAY]: 'order_details',
+			[WAWebInteractiveMessagesNativeFlowNameEnum.REVIEW_ORDER]: 'order_status',
+			[WAWebInteractiveMessagesNativeFlowNameEnum.PAYMENT_STATUS]: 'payment_status'
+		}
+
+		const firstButtonName = message.interactiveMessage?.nativeFlowMessage?.buttons?.[0]?.name
+
 		if (
 			message.interactiveMessage?.nativeFlowMessage &&
 			//@ts-ignore
-			message.interactiveMessage?.nativeFlowMessage?.buttons?.length > 0
+			message.interactiveMessage?.nativeFlowMessage?.buttons?.length > 0 &&
+			firstButtonName &&
+			data[firstButtonName as keyof typeof data]
 		) {
-			const firstButtonName = message.interactiveMessage?.nativeFlowMessage?.buttons?.[0]?.name
-			const data = {
-				[WAWebInteractiveMessagesNativeFlowNameEnum.REVIEW_AND_PAY]: 'order_details',
-				[WAWebInteractiveMessagesNativeFlowNameEnum.REVIEW_ORDER]: 'order_status',
-				[WAWebInteractiveMessagesNativeFlowNameEnum.PAYMENT_STATUS]: 'payment_status'
-			}
-
 			return {
 				tag: 'biz',
 				attrs: {},
