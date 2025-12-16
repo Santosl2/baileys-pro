@@ -239,7 +239,18 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		const result = await sock.executeUSyncQuery(query)
 
 		if (result) {
-			const extracted = extractDeviceJids(result?.list, authState.creds.me!.id, ignoreZeroDevices)
+			const extracted = extractDeviceJids(
+				result?.list,
+				authState.creds.me!.id,
+				authState.creds.me!.lid!,
+				ignoreZeroDevices
+			)
+
+			if (!extracted?.length) {
+				logger.debug('no devices found in usync response')
+				return deviceResults
+			}
+
 			const deviceMap: { [_: string]: JidWithDevice[] } = {}
 
 			for (const item of extracted) {
@@ -708,10 +719,10 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 			const contactTcTokenData =
 				!isGroup && !isRetryResend && !isStatus ? await authState.keys.get('tc-token', [destinationJid]) : {}
 
-			const tcTokenBuffer = contactTcTokenData[destinationJid]?.token;
+			const tcTokenBuffer = contactTcTokenData[destinationJid]?.token
 
 			if (tcTokenBuffer) {
-				(stanza.content as BinaryNode[]).push({
+				;(stanza.content as BinaryNode[]).push({
 					tag: 'tctoken',
 					attrs: {},
 					content: tcTokenBuffer
