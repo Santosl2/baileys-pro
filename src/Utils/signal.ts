@@ -11,6 +11,7 @@ import {
 import {
 	assertNodeErrorFree,
 	BinaryNode,
+	FullJid,
 	getBinaryNodeChild,
 	getBinaryNodeChildBuffer,
 	getBinaryNodeChildren,
@@ -153,22 +154,24 @@ export const extractDeviceJids = (
 				(device === 0 || !!keyIndex) // ensure that "key-index" is specified for "non-zero" devices, produces a bad req otherwise
 			) {
 				if (isHosted) {
-				// Device 99 must always be on the hosted domain
-				if (isHosted || device === 99) {
-					domainType = domainType === WAJIDDomains.LID ? WAJIDDomains.HOSTED_LID : WAJIDDomains.HOSTED
-				}
+					// Device 99 must always be on the hosted domain
+					// eslint-disable-next-line max-depth
+					if (isHosted || device === 99) {
+						domainType = domainType === WAJIDDomains.LID ? WAJIDDomains.HOSTED_LID : WAJIDDomains.HOSTED
+					}
 
-				extracted.push({
-					user,
-					device,
-					domainType,
-					server: getServerFromDomainType(server, domainType)
-				})
+					extracted.push({
+						user,
+						device,
+						domainType,
+						server: getServerFromDomainType(server, domainType)
+					})
+				}
 			}
 		}
-	}
 
-	return extracted
+		return extracted
+	}
 }
 
 /**
