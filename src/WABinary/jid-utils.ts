@@ -89,3 +89,17 @@ export const jidNormalizedUser = (jid: string | undefined) => {
 	const { user, server } = result
 	return jidEncode(user, server === 'c.us' ? 's.whatsapp.net' : (server as JidServer))
 }
+
+export const getServerFromDomainType = (initialServer: string, domainType?: WAJIDDomains): JidServer => {
+	switch (domainType) {
+		case WAJIDDomains.LID:
+			return 'lid'
+		case WAJIDDomains.HOSTED:
+			return 'hosted'
+		case WAJIDDomains.HOSTED_LID:
+			return 'hosted.lid'
+		case WAJIDDomains.WHATSAPP:
+		default:
+			return initialServer as JidServer
+	}
+}
