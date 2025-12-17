@@ -459,6 +459,7 @@ export const makeSocket = (config: SocketConfig) => {
 							logger.error({ trace: err.stack }, 'error in sending keep alive')
 						})
 				} else {
+					end(new Boom('Connection was lost', { statusCode: DisconnectReason.connectionLost }))
 					logger.warn('keep alive called when WS not open')
 				}
 
