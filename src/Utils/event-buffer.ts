@@ -31,7 +31,7 @@ const BUFFERABLE_EVENT = [
 	// 'groups.update'
 ] as const
 
-type BufferableEvent = (typeof BUFFERABLE_EVENT)[number]
+type BufferableEvent = (typeof BUFFERABLE_EVENT)[number] & 'messages.upsert' & 'groups.update'
 
 /**
  * A map that contains a list of all events that have been triggered
