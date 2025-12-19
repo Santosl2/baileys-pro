@@ -359,7 +359,7 @@ export const makeSocket = (config: SocketConfig) => {
 
 	const end = (error: Error | undefined) => {
 		if (closed) {
-			logger.trace({ trace: error?.stack }, 'connection already closed')
+			logger.error({ trace: error?.stack }, 'connection already closed')
 			return
 		}
 
@@ -447,7 +447,7 @@ export const makeSocket = (config: SocketConfig) => {
 							to: S_WHATSAPP_NET,
 							type: 'get',
 							xmlns: 'w:p'
-						},
+						}
 					})
 						.then(() => {
 							logger.trace('keep alive response received sent after' + delay)
