@@ -309,7 +309,13 @@ export const addTransactionCapability = (
 	const keyTypeMutexes = new Map<string, Mutex>()
 
 	// Per-sender-key-name mutexes for fine-grained serialization
-	const senderKeyMutexes = new Map<string, Mutex>()
+	const senderKeyMutexes = new Map<
+		string,
+		{
+			mutex: Mutex
+			refCount: number
+		}
+	>()
 
 	// Global transaction mutex
 	const transactionMutex = new Mutex()
@@ -338,17 +344,53 @@ export const addTransactionCapability = (
 	function getSenderKeyMutex(senderKeyName: string): Mutex {
 		let mutex = senderKeyMutexes.get(senderKeyName)
 		if (!mutex) {
-			mutex = new Mutex()
+			mutex = {
+				mutex: new Mutex(),
+				refCount: 0
+			}
 			senderKeyMutexes.set(senderKeyName, mutex)
+
 			logger.info({ senderKeyName }, 'created new sender key mutex')
 		}
 
-		return mutex
+		return mutex.mutex
+	}
+
+	function acquireSenderKey(senderKeyName: string) {
+		const entry = senderKeyMutexes.get(senderKeyName)
+		if (entry) {
+			logger.trace({ senderKeyName, refCount: entry.refCount }, 'acquiring sender key mutex')
+			entry.refCount += 1
+		}
+	}
+
+	function releaseSenderKey(name: string) {
+		const data = senderKeyMutexes.get(name)
+
+		if (!data) return
+
+		const count = (data.refCount ?? 1) - 1
+		data.refCount = count
+
+		if (count <= 0) {
+			if (data && !data.mutex.isLocked()) {
+				// safe cleanup
+				logger.trace({ name }, 'cleaning up sender key mutex')
+				senderKeyMutexes.delete(name)
+			}
+		}
 	}
 
 	// Sender key operations with proper mutex sequencing
-	function queueSenderKeyOperation<T>(senderKeyName: string, operation: () => Promise<T>): Promise<T> {
-		return getSenderKeyMutex(senderKeyName).runExclusive(operation)
+	async function queueSenderKeyOperation<T>(senderKeyName: string, op: () => Promise<T>): Promise<T> {
+		const mutex = getSenderKeyMutex(senderKeyName)
+		acquireSenderKey(senderKeyName)
+
+		try {
+			return await mutex.runExclusive(op)
+		} finally {
+			releaseSenderKey(senderKeyName)
+		}
 	}
 
 	// Check if we are currently in a transaction
