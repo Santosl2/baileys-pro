@@ -352,6 +352,8 @@ const processMessage = async (
 					}
 				])
 				break
+			default:
+				logger?.trace({ protocolMsg, type: protocolMsg.type }, 'unknown protocol message type')
 		}
 	} else if (content?.reactionMessage) {
 		const reaction: proto.IReaction = {
