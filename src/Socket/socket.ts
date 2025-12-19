@@ -448,7 +448,6 @@ export const makeSocket = (config: SocketConfig) => {
 							type: 'get',
 							xmlns: 'w:p'
 						},
-						content: [{ tag: 'ping', attrs: {} }]
 					})
 						.then(() => {
 							logger.trace('keep alive response received sent after' + delay)
