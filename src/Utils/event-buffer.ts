@@ -15,6 +15,7 @@ import { trimUndefined } from './generics'
 import type { ILogger } from './logger'
 import { updateMessageWithReaction, updateMessageWithReceipt } from './messages'
 import { isRealMessage, shouldIncrementChatUnread } from './process-message'
+import logger from './logger'
 
 const BUFFERABLE_EVENT = [
 	'messaging-history.set',
@@ -23,15 +24,15 @@ const BUFFERABLE_EVENT = [
 	'chats.delete',
 	'contacts.upsert',
 	'contacts.update',
-	// 'messages.upsert',
+	'messages.upsert',
 	'messages.update',
 	'messages.delete',
 	'messages.reaction',
 	'message-receipt.update',
-	// 'groups.update'
+	'groups.update'
 ] as const
 
-type BufferableEvent = (typeof BUFFERABLE_EVENT)[number] & 'messages.upsert' & 'groups.update'
+type BufferableEvent = (typeof BUFFERABLE_EVENT)[number]
 
 /**
  * A map that contains a list of all events that have been triggered
@@ -566,6 +567,13 @@ function consolidateEvents(data: BufferedEventData) {
 	const messageUpsertList = Object.values(data.messageUpserts)
 	if (messageUpsertList.length) {
 		const type = messageUpsertList[0]!.type
+		const notify = messageUpsertList.filter(m => m.type === 'notify')
+		const append = messageUpsertList.filter(m => m.type === 'append')
+
+		if(notify.length > 0 && append.length > 0){
+			console.warn({ notifyCount: notify.length, appendCount: append.length, type, messageUpsertList }, 'Mixed message upsert types in buffer, this may lead to unexpected behavior')
+		}
+
 		map['messages.upsert'] = {
 			messages: messageUpsertList.map(m => m.message),
 			type
