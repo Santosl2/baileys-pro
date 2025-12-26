@@ -6867,10 +6867,10 @@ webidl-conversions@^3.0.0:
   resolved "https://registry.npmjs.org/webidl-conversions/-/webidl-conversions-3.0.1.tgz"
   integrity sha512-2JAn3z8AR6rjK8Sm8orRC0h/bcl/DqL7tRPdGZ4I1CjdF+EaMLmYxBHyXuKL849eucPFhvBoxMsflfOb8kxaeQ==
 
-whatsapp-rust-bridge@^0.4.7:
-  version "0.4.7"
-  resolved "https://registry.npmjs.org/whatsapp-rust-bridge/-/whatsapp-rust-bridge-0.4.7.tgz"
-  integrity sha512-fmHWGG8JC2uu5hCsEi7K59B2YJ1qHNHMVWbQLSi0TY427Ev4mFh00cc1rZc7zFuHZBjOUnYnjZaWkn7n7bossg==
+whatsapp-rust-bridge@^0.4.8:
+  version "0.4.8"
+  resolved "https://registry.npmjs.org/whatsapp-rust-bridge/-/whatsapp-rust-bridge-0.4.8.tgz"
+  integrity sha512-xiz+HCB9FsHfboTez+QHJXlRmX4u90GL9v0LYFDSeq9sTFijFYEVYwaHB2VuOflil1N/oo+WaIZaeIDiiDgFRg==
 
 whatwg-url@^5.0.0:
   version "5.0.0"
