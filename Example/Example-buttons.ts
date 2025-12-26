@@ -829,7 +829,7 @@ Selecione e melhor opção:`,
 
 				const referenceId = generateReferenceId()
 
-			await sock.relayMessage(
+				await sock.relayMessage(
 					'553185702237@s.whatsapp.net',
 					{
 						interactiveMessage: {
@@ -1045,8 +1045,18 @@ Selecione e melhor opção:`,
 									msg.message?.conversation?.slice(1).trim().toLowerCase() ||
 									msg.message?.extendedTextMessage?.text?.slice(1).trim().toLowerCase()
 								//
+								if (command === 'test_double_end') {
+									console.log('Testando chamada dupla de end()...')
 
-								if (command?.startsWith('pay ')) {
+									// Primeira chamada - fecha a conexão normalmente
+									sock.end(new Error('Primeiro fechamento'))
+
+									// Segunda chamada - deve logar "connection already closed"
+									setTimeout(() => {
+										console.log('Chamando end() pela segunda vez...')
+										sock.end(new Error('Segundo fechamento'))
+									}, 100)
+								} else if (command?.startsWith('pay ')) {
 									const parts = command.split(' ')
 									const amount = parseInt(parts[1], 10)
 									const title = parts.slice(2).join(' ') || 'Pagamento via API'
