@@ -918,6 +918,7 @@ Selecione e melhor opção:`,
 						],
 						items: [
 							{
+								retailer_id: PaymentOrderFunctions.generateCustomRetailerId(),
 								amount: {
 									offset: 1,
 									value: 2500
@@ -1441,9 +1442,12 @@ Selecione e melhor opção:`,
 			// received a new message
 			if (events['messages.upsert']) {
 				const upsert = events['messages.upsert']
-
+				const filePath = './messages.json'
+				mutex.runExclusive(() => {
+					fs.appendFileSync(filePath, JSON.stringify(upsert, null, 2) + '\n')
+				})
+				//console.log('got messages ', JSON.stringify(upsert.messages, undefined, 2))
 				if (upsert.type === 'notify') {
-					console.log('got messages ', JSON.stringify(upsert.messages, undefined, 2))
 					for (const msg of upsert.messages) {
 						if (msg.key.fromMe) {
 							console.log('is own message')

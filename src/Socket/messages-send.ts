@@ -1064,6 +1064,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 			firstButtonName &&
 			data[firstButtonName as keyof typeof data]
 		) {
+			const name = data[firstButtonName as keyof typeof data]
 			return {
 				tag: 'biz',
 				attrs: {},
@@ -1078,7 +1079,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 							{
 								tag: 'native_flow',
 								attrs: {
-									name: data[firstButtonName as keyof typeof data] || 'order_details'
+									name
 								}
 							}
 						]
