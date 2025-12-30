@@ -481,12 +481,12 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 			if (isGroupOrStatus && !isRetryResend) {
 				const [groupData, senderKeyMap] = await Promise.all([
 					(async () => {
-						let groupData = useCachedGroupMetadata && groupMetadataCache ? groupMetadataCache.get(jid) : undefined
+						let groupData = useCachedGroupMetadata && groupMetadataCache ? await groupMetadataCache.get(jid) : undefined
 						if (groupData && Array.isArray(groupData?.participants)) {
 							logger.trace({ jid, participants: groupData.participants.length }, 'using cached group metadata')
 						} else if (!isStatus) {
 							groupData = await groupMetadata(jid)
-							groupMetadataCache?.set(jid, groupData)
+							await groupMetadataCache?.set(jid, groupData)
 						}
 
 						return groupData

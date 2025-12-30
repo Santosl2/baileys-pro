@@ -300,11 +300,11 @@ const processMessage = async (
 				})
 
 				if (chat.id && isJidGroup(chat.id)) {
-					const groupMetadata = config.groupMetadataCache?.get(chat.id)
+					const groupMetadata = await config.groupMetadataCache?.get(chat.id)
 
 					if (!groupMetadata) break
 
-					config.groupMetadataCache?.set(chat.id, {
+					await config.groupMetadataCache?.set(chat.id, {
 						...groupMetadata,
 						ephemeralDuration: Number(protocolMsg.ephemeralExpiration) || undefined
 					})
@@ -373,23 +373,23 @@ const processMessage = async (
 		const emitParticipantsUpdate = async (action: ParticipantAction) => {
 			ev.emit('group-participants.update', { id: jid, author: message.participant!, participants, action })
 
-			const groupMetadata = config.groupMetadataCache?.get(jid)
+			const groupMetadata = await config.groupMetadataCache?.get(jid)
 
 			if (!groupMetadata) return
 
 			const updatedMetadata = updateGroupMetadata(groupMetadata, action, participants)
 
-			config.groupMetadataCache?.set(jid, updatedMetadata)
+			await config.groupMetadataCache?.set(jid, updatedMetadata)
 		}
 
 		const emitGroupUpdate = async (update: Partial<GroupMetadata>) => {
 			ev.emit('groups.update', [{ id: jid, ...update }])
 
-			const groupMetadata = config.groupMetadataCache?.get(jid)
+			const groupMetadata = await config.groupMetadataCache?.get(jid)
 
 			if (!groupMetadata) return
 
-			config.groupMetadataCache?.set(jid, { ...groupMetadata, ...update })
+			await config.groupMetadataCache?.set(jid, { ...groupMetadata, ...update })
 		}
 
 		const emitGroupRequestJoin = (participant: string, action: RequestJoinAction, method: RequestJoinMethod) => {

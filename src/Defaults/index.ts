@@ -48,6 +48,11 @@ export const KEEPALIVE_INTERVAL_MAX = 30_000
 const MAX_RECENT_MESSAGE_SENT_HISTORY = 256
 const recentMessageSentHistory = new Map<string, proto.IMessage>()
 
+const cachedGroupMetadata = new NodeCache({
+	useClones: false,
+	stdTTL: DEFAULT_CACHE_TTLS.GROUP_METADATA
+})
+
 export const DEFAULT_CONNECTION_CONFIG: SocketConfig = {
 	version: version as WAVersion,
 	browser: Browsers.macOS('Chrome'),
@@ -80,10 +85,7 @@ export const DEFAULT_CONNECTION_CONFIG: SocketConfig = {
 	// cachedGroupMetadata: async () => undefined,
 	makeSignalRepository: makeLibSignalRepository,
 
-	groupMetadataCache: new NodeCache({
-		useClones: false,
-		stdTTL: DEFAULT_CACHE_TTLS.GROUP_METADATA
-	}),
+	groupMetadataCache: cachedGroupMetadata as any,
 
 	sendReportingTag: true,
 

@@ -28,17 +28,17 @@ export type CacheStore = {
 
 export type CacheStoreWithGeneric<T> = {
 	/** get a cached key and change the stats */
-	get(key: string): T | undefined
+	get(key: string): Promise<T | undefined>
 	/** set a key in the cache */
-	set(key: string, value: T): void
+	set(key: string, value: T): Promise<void>
 	/** delete a key from the cache */
-	del(key: string): void
+	del(key: string): Promise<void>
 	/** flush all data */
-	flushAll(): void
+	flushAll(): Promise<void>
 	/** mset multiple values at once */
-	mset?(values: { key: string; value: T }[]): boolean | void
+	mset?(values: { key: string; value: T }[]): Promise<boolean | void>
 	/** get multiple values at once */
-	mget?(keys: string[]): Record<string, unknown> | (T | undefined)[]
+	mget?(keys: string[]): Promise<Record<string, unknown> | (T | undefined)[]>
 }
 
 export type PatchedMessageWithRecipientJID = proto.IMessage & { recipientJid?: string }
