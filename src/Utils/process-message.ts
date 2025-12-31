@@ -150,19 +150,19 @@ const updateGroupMetadata = (
 	action: ParticipantAction,
 	participants: string[]
 ): GroupMetadata => {
-	const findParticipant = (id: string) => groupMetadata.participants.find(p => areJidsSameUser(p.id, id))
+	const findParticipant = (id: string) => groupMetadata.participants?.find(p => areJidsSameUser(p.id, id))
 
 	switch (action) {
 		case 'add':
 			participants.forEach(id => {
 				if (!findParticipant(id)) {
-					groupMetadata.participants.push({ id, admin: null })
+					groupMetadata.participants?.push({ id, admin: null })
 				}
 			})
 			break
 
 		case 'remove':
-			groupMetadata.participants = groupMetadata.participants.filter(p => !participants.includes(p.id))
+			groupMetadata.participants = groupMetadata.participants?.filter(p => !participants.includes(p.id))
 			break
 
 		case 'promote':
