@@ -737,6 +737,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 			if (!isNewsletter) {
 				if (
 					message &&
+					!isRetryResend &&
 					config.sendReportingTag &&
 					shouldIncludeReportingToken(message) &&
 					message.messageContextInfo?.messageSecret &&

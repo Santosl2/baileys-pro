@@ -360,8 +360,6 @@ export const generateForwardMessageContent = (message: WAMessage, forceForward?:
 	return content
 }
 
-
-
 export const generateWAMessageContent = async (
 	message: AnyMessageContent,
 	options: MessageContentGenerationOptions

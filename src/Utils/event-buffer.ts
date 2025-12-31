@@ -570,8 +570,11 @@ function consolidateEvents(data: BufferedEventData) {
 		const notify = messageUpsertList.filter(m => m.type === 'notify')
 		const append = messageUpsertList.filter(m => m.type === 'append')
 
-		if(notify.length > 0 && append.length > 0){
-			console.warn({ notifyCount: notify.length, appendCount: append.length, type, messageUpsertList }, 'Mixed message upsert types in buffer, this may lead to unexpected behavior')
+		if (notify.length > 0 && append.length > 0) {
+			console.warn(
+				{ notifyCount: notify.length, appendCount: append.length, type, messageUpsertList },
+				'Mixed message upsert types in buffer, this may lead to unexpected behavior'
+			)
 		}
 
 		map['messages.upsert'] = {

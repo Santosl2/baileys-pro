@@ -90,7 +90,7 @@ export const generateRegistrationNode = (
 		os: config.browser[0],
 		platformType: getPlatformType(config.browser[1]),
 		requireFullSync: config.syncFullHistory,
-			historySyncConfig: {
+		historySyncConfig: {
 			storageQuotaMb: 10240,
 			inlineInitialPayloadInE2EeMsg: true,
 			recentSyncDaysLimit: undefined,
