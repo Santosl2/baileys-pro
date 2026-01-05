@@ -1073,8 +1073,14 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		exec: (node: BinaryNode, offline: boolean) => Promise<T>
 	) => {
 		ev.buffer()
-		await execTask()
-		ev.flush()
+		try {
+			await execTask()
+		} catch (error) {
+			logger.error({ error, identifier }, 'Error processing node with buffer')
+			throw error
+		} finally {
+			ev.flush()
+		}
 
 		function execTask() {
 			return exec(node, false).catch(err => onUnexpectedError(err, identifier))
@@ -1118,13 +1124,25 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 						continue
 					}
 
-					await nodeProcessor(node)
-				}
+					try {
+						const timeoutPromise = new Promise<void>((_, reject) => {
+							setTimeout(() => reject(new Error(`${type} processing timeout`)), 60000)
+						})
+						//@ts-ignore
+						await Promise.race([nodeProcessor(node), timeoutPromise])
+					} catch (error) {
+						logger.error({ error, type, node }, 'error processing offline node')
+					}
 
-				isProcessing = false
+					isProcessing = false
+				}
 			}
 
-			promise().catch(error => onUnexpectedError(error, 'processing offline nodes'))
+			promise()
+				.catch(error => onUnexpectedError(error, 'processing offline nodes'))
+				.finally(() => {
+					isProcessing = false
+				})
 		}
 
 		return { enqueue }
