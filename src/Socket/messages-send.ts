@@ -351,14 +351,14 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 
 		let shouldIncludeDeviceIdentity = false
 
-		const nodes = await Promise.all(
-			patched.map(async patchedMessageWithJid => {
-				const { recipientJid: jid, ...patchedMessage } = patchedMessageWithJid
-				if (!jid) {
-					return {} as BinaryNode
-				}
+		const encPromises = patched.map(async patchedMessageWithJid => {
+			const { recipientJid: jid, ...patchedMessage } = patchedMessageWithJid
+			if (!jid) {
+				return {} as BinaryNode
+			}
 
-				const bytes = encodeWAMessage(patchedMessage)
+			const bytes = encodeWAMessage(patchedMessage)
+			try {
 				const { type, ciphertext } = await signalRepository.encryptMessage({ jid, data: bytes })
 				if (type === 'pkmsg') {
 					shouldIncludeDeviceIdentity = true
@@ -380,8 +380,19 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 					]
 				}
 				return node
-			})
-		)
+			} catch (error) {
+				logger.error({ jid, trace: error?.stack }, 'failed to encrypt message for participant')
+				return null
+			}
+		})
+
+		const nodes = (await Promise.all(encPromises)).filter(node => node !== null)
+
+		if (jids.length > 0 && nodes.length === 0) {
+			logger.error({ jids }, 'failed to encrypt message for all participants')
+			throw new Boom('All encryptions failed', { statusCode: 500 })
+		}
+
 		return { nodes, shouldIncludeDeviceIdentity }
 	}
 
