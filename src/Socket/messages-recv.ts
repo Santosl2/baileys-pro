@@ -782,6 +782,8 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 					}
 				})
 			])
+		} catch (error) {
+			logger.error({ error, node }, 'error in handling notification')
 		} finally {
 			await sendMessageAck(node)
 		}
