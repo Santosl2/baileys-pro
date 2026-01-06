@@ -328,7 +328,7 @@ export const extractGroupMetadata = (result: BinaryNode) => {
 	const metadata: GroupMetadata = {
 		id: groupId,
 		addressingMode: group.attrs.addressing_mode as 'pn' | 'lid',
-		subject: group.attrs.subject,
+		subject: group.attrs.subject || group.attrs.notify || '',
 		subjectOwner: group.attrs.s_o,
 		subjectOwnerJid: group.attrs.s_o_pn,
 		subjectTime: +group.attrs.s_t,
