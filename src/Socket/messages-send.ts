@@ -781,8 +781,49 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 	}
 
 	const getMessageType = (message: proto.IMessage) => {
-		if (message.pollCreationMessage || message.pollCreationMessageV2 || message.pollCreationMessageV3) {
+		if (message.viewOnceMessage?.message) {
+			return getMessageType(message.viewOnceMessage.message)
+		}
+
+		if (message.viewOnceMessageV2?.message) {
+			return getMessageType(message.viewOnceMessageV2.message)
+		}
+
+		if (message.viewOnceMessageV2Extension?.message) {
+			return getMessageType(message.viewOnceMessageV2Extension.message)
+		}
+
+		if (message.lottieStickerMessage?.message) {
+			return getMessageType(message.lottieStickerMessage.message)
+		}
+
+		if (message.ephemeralMessage?.message) {
+			return getMessageType(message.ephemeralMessage.message)
+		}
+
+		if (message.documentWithCaptionMessage?.message) {
+			return getMessageType(message.documentWithCaptionMessage.message)
+		}
+
+		if (message.reactionMessage || message.encReactionMessage) {
+			return 'reaction'
+		}
+
+		if (
+			message.pollCreationMessage ||
+			message.pollCreationMessageV2 ||
+			message.pollCreationMessageV3 ||
+			message.pollUpdateMessage
+		) {
 			return 'poll'
+		}
+
+		if (message.eventMessage) {
+			return 'event'
+		}
+
+		if (getMediaType(message) !== '') {
+			return 'media'
 		}
 
 		return 'text'
@@ -820,6 +861,8 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		} else if (message.groupInviteMessage) {
 			return 'url'
 		}
+
+		return ''
 	}
 
 	const getButtonType = (message: proto.IMessage) => {
