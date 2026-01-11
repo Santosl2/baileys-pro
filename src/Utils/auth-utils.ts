@@ -28,7 +28,7 @@ export function makeCacheableSignalKeyStore(
 ): SignalKeyStore {
 	const cache =
 		_cache ||
-		new NodeCache({
+		new NodeCache<SignalDataTypeMap[keyof SignalDataTypeMap]>({
 			stdTTL: DEFAULT_CACHE_TTLS.SIGNAL_STORE, // 5 minutes
 			useClones: false,
 			deleteOnExpire: true
@@ -46,25 +46,38 @@ export function makeCacheableSignalKeyStore(
 			return cacheMutex.runExclusive(async () => {
 				const data: { [_: string]: SignalDataTypeMap[typeof type] } = {}
 				const idsToFetch: string[] = []
-				for (const id of ids) {
-					const item = cache.get<SignalDataTypeMap[typeof type]>(getUniqueId(type, id))
-					if (typeof item !== 'undefined') {
-						data[id] = item
-					} else {
-						idsToFetch.push(id)
+
+				const items = await cache.mget?.<SignalDataTypeMap[typeof type]>(ids.map(id => getUniqueId(type, id)))
+				if (items) {
+					for (const id of ids) {
+						const item = items[getUniqueId(type, id)]
+						if (typeof item !== 'undefined') {
+							data[id] = item
+						} else {
+							idsToFetch.push(id)
+						}
 					}
 				}
 
 				if (idsToFetch.length) {
 					logger?.trace({ items: idsToFetch.length }, 'loading from store')
 					const fetched = await store.get(type, idsToFetch)
-					for (const id of idsToFetch) {
-						const item = fetched[id]
-						if (item) {
-							data[id] = item
-							cache.set(getUniqueId(type, id), item)
-						}
-					}
+					const insertItems = idsToFetch
+						.map(id => {
+							const item = fetched[id]
+							if (item) {
+								data[id] = item
+
+								return {
+									key: getUniqueId(type, id),
+									value: fetched[id] as SignalDataTypeMap[keyof SignalDataTypeMap]
+								}
+							}
+
+							return undefined as any
+						})
+						.filter(Boolean)
+					await cache.mset?.(insertItems)
 				}
 
 				return data
@@ -73,21 +86,34 @@ export function makeCacheableSignalKeyStore(
 		async set(data) {
 			return cacheMutex.runExclusive(async () => {
 				let keys = 0
+				const toSave: {
+					key: string
+					value: SignalDataTypeMap[keyof SignalDataTypeMap]
+				}[] = []
+
 				for (const type in data) {
-					for (const id in data[type]) {
-						cache.set(getUniqueId(type, id), data[type][id])
+					let typedType = type as keyof SignalDataTypeMap
+
+					for (const id in data[typedType]) {
+						toSave.push({
+							key: getUniqueId(type, id),
+							value: data[typedType][id] as SignalDataTypeMap[keyof SignalDataTypeMap]
+						})
+
 						keys += 1
 					}
 				}
 
-				logger?.trace({ keys }, 'updated cache')
+				await cache.mset?.(toSave)
 
+				logger?.trace({ keys }, 'updated cache')
 				await store.set(data)
 			})
 		},
 		async clear() {
+			logger?.info('clearing signal store cache')
 			return cacheMutex.runExclusive(async () => {
-				cache.flushAll()
+				await cache.flushAll()
 				await store.clear?.()
 			})
 		}
