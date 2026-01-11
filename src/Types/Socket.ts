@@ -19,6 +19,10 @@ export type CacheStore = {
 	del(key: string): void | Promise<void> | number | boolean
 	/** flush all data */
 	flushAll(): void | Promise<void>
+	/** optional multi-get */
+	mget?<T>(keys: string[]): Promise<Record<string, T | undefined>>
+
+	mset?<T>(entries: { key: string; value: T }[]): Promise<void> | void | number | boolean
 }
 
 export type PossiblyExtendedCacheStore = CacheStore & {
