@@ -1045,7 +1045,10 @@ Selecione e melhor opção:`,
 									msg.message?.conversation?.slice(1).trim().toLowerCase() ||
 									msg.message?.extendedTextMessage?.text?.slice(1).trim().toLowerCase()
 								//
-								if (command === 'test_double_end') {
+
+								if (command === 'ping') {
+									await sock.sendMessage(msg.key.remoteJid!, { text: 'Pong!' })
+								} else if (command === 'test_double_end') {
 									console.log('Testando chamada dupla de end()...')
 
 									// Primeira chamada - fecha a conexão normalmente

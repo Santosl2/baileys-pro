@@ -352,15 +352,13 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 
 		// Cache encoded bytes for identical message objects (common in groups)
 		// but this is good enough for now
-		const encodedCache = new WeakMap<proto.IMessage, Buffer>()
+		let encodedMessage: Buffer | undefined = undefined
 		const getEncodedBytes = (msg: proto.IMessage): Buffer => {
-			let cached = encodedCache.get(msg)
-			if (!cached) {
-				cached = encodeWAMessage(msg)
-				encodedCache.set(msg, cached)
+			if (!encodedMessage) {
+				encodedMessage = encodeWAMessage(msg)
 			}
 
-			return cached
+			return encodedMessage
 		}
 
 		let shouldIncludeDeviceIdentity = false
