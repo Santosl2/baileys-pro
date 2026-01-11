@@ -345,8 +345,22 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 
 	const createParticipantNodes = async (jids: string[], message: proto.IMessage, extraAttrs?: BinaryNode['attrs']) => {
 		let patched = await patchMessageBeforeSending(message, jids)
+
 		if (!Array.isArray(patched)) {
 			patched = jids ? jids.map(jid => ({ recipientJid: jid, ...patched })) : [patched]
+		}
+
+		// Cache encoded bytes for identical message objects (common in groups)
+		// but this is good enough for now
+		const encodedCache = new WeakMap<proto.IMessage, Buffer>()
+		const getEncodedBytes = (msg: proto.IMessage): Buffer => {
+			let cached = encodedCache.get(msg)
+			if (!cached) {
+				cached = encodeWAMessage(msg)
+				encodedCache.set(msg, cached)
+			}
+
+			return cached
 		}
 
 		let shouldIncludeDeviceIdentity = false
@@ -357,7 +371,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				return {} as BinaryNode
 			}
 
-			const bytes = encodeWAMessage(patchedMessage)
+			const bytes = getEncodedBytes(patchedMessage)
 			try {
 				const { type, ciphertext } = await signalRepository.encryptMessage({ jid, data: bytes })
 				if (type === 'pkmsg') {
