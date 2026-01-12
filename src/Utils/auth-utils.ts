@@ -41,13 +41,29 @@ export function makeCacheableSignalKeyStore(
 		return `${type}.${id}`
 	}
 
+	async function cacheGet<T extends keyof SignalDataTypeMap>(type: T, ids: string[]) {
+		const keys = ids.map(id => getUniqueId(type, id))
+
+		if (cache.mget) {
+			return cache.mget(keys) as unknown as Promise<Record<string, SignalDataTypeMap[T] | undefined>>
+		}
+
+		const results: Record<string, SignalDataTypeMap[T] | undefined> = {}
+
+		for (const key of keys) {
+			results[key] = (await cache.get(key)) as SignalDataTypeMap[T] | undefined
+		}
+
+		return results
+	}
+
 	return {
 		async get(type, ids) {
 			return cacheMutex.runExclusive(async () => {
 				const data: { [_: string]: SignalDataTypeMap[typeof type] } = {}
 				const idsToFetch: string[] = []
 
-				const items = await cache.mget?.<SignalDataTypeMap[typeof type]>(ids.map(id => getUniqueId(type, id)))
+				const items = await cacheGet(type, ids)
 				if (items) {
 					for (const id of ids) {
 						const item = items[getUniqueId(type, id)]
@@ -92,7 +108,7 @@ export function makeCacheableSignalKeyStore(
 				}[] = []
 
 				for (const type in data) {
-					let typedType = type as keyof SignalDataTypeMap
+					const typedType = type as keyof SignalDataTypeMap
 
 					for (const id in data[typedType]) {
 						toSave.push({
