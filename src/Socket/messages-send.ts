@@ -369,7 +369,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				return {} as BinaryNode
 			}
 
-			const bytes = encodeWAMessage(patchedMessage)
+			const bytes = getEncodedBytes(patchedMessage)
 			try {
 				const { type, ciphertext } = await signalRepository.encryptMessage({ jid, data: bytes })
 				if (type === 'pkmsg') {

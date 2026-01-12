@@ -1008,11 +1008,11 @@ Selecione e melhor opção:`,
 			}
 
 			if (events['labels.association']) {
-				console.log(events['labels.association'])
+				console.log('labels association', events['labels.association'])
 			}
 
 			if (events['labels.edit']) {
-				console.log(events['labels.edit'])
+				console.log('labels edit', events['labels.edit'])
 			}
 
 			if (events.call) {
@@ -1106,7 +1106,7 @@ Selecione e melhor opção:`,
 
 			// messages updated like status delivered, message deleted etc.
 			if (events['messages.update']) {
-				console.log(JSON.stringify(events['messages.update'], undefined, 2))
+				console.log('messages update', events['messages.update'])
 
 				for (const { key, update } of events['messages.update']) {
 					if (update.pollUpdates) {
@@ -1125,19 +1125,19 @@ Selecione e melhor opção:`,
 			}
 
 			if (events['message-receipt.update']) {
-				console.log(events['message-receipt.update'])
+				console.log('message-receipt update', events['message-receipt.update'])
 			}
 
 			if (events['messages.reaction']) {
-				console.log(events['messages.reaction'])
+				console.log('messages reaction', events['messages.reaction'])
 			}
 
 			if (events['presence.update']) {
-				console.log(events['presence.update'])
+				console.log('presence update', events['presence.update'])
 			}
 
 			if (events['chats.update']) {
-				console.log(events['chats.update'])
+				console.log('chats update', events['chats.update'])
 			}
 
 			if (events['contacts.update']) {
