@@ -215,7 +215,12 @@ export const makeSocket = (config: SocketConfig) => {
 
 		const msgId = node.attrs.id
 
-		const [result] = await Promise.all([waitForMessage(msgId, timeoutMs), sendNode(node)])
+		const result = await promiseTimeout<any>(timeoutMs, async (resolve, reject) => {
+			const result = waitForMessage(msgId, timeoutMs).catch(reject)
+			sendNode(node)
+				.then(async () => resolve(await result))
+				.catch(reject)
+		})
 
 		if ('tag' in result) {
 			assertNodeErrorFree(result)
