@@ -31,7 +31,9 @@ export const NOISE_WA_HEADER = Buffer.from([87, 65, 6, DICT_VERSION]) // last is
 export const URL_REGEX = /https:\/\/(?![^:@\/\s]+:[^:@\/\s]+@)[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(:\d+)?(\/[^\s]*)?/g
 
 export const WA_CERT_DETAILS = {
-	SERIAL: 0
+	SERIAL: 0,
+	ISSUER: 'WhatsAppLongTerm1',
+	PUBLIC_KEY: Buffer.from('142375574d0a587166aae71ebe516437c4a28b73e3695c6ce1f7f9545da8ee6b', 'hex')
 }
 
 export const PROCESSABLE_HISTORY_TYPES = [
