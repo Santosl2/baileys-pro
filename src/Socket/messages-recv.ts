@@ -845,6 +845,10 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 						return sendMessageAck(node, NACK_REASONS.ParsingError)
 					}
 
+					if (msg.messageStubParameters?.[0] === NO_MESSAGE_FOUND_ERROR_TEXT) {
+						return sendMessageAck(node)
+					}
+
 					const errorMessage = msg?.messageStubParameters?.[0] || ''
 					const isPreKeyError = errorMessage.includes('PreKey')
 
