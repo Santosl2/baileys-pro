@@ -57,6 +57,20 @@ export function makeCacheableSignalKeyStore(
 		return results
 	}
 
+	type CacheValue = SignalDataTypeMap[keyof SignalDataTypeMap]
+
+	async function cacheMset(entries: Array<{ key: string; value: CacheValue }>): Promise<void> {
+		if (entries.length === 0) return
+
+		if (cache.mset) {
+			await cache.mset(entries)
+		} else {
+			for (const { key, value } of entries) {
+				await cache.set(key, value)
+			}
+		}
+	}
+
 	return {
 		async get(type, ids) {
 			return cacheMutex.runExclusive(async () => {
@@ -120,7 +134,7 @@ export function makeCacheableSignalKeyStore(
 					}
 				}
 
-				await cache.mset?.(toSave)
+				await cacheMset(toSave)
 
 				logger?.trace({ keys }, 'updated cache')
 				await store.set(data)
