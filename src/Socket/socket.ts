@@ -641,6 +641,7 @@ export const makeSocket = (config: SocketConfig) => {
 		let qrMs = qrTimeout || 60_000 // time to let a QR live
 		const genPairQR = () => {
 			if (!ws.isOpen) {
+				logger.error('stopped generating QR codes as the connection is closed')
 				return
 			}
 
