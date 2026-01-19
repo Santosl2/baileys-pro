@@ -656,6 +656,7 @@ export const makeSocket = (config: SocketConfig) => {
 
 			ev.emit('connection.update', { qr })
 
+			if (qrTimer) clearTimeout(qrTimer)
 			qrTimer = setTimeout(genPairQR, qrMs)
 			qrMs = qrTimeout || 20_000 // shorter subsequent qrs
 		}
