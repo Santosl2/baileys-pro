@@ -3,7 +3,7 @@ import { Boom } from '@hapi/boom'
 import { randomBytes } from 'crypto'
 import Long from 'long'
 import { proto } from '../../WAProto'
-import { DEFAULT_CACHE_TTLS, KEY_BUNDLE_TYPE, MIN_PREKEY_COUNT } from '../Defaults'
+import { DEFAULT_CACHE_TTLS, KEY_BUNDLE_TYPE, MIN_PREKEY_COUNT, STATUS_EXPIRY_SECONDS } from '../Defaults'
 import {
 	MessageReceiptType,
 	MessageRelayOptions,
@@ -35,6 +35,7 @@ import {
 	MISSING_KEYS_ERROR_TEXT,
 	NACK_REASONS,
 	NO_MESSAGE_FOUND_ERROR_TEXT,
+	toNumber,
 	unixTimestampSeconds,
 	xmppPreKey,
 	xmppSignedPreKey
@@ -49,6 +50,7 @@ import {
 	getBinaryNodeChildren,
 	getBinaryNodeChildString,
 	isJidGroup,
+	isJidNewsletter,
 	isJidStatusBroadcast,
 	isJidUser,
 	jidDecode,
@@ -840,13 +842,24 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 			await messageMutex.mutex(async () => {
 				await decrypt()
 				// message failed to decrypt
-				if (msg.messageStubType === proto.WebMessageInfo.StubType.CIPHERTEXT) {
+				if (msg.messageStubType === proto.WebMessageInfo.StubType.CIPHERTEXT && msg.category !== 'peer') {
 					if (msg?.messageStubParameters?.[0] === MISSING_KEYS_ERROR_TEXT) {
 						return sendMessageAck(node, NACK_REASONS.ParsingError)
 					}
 
 					if (msg.messageStubParameters?.[0] === NO_MESSAGE_FOUND_ERROR_TEXT) {
 						return sendMessageAck(node)
+					}
+
+					if (isJidStatusBroadcast(msg.key.remoteJid!)) {
+						const messageAge = unixTimestampSeconds() - toNumber(msg.messageTimestamp)
+						if (messageAge > STATUS_EXPIRY_SECONDS) {
+							logger.debug(
+								{ msgId: msg.key.id, messageAge, remoteJid: msg.key.remoteJid },
+								'skipping retry for expired status message'
+							)
+							return sendMessageAck(node)
+						}
 					}
 
 					const errorMessage = msg?.messageStubParameters?.[0] || ''
@@ -895,30 +908,37 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 						await sendMessageAck(node, NACK_REASONS.UnhandledError)
 					})
 				} else {
-					// no type in the receipt => message delivered
-					let type: MessageReceiptType = undefined
-					let participant = msg.key.participant
-					if (category === 'peer') {
-						// special peer message
-						type = 'peer_msg'
-					} else if (msg.key.fromMe) {
-						// message was sent by us from a different device
-						type = 'sender'
-						// need to specially handle this case
-						if (isJidUser(msg.key.remoteJid!)) {
-							participant = author
+					const isNewsletter = isJidNewsletter(msg.key.remoteJid!)
+
+					if (isNewsletter) {
+						await sendMessageAck(node)
+						logger.debug({ key: msg.key }, 'processed newsletter message without receipts')
+					} else {
+						// no type in the receipt => message delivered
+						let type: MessageReceiptType = undefined
+						let participant = msg.key.participant
+						if (category === 'peer') {
+							// special peer message
+							type = 'peer_msg'
+						} else if (msg.key.fromMe) {
+							// message was sent by us from a different device
+							type = 'sender'
+							// need to specially handle this case
+							if (isJidUser(msg.key.remoteJid!)) {
+								participant = author
+							}
+						} else if (!sendActiveReceipts) {
+							type = 'inactive'
 						}
-					} else if (!sendActiveReceipts) {
-						type = 'inactive'
-					}
 
-					await sendReceipt(msg.key.remoteJid!, participant!, [msg.key.id!], type)
+						await sendReceipt(msg.key.remoteJid!, participant!, [msg.key.id!], type)
 
-					// send ack for history message
-					const isAnyHistoryMsg = getHistoryMsg(msg.message!)
-					if (isAnyHistoryMsg) {
-						const jid = jidNormalizedUser(msg.key.remoteJid!)
-						await sendReceipt(jid, undefined, [msg.key.id!], 'hist_sync')
+						// send ack for history message
+						const isAnyHistoryMsg = getHistoryMsg(msg.message!)
+						if (isAnyHistoryMsg) {
+							const jid = jidNormalizedUser(msg.key.remoteJid!)
+							await sendReceipt(jid, undefined, [msg.key.id!], 'hist_sync')
+						}
 					}
 				}
 

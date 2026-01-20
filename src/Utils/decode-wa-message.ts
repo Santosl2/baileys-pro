@@ -129,6 +129,7 @@ export function decodeMessageNode(stanza: BinaryNode, meId: string, meLid: strin
 
 	const fullMessage: WAMessage = {
 		key,
+		category: stanza.attrs.category,
 		messageTimestamp: +stanza.attrs.t,
 		pushName: pushname,
 		broadcast: isJidBroadcast(from)

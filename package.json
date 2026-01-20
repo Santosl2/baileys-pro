@@ -47,6 +47,7 @@
     "axios": "^1.6.0",
     "libsignal": "github:vinikjkkj/libsignal-node",
     "lodash": "^4.17.21",
+    "lru-cache": "^11.2.4",
     "music-metadata": "^7.12.3",
     "node-addon-api": "^8.5.0",
     "pino": "^9.6",

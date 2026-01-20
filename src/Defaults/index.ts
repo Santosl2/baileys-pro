@@ -36,6 +36,9 @@ export const WA_CERT_DETAILS = {
 	PUBLIC_KEY: Buffer.from('142375574d0a587166aae71ebe516437c4a28b73e3695c6ce1f7f9545da8ee6b', 'hex')
 }
 
+/** Status messages older than 24 hours are considered expired */
+export const STATUS_EXPIRY_SECONDS = 24 * 60 * 60
+
 export const PROCESSABLE_HISTORY_TYPES = [
 	proto.Message.HistorySyncNotification.HistorySyncType.INITIAL_BOOTSTRAP,
 	proto.Message.HistorySyncNotification.HistorySyncType.PUSH_NAME,
