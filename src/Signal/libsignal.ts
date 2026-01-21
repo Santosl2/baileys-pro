@@ -176,9 +176,14 @@ function signalStorage({ creds, keys }: SignalAuthState): SenderKeyStore & Recor
 			return new SenderKeyRecord()
 		},
 		storeSenderKey: async (senderKeyName: SenderKeyName, key: SenderKeyRecord) => {
-			const keyId = senderKeyName.toString()
-			const serialized = JSON.stringify(key.serialize())
-			await keys.set({ 'sender-key': { [keyId]: Buffer.from(serialized, 'utf-8') } })
+			try {
+				const keyId = senderKeyName.toString()
+				const serialized = JSON.stringify(key.serialize())
+				await keys.set({ 'sender-key': { [keyId]: Buffer.from(serialized, 'utf-8') } })
+			} catch (error) {
+				logger.error({ senderKeyName, error, key }, 'Failed to store sender key')
+				throw error
+			}
 		},
 		getOurRegistrationId: () => creds.registrationId,
 		getOurIdentity: () => {

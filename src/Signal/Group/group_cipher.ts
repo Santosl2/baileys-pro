@@ -59,7 +59,7 @@ export class GroupCipher {
 			}
 
 			const senderKeyMessage = new SenderKeyMessage(null, null, null, null, senderKeyMessageBytes)
-			let senderKeyState = record.getSenderKeyState(senderKeyMessage.getKeyId())
+			const senderKeyState = record.getSenderKeyState(senderKeyMessage.getKeyId())
 
 			if (!senderKeyState) {
 				throw new Error('No session found to decrypt message')
