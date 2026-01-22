@@ -35,6 +35,7 @@ import {
 	MISSING_KEYS_ERROR_TEXT,
 	NACK_REASONS,
 	NO_MESSAGE_FOUND_ERROR_TEXT,
+	toNumber,
 	unixTimestampSeconds,
 	xmppPreKey,
 	xmppSignedPreKey
@@ -847,6 +848,26 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 				if (msg.messageStubType === proto.WebMessageInfo.StubType.CIPHERTEXT) {
 					if (msg?.messageStubParameters?.[0] === MISSING_KEYS_ERROR_TEXT) {
 						return sendMessageAck(node, NACK_REASONS.ParsingError)
+					}
+
+					if (msg.messageStubParameters?.[0] === NO_MESSAGE_FOUND_ERROR_TEXT) {
+						// Skip old messages
+						const messageAge = unixTimestampSeconds() - toNumber(msg.messageTimestamp)
+						const MAX_PLACEHOLDER_RESEND_AGE = 7 * 24 * 60 * 60 // 7 days
+
+						if (messageAge > MAX_PLACEHOLDER_RESEND_AGE) {
+							logger.debug({ msgId: msg.key.id, messageAge }, 'skipping placeholder resend for old message')
+							return sendMessageAck(node)
+						}
+
+						logger.debug('Message absent from node, requesting placeholder resend from phone')
+
+						// Fire and forget - don't block ACK
+						requestPlaceholderResend(msg.key).catch(error => {
+							logger.error({ error }, 'Failed to request placeholder resend')
+						})
+
+						return sendMessageAck(node)
 					}
 
 					const errorMessage = msg?.messageStubParameters?.[0] || ''
