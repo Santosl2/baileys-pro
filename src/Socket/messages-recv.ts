@@ -59,6 +59,7 @@ import {
 } from '../WABinary'
 import { extractGroupMetadata } from './groups'
 import { makeMessagesSocket } from './messages-send'
+import { handleIdentityChange } from '../Utils/identity-change-handler'
 
 export const makeMessagesRecvSocket = (config: SocketConfig) => {
 	const { logger, retryRequestDelayMs, maxMsgRetryCount, getMessage, shouldIgnoreJid, recentMessageSentHistory } =
@@ -269,23 +270,16 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 				await uploadPreKeys()
 			}
 		} else {
-			const identityNode = getBinaryNodeChild(node, 'identity')
-			if (identityNode) {
-				logger.info({ jid: from }, 'identity changed')
+			const result = await handleIdentityChange(node, {
+				meId: authState.creds.me?.id,
+				meLid: authState.creds.me?.lid,
+				validateSession: signalRepository.validateSession,
+				assertSessions,
+				debounceCache: identityAssertDebounce,
+				logger
+			})
 
-				if (identityAssertDebounce.get(from)) {
-					logger.debug({ jid: from }, 'skipping identity assert (debounced)')
-					return
-				}
-
-				identityAssertDebounce.set(from, true)
-
-				try {
-					await assertSessions([from], true)
-				} catch (error) {
-					logger.warn({ error, jid: from }, 'failed to assert sessions after identity change')
-				}
-			} else {
+			if (result.action === 'no_identity_node') {
 				logger.info({ node }, 'unknown encrypt notification')
 			}
 		}

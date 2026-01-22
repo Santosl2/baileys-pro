@@ -57,6 +57,7 @@ export type SignalRepository = {
 		type: 'pkmsg' | 'msg'
 		ciphertext: Uint8Array
 	}>
+	validateSession(jid: string): Promise<{ exists: boolean; reason?: string }>
 	encryptGroupMessage(opts: EncryptGroupMessageOpts): Promise<{
 		senderKeyDistributionMessage: Uint8Array
 		ciphertext: Uint8Array
