@@ -519,27 +519,31 @@ export const downloadEncryptedContent = async (
 	let bytesFetched = 0
 	let startChunk = 0
 	let firstBlockIsIV = false
-
-	if (typeof startByte === 'number') {
-		const chunk = toSmallestChunkSize(startByte)
-		if (chunk > 0) {
-			startChunk = Math.max(chunk - AES_CHUNK_SIZE, 0)
+	// if a start byte is specified -- then we need to fetch the previous chunk as that will form the IV
+	if (startByte) {
+		const chunk = toSmallestChunkSize(startByte || 0)
+		if (chunk) {
+			startChunk = chunk - AES_CHUNK_SIZE
 			bytesFetched = chunk
+
 			firstBlockIsIV = true
 		}
 	}
 
-	const endChunk = typeof endByte === 'number' ? toSmallestChunkSize(endByte) + AES_CHUNK_SIZE : undefined
+	const endChunk = endByte ? toSmallestChunkSize(endByte || 0) + AES_CHUNK_SIZE : undefined
 
 	const headers: AxiosRequestConfig['headers'] = {
 		...(options?.headers || {}),
 		Origin: DEFAULT_ORIGIN
 	}
-
-	if (startChunk || endChunk !== undefined) {
-		headers.Range = `bytes=${startChunk}-${endChunk ?? ''}`
+	if (startChunk || endChunk) {
+		headers.Range = `bytes=${startChunk}-`
+		if (endChunk) {
+			headers.Range += endChunk
+		}
 	}
 
+	// download the message
 	const fetched = await getHttpStream(downloadUrl, {
 		...(options || {}),
 		headers,
@@ -547,20 +551,17 @@ export const downloadEncryptedContent = async (
 		maxContentLength: Infinity
 	})
 
-	let remainingBytes = Buffer.alloc(0)
-	let aes: Crypto.Decipher | undefined
+	let remainingBytes = Buffer.from([])
 
-	const pushBytes = (bytes: Buffer, push: (b: Buffer) => void) => {
-		if (typeof startByte === 'number' || typeof endByte === 'number') {
-			const start =
-				typeof startByte === 'number' && bytesFetched < startByte ? Math.max(startByte - bytesFetched, 0) : undefined
+	let aes: Crypto.Decipher
 
-			const end =
-				typeof endByte === 'number' && bytesFetched + bytes.length > endByte
-					? Math.max(endByte - bytesFetched, 0)
-					: undefined
+	const pushBytes = (bytes: Buffer, push: (bytes: Buffer) => void) => {
+		if (startByte || endByte) {
+			const start = bytesFetched >= startByte! ? undefined : Math.max(startByte! - bytesFetched, 0)
+			const end = bytesFetched + bytes.length < endByte! ? undefined : Math.max(endByte! - bytesFetched, 0)
 
 			push(bytes.subarray(start, end))
+
 			bytesFetched += bytes.length
 		} else {
 			push(bytes)
@@ -572,11 +573,6 @@ export const downloadEncryptedContent = async (
 			let data = Buffer.concat([remainingBytes, chunk])
 
 			const decryptLength = toSmallestChunkSize(data.length)
-			if (decryptLength === 0) {
-				remainingBytes = data
-				return callback()
-			}
-
 			remainingBytes = data.subarray(decryptLength)
 			data = data.subarray(0, decryptLength)
 
@@ -588,28 +584,21 @@ export const downloadEncryptedContent = async (
 				}
 
 				aes = Crypto.createDecipheriv('aes-256-cbc', cipherKey, ivValue)
-
 				// if an end byte that is not EOF is specified
 				// stop auto padding (PKCS7) -- otherwise throws an error for decryption
-				if (typeof endByte === 'number' && endChunk !== undefined) {
+				if (endByte) {
 					aes.setAutoPadding(false)
 				}
 			}
 
 			try {
-				if (data.length > 0) {
-					pushBytes(aes.update(data), b => this.push(b))
-				}
-
+				pushBytes(aes.update(data), b => this.push(b))
 				callback()
 			} catch (error) {
 				callback(error)
 			}
 		},
-
 		final(callback) {
-			if (!aes) return callback()
-
 			try {
 				pushBytes(aes.final(), b => this.push(b))
 				callback()
