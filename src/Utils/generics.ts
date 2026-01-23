@@ -436,3 +436,7 @@ export function bytesToCrockford(buffer: Buffer): string {
 export function encodeNewsletterMessage(message: proto.IMessage): Uint8Array {
 	return proto.Message.encode(message).finish()
 }
+
+export const isStringNullOrEmpty = (value: string | null | undefined): value is null | undefined | '' =>
+	// eslint-disable-next-line eqeqeq
+	value == null || value === ''
