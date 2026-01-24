@@ -362,6 +362,21 @@ export async function generateThumbnail(
 	}
 }
 
+export const getHttpStreamFetch = async (url: string | URL, options: RequestInit & { isStream?: true } = {}) => {
+	const response = await fetch(url.toString(), {
+		//@ts-ignore
+		dispatcher: options.dispatcher,
+		method: 'GET',
+		headers: options.headers as HeadersInit
+	})
+	if (!response.ok) {
+		throw new Boom(`Failed to fetch stream from ${url}`, { statusCode: response.status, data: { url } })
+	}
+
+	// @ts-ignore Node18+ Readable.fromWeb exists
+	return response.body instanceof Readable ? response.body : Readable.fromWeb(response.body as any)
+}
+
 export const getHttpStream = async (url: string | URL, options: AxiosRequestConfig & { isStream?: true } = {}) => {
 	const fetched = await axios.get(url.toString(), { ...options, responseType: 'stream' })
 	return fetched.data as Readable
@@ -486,7 +501,7 @@ const toSmallestChunkSize = (num: number) => {
 export type MediaDownloadOptions = {
 	startByte?: number
 	endByte?: number
-	options?: AxiosRequestConfig<{}>
+	options?: AxiosRequestConfig<{}> | RequestInit
 }
 
 export const getUrlFromDirectPath = (directPath: string) => `https://${DEF_HOST}${directPath}`
@@ -532,8 +547,13 @@ export const downloadEncryptedContent = async (
 
 	const endChunk = endByte ? toSmallestChunkSize(endByte || 0) + AES_CHUNK_SIZE : undefined
 
-	const headers: AxiosRequestConfig['headers'] = {
-		...(options?.headers || {}),
+	const headersInit = options?.headers ? options.headers : undefined
+	const headers: Record<string, string> = {
+		...(headersInit
+			? Array.isArray(headersInit)
+				? Object.fromEntries(headersInit)
+				: (headersInit as Record<string, string>)
+			: {}),
 		Origin: DEFAULT_ORIGIN
 	}
 	if (startChunk || endChunk) {
@@ -544,12 +564,10 @@ export const downloadEncryptedContent = async (
 	}
 
 	// download the message
-	const fetched = await getHttpStream(downloadUrl, {
+	const fetched = await getHttpStreamFetch(downloadUrl, {
 		...(options || {}),
-		headers,
-		maxBodyLength: Infinity,
-		maxContentLength: Infinity
-	})
+		headers
+	} as RequestInit)
 
 	let remainingBytes = Buffer.from([])
 
@@ -560,7 +578,7 @@ export const downloadEncryptedContent = async (
 			const start = bytesFetched >= startByte! ? undefined : Math.max(startByte! - bytesFetched, 0)
 			const end = bytesFetched + bytes.length < endByte! ? undefined : Math.max(endByte! - bytesFetched, 0)
 
-			push(bytes.subarray(start, end))
+			push(bytes.slice(start, end))
 
 			bytesFetched += bytes.length
 		} else {
@@ -573,14 +591,14 @@ export const downloadEncryptedContent = async (
 			let data = Buffer.concat([remainingBytes, chunk])
 
 			const decryptLength = toSmallestChunkSize(data.length)
-			remainingBytes = data.subarray(decryptLength)
-			data = data.subarray(0, decryptLength)
+			remainingBytes = data.slice(decryptLength)
+			data = data.slice(0, decryptLength)
 
 			if (!aes) {
 				let ivValue = iv
 				if (firstBlockIsIV) {
-					ivValue = data.subarray(0, AES_CHUNK_SIZE)
-					data = data.subarray(AES_CHUNK_SIZE)
+					ivValue = data.slice(0, AES_CHUNK_SIZE)
+					data = data.slice(AES_CHUNK_SIZE)
 				}
 
 				aes = Crypto.createDecipheriv('aes-256-cbc', cipherKey, ivValue)
@@ -594,7 +612,7 @@ export const downloadEncryptedContent = async (
 			try {
 				pushBytes(aes.update(data), b => this.push(b))
 				callback()
-			} catch (error) {
+			} catch (error: any) {
 				callback(error)
 			}
 		},
@@ -602,7 +620,7 @@ export const downloadEncryptedContent = async (
 			try {
 				pushBytes(aes.final(), b => this.push(b))
 				callback()
-			} catch (error) {
+			} catch (error: any) {
 				callback(error)
 			}
 		}
