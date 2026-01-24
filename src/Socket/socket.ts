@@ -10,6 +10,8 @@ import {
 	MIN_PREKEY_COUNT,
 	MIN_UPLOAD_INTERVAL,
 	NOISE_WA_HEADER,
+	PROCESSABLE_HISTORY_TYPES,
+	TimeMs,
 	UPLOAD_TIMEOUT
 } from '../Defaults'
 import type { LIDMapping, SocketConfig } from '../Types'
@@ -75,6 +77,8 @@ export const makeSocket = (config: SocketConfig) => {
 	} = config
 
 	const publicWAMBuffer = new BinaryInfo()
+
+	let serverTimeOffsetMs = 0
 
 	const uqTagId = generateMdTagPrefix()
 	const generateMessageTag = () => `${uqTagId}${epoch++}`
@@ -887,6 +891,7 @@ export const makeSocket = (config: SocketConfig) => {
 	ws.on('CB:iq,,pair-success', async (stanza: BinaryNode) => {
 		logger.debug('pair success recv')
 		try {
+			updateServerTimeOffset(stanza)
 			const { reply, creds: updatedCreds } = configureSuccessfulPairing(stanza, creds)
 
 			logger.info(
@@ -898,6 +903,7 @@ export const makeSocket = (config: SocketConfig) => {
 			ev.emit('connection.update', { isNewLogin: true, qr: undefined })
 
 			await sendNode(reply)
+			void sendUnifiedSession()
 		} catch (error: any) {
 			logger.info({ trace: error.stack }, 'error in pairing')
 			end(error)
@@ -906,6 +912,7 @@ export const makeSocket = (config: SocketConfig) => {
 	// login complete
 	ws.on('CB:success', async (node: BinaryNode) => {
 		try {
+			updateServerTimeOffset(node)
 			await uploadPreKeysToServerIfRequired()
 			await sendPassiveIq('active')
 
@@ -925,6 +932,7 @@ export const makeSocket = (config: SocketConfig) => {
 		ev.emit('creds.update', { me: { ...authState.creds.me!, lid: node.attrs.lid } })
 
 		ev.emit('connection.update', { connection: 'open' })
+		void sendUnifiedSession()
 
 		if (node.attrs.lid && authState.creds.me?.id) {
 			const myLID = node.attrs.lid
@@ -1033,6 +1041,54 @@ export const makeSocket = (config: SocketConfig) => {
 		Object.assign(creds, update)
 	})
 
+	const updateServerTimeOffset = ({ attrs }: BinaryNode) => {
+		const tValue = attrs?.t
+		if (!tValue) {
+			return
+		}
+
+		const parsed = Number(tValue)
+		if (Number.isNaN(parsed) || parsed <= 0) {
+			return
+		}
+
+		const localMs = Date.now()
+		serverTimeOffsetMs = parsed * 1000 - localMs
+		logger.debug({ offset: serverTimeOffsetMs }, 'calculated server time offset')
+	}
+
+	const getUnifiedSessionId = () => {
+		const offsetMs = 3 * TimeMs.Day
+		const now = Date.now() + serverTimeOffsetMs
+		const id = (now + offsetMs) % TimeMs.Week
+		return id.toString()
+	}
+
+	const sendUnifiedSession = async () => {
+		if (!ws.isOpen) {
+			return
+		}
+
+		const node = {
+			tag: 'ib',
+			attrs: {},
+			content: [
+				{
+					tag: 'unified_session',
+					attrs: {
+						id: getUnifiedSessionId()
+					}
+				}
+			]
+		}
+
+		try {
+			await sendNode(node)
+		} catch (error) {
+			logger.debug({ error }, 'failed to send unified_session telemetry')
+		}
+	}
+
 	return {
 		type: 'md' as 'md',
 		ws,
@@ -1056,6 +1112,8 @@ export const makeSocket = (config: SocketConfig) => {
 		digestKeyBundle,
 		rotateSignedPreKey,
 		requestPairingCode,
+		updateServerTimeOffset,
+		sendUnifiedSession,
 		wamBuffer: publicWAMBuffer,
 		/** Waits for the connection to WA to reach a state */
 		waitForConnectionUpdate: bindWaitForConnectionUpdate(ev),
