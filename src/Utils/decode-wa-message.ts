@@ -238,6 +238,7 @@ export const decryptMessageNode = (
 						const errorContext = {
 							key: fullMessage.key,
 							err,
+							errMessage: err.message,
 							messageType: tag === 'plaintext' ? 'plaintext' : attrs.type,
 							sender,
 							author
