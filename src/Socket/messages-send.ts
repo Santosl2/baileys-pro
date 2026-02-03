@@ -34,6 +34,7 @@ import {
 	unixTimestampSeconds
 } from '../Utils'
 import { getUrlInfo } from '../Utils/link-preview'
+import { MessageRetryManager } from '../Utils/message-retry-manager'
 import { getMessageReportingToken, shouldIncludeReportingToken } from '../Utils/reporting-utils'
 import {
 	areJidsSameUser,
@@ -62,7 +63,8 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		options: axiosOptions,
 		patchMessageBeforeSending,
 		groupMetadataCache,
-		recentMessageSentHistory
+		recentMessageSentHistory,
+		maxMsgRetryCount
 	} = config
 	const sock: NewsletterSocket = makeNewsletterSocket(makeGroupsSocket(config))
 	const {
@@ -85,6 +87,8 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 			useClones: false
 		})
 
+	const messageRetryManager = new MessageRetryManager(logger, maxMsgRetryCount)
+
 	let mediaConn: Promise<MediaConnInfo>
 	const refreshMediaConn = async (forceGet = false) => {
 		const media = await mediaConn
@@ -105,8 +109,8 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 						hostname: attrs.hostname,
 						maxContentLengthBytes: +attrs.maxContentLengthBytes
 					})),
-					auth: mediaConnNode!.attrs.auth,
-					ttl: +mediaConnNode!.attrs.ttl,
+					auth: mediaConnNode.attrs.auth,
+					ttl: +mediaConnNode.attrs.ttl,
 					fetchDate: new Date()
 				}
 				logger.debug('fetched media conn')
@@ -1179,6 +1183,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 
 				return fullMsg
 			}
-		}
+		},
+		messageRetryManager
 	}
 }

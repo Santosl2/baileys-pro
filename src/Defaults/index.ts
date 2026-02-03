@@ -92,6 +92,7 @@ export const DEFAULT_CONNECTION_CONFIG: SocketConfig = {
 
 	groupMetadataCache: cachedGroupMetadata as any,
 
+	enableAutoSessionRecreation: false,
 	sendReportingTag: true,
 
 	recentMessageSentHistory: {

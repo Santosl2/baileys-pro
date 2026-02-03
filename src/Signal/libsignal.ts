@@ -1,4 +1,5 @@
 import * as libsignal from 'libsignal'
+import { PreKeyWhisperMessage } from 'libsignal/src/protobufs'
 import { SignalAuthState, SignalKeyStoreWithTransaction } from '../Types'
 import { SignalRepository } from '../Types/Signal'
 import { generateSignalPubKey } from '../Utils'
@@ -8,6 +9,30 @@ import type { SenderKeyStore } from './Group/group_cipher'
 import { SenderKeyName } from './Group/sender-key-name'
 import { SenderKeyRecord } from './Group/sender-key-record'
 import { GroupCipher, GroupSessionBuilder, SenderKeyDistributionMessage } from './Group'
+
+function extractIdentityFromPkmsg(ciphertext: Uint8Array): Uint8Array | undefined {
+	try {
+		if (!ciphertext || ciphertext.length < 2) {
+			return undefined
+		}
+
+		// Version byte check (version 3)
+		const version = ciphertext[0]
+		if ((version & 0xf) !== 3) {
+			return undefined
+		}
+
+		// Parse protobuf (skip version byte)
+		const preKeyProto = PreKeyWhisperMessage.decode(ciphertext.slice(1))
+		if (preKeyProto.identityKey?.length === 33) {
+			return new Uint8Array(preKeyProto.identityKey)
+		}
+
+		return undefined
+	} catch {
+		return undefined
+	}
+}
 
 export function makeLibSignalRepository(auth: SignalAuthState): SignalRepository {
 	const storage: SenderKeyStore = signalStorage(auth)
@@ -72,6 +97,21 @@ export function makeLibSignalRepository(auth: SignalAuthState): SignalRepository
 
 			// Use transaction to ensure atomicityAdd commentMore actions
 			return (auth.keys as SignalKeyStoreWithTransaction).transaction(async () => {
+				if (type === 'pkmsg') {
+					const identityKey = extractIdentityFromPkmsg(ciphertext)
+					if (identityKey) {
+						const addrStr = addr.toString()
+						const identityChanged = await storage.saveIdentity(addrStr, identityKey)
+						if (identityChanged) {
+							logger.debug(
+								{ jid, addr: addrStr },
+								'identity key changed or new contact, session will be re-established'
+							) // todo: remove later
+							logger.info({ jid, addr: addrStr }, 'identity key changed or new contact, session will be re-established')
+						}
+					}
+				}
+
 				let result: Buffer
 				switch (type) {
 					case 'pkmsg':
@@ -154,6 +194,37 @@ const jidToSignalSenderKeyName = (group: string, user: string): SenderKeyName =>
 
 function signalStorage({ creds, keys }: SignalAuthState): SenderKeyStore & Record<string, any> {
 	return {
+		loadIdentityKey: async (id: string) => {
+			const wireJid = id
+			const { [wireJid]: key } = await keys.get('identity-key', [wireJid])
+			return key || undefined
+		},
+		saveIdentity: async (id: string, identityKey: Uint8Array): Promise<boolean> => {
+			const wireJid = id
+			const { [wireJid]: existingKey } = await keys.get('identity-key', [wireJid])
+
+			const keysMatch =
+				existingKey &&
+				existingKey.length === identityKey.length &&
+				existingKey.every((byte, i) => byte === identityKey[i])
+
+			if (existingKey && !keysMatch) {
+				// Identity changed - clear session and update key
+				await keys.set({
+					session: { [wireJid]: null },
+					'identity-key': { [wireJid]: identityKey }
+				})
+				return true
+			}
+
+			if (!existingKey) {
+				// New contact - Trust on First Use (TOFU)
+				await keys.set({ 'identity-key': { [wireJid]: identityKey } })
+				return true
+			}
+
+			return false
+		},
 		loadSession: async (id: string) => {
 			const { [id]: sess } = await keys.get('session', [id])
 			if (sess) {

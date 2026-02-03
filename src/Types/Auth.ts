@@ -73,6 +73,7 @@ export type SignalDataTypeMap = {
 	'tc-token': { token: Buffer; timestamp?: string }
 	'app-state-sync-key': proto.Message.IAppStateSyncKeyData
 	'app-state-sync-version': LTHashState
+	'identity-key': Uint8Array
 }
 
 export type SignalDataSet = { [T in keyof SignalDataTypeMap]?: { [id: string]: SignalDataTypeMap[T] | null } }

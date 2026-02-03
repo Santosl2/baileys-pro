@@ -165,4 +165,6 @@ export type SocketConfig = {
 	makeSignalRepository: (auth: SignalAuthState) => SignalRepository
 
 	sendReportingTag?: boolean
+
+	enableAutoSessionRecreation?: boolean
 }

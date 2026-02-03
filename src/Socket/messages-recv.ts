@@ -40,6 +40,7 @@ import {
 	xmppPreKey,
 	xmppSignedPreKey
 } from '../Utils'
+import { handleIdentityChange } from '../Utils/identity-change-handler'
 import { makeMutex } from '../Utils/make-mutex'
 import {
 	areJidsSameUser,
@@ -59,11 +60,17 @@ import {
 } from '../WABinary'
 import { extractGroupMetadata } from './groups'
 import { makeMessagesSocket } from './messages-send'
-import { handleIdentityChange } from '../Utils/identity-change-handler'
 
 export const makeMessagesRecvSocket = (config: SocketConfig) => {
-	const { logger, retryRequestDelayMs, maxMsgRetryCount, getMessage, shouldIgnoreJid, recentMessageSentHistory } =
-		config
+	const {
+		logger,
+		retryRequestDelayMs,
+		maxMsgRetryCount,
+		enableAutoSessionRecreation,
+		getMessage,
+		shouldIgnoreJid,
+		recentMessageSentHistory
+	} = config
 	const sock = makeMessagesSocket(config)
 	const {
 		ev,
@@ -82,7 +89,8 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		relayMessage,
 		sendReceipt,
 		uploadPreKeys,
-		sendPeerDataOperationMessage
+		sendPeerDataOperationMessage,
+		messageRetryManager
 	} = sock
 
 	/** this mutex ensures that each retryRequest will wait for the previous one to finish */
@@ -195,6 +203,29 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 			logger.debug(`sendRetryRequest: requested placeholder resend for message ${msgId}`)
 		}
 
+		let shouldRecreateSession = (await signalRepository.validateSession(fromJid)).exists !== true
+		let recreateReason = ''
+
+		if (enableAutoSessionRecreation && messageRetryManager && retryCount > 1) {
+			try {
+				// Check if we have a session with this JID
+				const sessionId = signalRepository.jidToSignalProtocolAddress(fromJid)
+				const hasSession = await signalRepository.validateSession(fromJid)
+				const result = messageRetryManager.shouldRecreateSession(fromJid, hasSession.exists)
+				shouldRecreateSession = result.recreate
+				recreateReason = result.reason
+
+				if (shouldRecreateSession) {
+					logger.debug({ fromJid, retryCount, reason: recreateReason }, 'recreating session for retry')
+					// Delete existing session to force recreation
+					await authState.keys.set({ session: { [sessionId]: null } })
+					forceIncludeKeys = true
+				}
+			} catch (error) {
+				logger.warn({ error, fromJid }, 'failed to check session recreation')
+			}
+		}
+
 		const deviceIdentity = encodeSignedDeviceIdentity(account!, true)
 		await authState.keys.transaction(async () => {
 			const receipt: BinaryNode = {
@@ -262,7 +293,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		const from = node.attrs.from
 		if (from === S_WHATSAPP_NET) {
 			const countChild = getBinaryNodeChild(node, 'count')
-			const count = +countChild!.attrs.value
+			const count = +countChild.attrs.value
 			const shouldUploadMorePreKeys = count < MIN_PREKEY_COUNT
 
 			logger.debug({ count, shouldUploadMorePreKeys }, 'recv pre-key count')
@@ -724,7 +755,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 								try {
 									updateSendMessageAgainCount(ids[0], key.participant)
 									logger.debug({ attrs, key }, 'recv retry request')
-									await sendMessagesAgain(key, ids, retryNode!)
+									await sendMessagesAgain(key, ids, retryNode)
 								} catch (error: unknown) {
 									logger.error(
 										{ key, ids, trace: error instanceof Error ? error.stack : 'Unknown error' },
