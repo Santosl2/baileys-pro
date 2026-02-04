@@ -283,6 +283,10 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 				ev.emit('creds.update', update)
 			}
 
+			if (signalRepository.erroredMessages.has(msgId)) {
+				logger.debug({ msgId }, 'errored message, including keys in retry')
+			}
+
 			await sendNode(receipt)
 
 			logger.info({ msgAttrs: node.attrs, retryCount }, 'sent retry receipt')

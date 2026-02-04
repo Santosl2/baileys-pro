@@ -245,6 +245,7 @@ export const decryptMessageNode = (
 						}
 
 						logger.error(errorContext, 'failed to decrypt message')
+						repository.erroredMessages.set(fullMessage.key.id!, err.message)
 
 						fullMessage.messageStubType = proto.WebMessageInfo.StubType.CIPHERTEXT
 						fullMessage.messageStubParameters = [err.message]

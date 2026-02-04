@@ -65,7 +65,7 @@ export const makeChatsSocket = (config: SocketConfig) => {
 		shouldSyncHistoryMessage
 	} = config
 	const sock = makeUSyncSocket(config)
-	const { ev, ws, authState, generateMessageTag, sendNode, query, onUnexpectedError } = sock
+	const { ev, ws, authState, generateMessageTag, sendNode, query, signalRepository, onUnexpectedError } = sock
 
 	let privacySettings: { [_: string]: string } | undefined
 	let syncState: SyncState = SyncState.Connecting
@@ -985,6 +985,11 @@ export const makeChatsSocket = (config: SocketConfig) => {
 	}
 
 	const upsertMessage = ev.createBufferedFunction(async (msg: WAMessage, type: MessageUpsertType) => {
+		if (signalRepository.erroredMessages.has(msg.key.id!)) {
+			logger.debug({ msgId: msg.key.id }, 'errored message recovered')
+			signalRepository.erroredMessages.delete(msg.key.id!)
+		}
+
 		ev.emit('messages.upsert', { messages: [msg], type })
 
 		if (!!msg.pushName) {
