@@ -76,7 +76,7 @@ export const DEFAULT_CONNECTION_CONFIG: SocketConfig = {
 	syncFullHistory: false,
 	patchMessageBeforeSending: msg => msg,
 	shouldSyncHistoryMessage: () => true,
-	shouldIgnoreJid: () => false,
+	shouldIgnoreJid: async () => Promise.resolve(false),
 	linkPreviewImageThumbnailWidth: 192,
 	transactionOpts: { maxCommitRetries: 10, delayBetweenTriesMs: 3000 },
 	generateHighQualityLinkPreview: false,
