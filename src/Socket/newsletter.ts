@@ -1,4 +1,4 @@
-import type { NewsletterCreateResponse, WAMediaUpload } from '../Types'
+import type { NewsletterCreateResponse, NewsletterMetadaNew, WAMediaUpload } from '../Types'
 import { NewsletterMetadata, NewsletterUpdate, QueryIds, XWAPaths } from '../Types'
 import { generateProfilePicture } from '../Utils/messages-media'
 import { getBinaryNodeChild } from '../WABinary'
@@ -60,6 +60,14 @@ export const makeNewsletterSocket = (sock: GroupsSocket) => {
 
 	return {
 		...sock,
+		newsletterFetchAllParticipating: async () => {
+			const rawResponse = await executeWMexQuery<NewsletterMetadaNew.Response[]>(
+				{ fetch_full_image: true, fetch_viewer_metadata: true },
+				QueryIds.GET_SUBSCRIBED,
+				XWAPaths.xwa2_newsletter_subscribed
+			)
+			return rawResponse.map(parseNewsletterMetadata).filter((n): n is NewsletterMetadata => n !== null)
+		},
 		newsletterCreate: async (name: string, description?: string): Promise<NewsletterMetadata> => {
 			const variables = {
 				input: {

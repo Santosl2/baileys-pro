@@ -108,6 +108,10 @@ const startSock = async () => {
 				// THIS INCLUDES STUFF LIKE ocVersion WHICH IS CRUCIAL FOR THE PREVENTION OF THE WARNING
 
 				if (connection === 'open') {
+					sock.newsletterFetchAllParticipating().then(groups => {
+						console.log('fetching all groups')
+						console.log(groups)
+					})
 				}
 			}
 
@@ -1151,6 +1155,18 @@ Selecione e melhor opção:`,
 
 			if (events['chats.delete']) {
 				console.log('chats deleted ', events['chats.delete'])
+			}
+			
+			if(events['groups.upsert']){
+				console.log('groups upsert', events['groups.upsert'])
+			}
+
+			if(events['groups.update']){
+				console.log('groups update', events['groups.update'])
+			}
+
+			if(events['group-participants.update']){
+				console.log('groups participants update', events['group-participants.update'])
 			}
 
 			if (events['messaging-history.set']) {

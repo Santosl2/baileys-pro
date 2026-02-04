@@ -8,6 +8,9 @@ import {
 	MessageReceiptType,
 	MessageRelayOptions,
 	MessageUserReceipt,
+	NewsletterEventPayloads,
+	NewsletterJoinPayload,
+	NewsletterMetadataUpdate,
 	SocketConfig,
 	WACallEvent,
 	WAMessageKey,
@@ -1359,12 +1362,99 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		}
 	}
 
+	async function handleMexNewsletterNotificationNew(node: BinaryNode) {
+		const from = node.attrs.from
+
+		const updateContent = getBinaryNodeChild(node, 'update')
+
+		const attrs = updateContent?.attrs
+
+		if (!updateContent || !attrs || !updateContent.content) {
+			logger.warn({ node }, 'Invalid mex newsletter notification')
+			return
+		}
+
+		const json = Buffer.from(updateContent.content as Uint8Array).toString('utf8')
+
+		try {
+			const parsedData = JSON.parse(json)
+			const payload = parsedData.data as NewsletterEventPayloads
+
+			switch (attrs.op_name) {
+				case 'NotificationNewsletterStateChange':
+					const payloadOnStateChangeParsed = payload.xwa2_notify_newsletter_on_state_change
+
+					if (payloadOnStateChangeParsed.state.type.toLowerCase() === 'deleted') {
+						ev.emit('newsletter.unfollow', {
+							id: from,
+							role: 'GUEST'
+						})
+						return
+					}
+
+					break
+				case 'NotificationNewsletterAdminPromote':
+					const payloadPromoteParsed = payload.xwa2_notify_newsletter_admin_promote
+					ev.emit('newsletter-participants.update', {
+						id: from,
+						author: payloadPromoteParsed.actor,
+						user: payloadPromoteParsed.user,
+						new_role: payloadPromoteParsed.user_new_role,
+						action: 'promote'
+					})
+					break
+				case 'NotificationNewsletterAdminDemote':
+					const payloadDemoteParsed = payload.xwa2_notify_newsletter_admin_demote
+
+					ev.emit('newsletter-participants.update', {
+						id: from,
+						author: payloadDemoteParsed.actor,
+						user: payloadDemoteParsed.user,
+						new_role: payloadDemoteParsed.user_new_role,
+						action: 'demote'
+					})
+					break
+				case 'NotificationNewsletterMilestone':
+					// idk
+					break
+				case 'NotificationNewsletterLeave':
+					const threadMetadataLeave = payload.xwa2_notify_newsletter_on_leave
+					ev.emit('newsletter.unfollow', {
+						id: from,
+						role: threadMetadataLeave.role
+					})
+					break
+				case 'NotificationNewsletterJoin':
+					const threadMetadataJoin = payload.xwa2_notify_newsletter_on_join.thread_metadata
+
+					ev.emit('newsletter.follow', {
+						id: from,
+						data: threadMetadataJoin
+					})
+
+					break
+
+				case 'NotificationNewsletterUpdate':
+					const threadMetadata = payload.xwa2_notify_newsletter_on_metadata_update.thread_metadata
+
+					ev.emit('newsletter-settings.update', {
+						id: from,
+						update: threadMetadata
+					})
+
+					break
+			}
+		} catch (error) {
+			logger.error({ node, error }, 'Failed to parse mex newsletter notification')
+		}
+	}
+
 	// Handles mex newsletter notifications
 	async function handleMexNewsletterNotification(node: BinaryNode) {
 		const mexNode = getBinaryNodeChild(node, 'mex')
 		if (!mexNode?.content) {
 			logger.warn({ node }, 'Invalid mex newsletter notification')
-			return
+			return handleMexNewsletterNotificationNew(node)
 		}
 
 		let data: any
