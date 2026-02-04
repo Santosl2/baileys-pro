@@ -126,7 +126,7 @@ export type SocketConfig = {
 	 * no event for that jid will be triggered.
 	 * Messages from that jid will also not be decrypted
 	 * */
-	shouldIgnoreJid: (jid: string) => boolean | undefined
+	shouldIgnoreJid: (jid: string) => Promise<boolean | undefined>
 
 	/**
 	 * Optionally patch the message before sending out

@@ -706,12 +706,13 @@ export const makeChatsSocket = (config: SocketConfig) => {
 		})
 	}
 
-	const handlePresenceUpdate = ({ tag, attrs, content }: BinaryNode) => {
+	const handlePresenceUpdate = async ({ tag, attrs, content }: BinaryNode) => {
 		let presence: PresenceData | undefined
 		const jid = attrs.from
 		const participant = attrs.participant || attrs.from
 
-		if (shouldIgnoreJid(jid) && jid !== '@s.whatsapp.net') {
+		const shouldIgnore = await shouldIgnoreJid(jid)
+		if (shouldIgnore && jid !== '@s.whatsapp.net') {
 			return
 		}
 

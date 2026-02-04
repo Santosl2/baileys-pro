@@ -66,6 +66,7 @@ export const makeNewsletterSocket = (sock: GroupsSocket) => {
 				QueryIds.GET_SUBSCRIBED,
 				XWAPaths.xwa2_newsletter_subscribed
 			)
+
 			return rawResponse.map(parseNewsletterMetadata).filter((n): n is NewsletterMetadata => n !== null)
 		},
 		newsletterCreate: async (name: string, description?: string): Promise<NewsletterMetadata> => {
