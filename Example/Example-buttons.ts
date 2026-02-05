@@ -111,6 +111,11 @@ const startSock = async () => {
 
 				if (connection === 'open') {
 					sock.newsletterFetchAllParticipating().then(groups => {
+						console.log('fetching all newsletter')
+						console.log(groups)
+					})
+
+					sock.groupFetchAllParticipating().then(groups => {
 						console.log('fetching all groups')
 						console.log(groups)
 					})
