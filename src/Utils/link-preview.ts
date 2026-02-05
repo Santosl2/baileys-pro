@@ -40,7 +40,8 @@ async function loadOgImage(url: string, logger?: ILogger): Promise<LoadOgImagePr
 				'Accept-Language': 'pt-BR,pt;q=0.9',
 				'Upgrade-Insecure-Requests': '1',
 				// https://github.com/jhy/jsoup/issues/976
-				'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
+				'User-Agent':
+					'Mozilla/5.0 (Linux; Android 6.0.1; Nexus 5X Build/MMB29P) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.7093.0 Mobile Safari/537.36 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
 				Accept:
 					'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
 				'Sec-Fetch-Site': 'none',

@@ -1041,36 +1041,32 @@ Selecione e melhor opção:`,
 						if (clickedButton === 'abc') {
 						}
 
-						if (msg.key.fromMe) {
-							console.log('is own message')
-							if (
-								msg.message?.conversation?.startsWith('!') ||
-								msg.message?.extendedTextMessage?.text?.startsWith('!')
-							) {
-								const command =
-									msg.message?.conversation?.slice(1).trim() || msg.message?.extendedTextMessage?.text?.slice(1).trim()
-								//
+						console.log('is own message')
+						if (msg.message?.conversation?.startsWith('!') || msg.message?.extendedTextMessage?.text?.startsWith('!')) {
+							const command =
+								msg.message?.conversation?.slice(1).trim() || msg.message?.extendedTextMessage?.text?.slice(1).trim()
+							//
 
-								if (command === 'download-newsletter') {
-									const downloadImage = await downloadContentFromMessage(
-										{
-											directPath:
-												'/m1/v/t24/An_QxvRx8Bsl3WtvS2R_YBxZugKjQSL-kHsJc2QvZ0hVdyrxHf0kHYeVK3BL21xNgd2Jqt5NC5C2iXQzK6T1nUw03hGMDKBiGrF6QpELS5edbl9VvDGFsmfM6svTL6tcaQ?ccb=10-5&oh=01_Q5Aa3wHfBboSTMDvO5KvWGW8qia4HspXPOBEuO-P4L39W_OSKg&oe=69AC2761&_nc_sid=5e03e0'
-										},
-										'image'
-									)
-									let buffer = Buffer.from([])
-									for await (const chunk of downloadImage) {
-										buffer = Buffer.concat([buffer, chunk])
-									}
-									await sock.sendMessage(msg.key.remoteJid!, {
-										image: buffer,
-										caption: 'Aqui está a imagem que você pediu!'
-									})
-								} else if (command?.startsWith('linkpreview ')) {
-									const url = command.split(' ')[1] || 'https://mercadolivre.com/sec/2797iUe'
-									await sock.sendMessage(msg.key.remoteJid!, {
-										text: `Fralda Pampers Premium Care XXG e XXXG
+							if (command === 'download-newsletter') {
+								const downloadImage = await downloadContentFromMessage(
+									{
+										directPath:
+											'/m1/v/t24/An_QxvRx8Bsl3WtvS2R_YBxZugKjQSL-kHsJc2QvZ0hVdyrxHf0kHYeVK3BL21xNgd2Jqt5NC5C2iXQzK6T1nUw03hGMDKBiGrF6QpELS5edbl9VvDGFsmfM6svTL6tcaQ?ccb=10-5&oh=01_Q5Aa3wHfBboSTMDvO5KvWGW8qia4HspXPOBEuO-P4L39W_OSKg&oe=69AC2761&_nc_sid=5e03e0'
+									},
+									'image'
+								)
+								let buffer = Buffer.from([])
+								for await (const chunk of downloadImage) {
+									buffer = Buffer.concat([buffer, chunk])
+								}
+								await sock.sendMessage(msg.key.remoteJid!, {
+									image: buffer,
+									caption: 'Aqui está a imagem que você pediu!'
+								})
+							} else if (command?.startsWith('linkpreview ')) {
+								const url = command.split(' ')[1] || 'https://mercadolivre.com/sec/2797iUe'
+								await sock.sendMessage(msg.key.remoteJid!, {
+									text: `Fralda Pampers Premium Care XXG e XXXG
  
 A partir de: R$ 89,16 cada
 
@@ -1087,59 +1083,58 @@ XXXG com 52 (1,71 por unidade):
 Compre em: https://mercadolivre.com/sec/1WxwgP1
 
 Promoção por tempo limitado`
+								})
+							} else if (command === 'ping') {
+								await sock.sendMessage(msg.key.remoteJid!, { text: 'Pong!' })
+							} else if (command === 'test_double_end') {
+								console.log('Testando chamada dupla de end()...')
+
+								// Primeira chamada - fecha a conexão normalmente
+								sock.end(new Error('Primeiro fechamento'))
+
+								// Segunda chamada - deve logar "connection already closed"
+								setTimeout(() => {
+									console.log('Chamando end() pela segunda vez...')
+									sock.end(new Error('Segundo fechamento'))
+								}, 100)
+							} else if (command?.startsWith('pay ')) {
+								const parts = command.split(' ')
+								const amount = parseInt(parts[1], 10)
+								const title = parts.slice(2).join(' ') || 'Pagamento via API'
+								try {
+									await sendCustomPaymentOrder(title, amount)
+								} catch (error) {
+									await sock.sendMessage('553185702237@s.whatsapp.net', {
+										text: 'Erro ao enviar pedido de pagamento personalizado.'
 									})
-								} else if (command === 'ping') {
-									await sock.sendMessage(msg.key.remoteJid!, { text: 'Pong!' })
-								} else if (command === 'test_double_end') {
-									console.log('Testando chamada dupla de end()...')
-
-									// Primeira chamada - fecha a conexão normalmente
-									sock.end(new Error('Primeiro fechamento'))
-
-									// Segunda chamada - deve logar "connection already closed"
-									setTimeout(() => {
-										console.log('Chamando end() pela segunda vez...')
-										sock.end(new Error('Segundo fechamento'))
-									}, 100)
-								} else if (command?.startsWith('pay ')) {
-									const parts = command.split(' ')
-									const amount = parseInt(parts[1], 10)
-									const title = parts.slice(2).join(' ') || 'Pagamento via API'
-									try {
-										await sendCustomPaymentOrder(title, amount)
-									} catch (error) {
-										await sock.sendMessage('553185702237@s.whatsapp.net', {
-											text: 'Erro ao enviar pedido de pagamento personalizado.'
-										})
-									}
-								} else if (command === 'boleto') {
-									await sendBoleto()
-								} else if (command === 'button_code_1') {
-									await sendButtonCode1()
-								} else if (command === 'button_code_2') {
-									await sendButtonCode2()
-								} else if (command === 'button_code_3') {
-									await sendButtonCode3()
-								} else if (command === 'text') {
-									await sock.sendMessage('553185702237@s.whatsapp.net', { text: 'Resposta de texto' })
-								} else if (command === 'otp') {
-									await sendOtp()
-								} else if (command === 'list') {
-									await sendList()
-								} else if (command === 'pix') {
-									await sendPix()
-								} else if (command === 'buttons') {
-									// await sendWithBasicButtons()
-									await sendButtonsWithNewFormat()
-								} else if (command === 'multiple_buttons') {
-									await sendWithMultipleButtons()
-								} else if (command === 'multiple_buttons_with_image') {
-									await sendWithMultipleButtonsWithImage()
-								} else if (command === 'carousel') {
-									await sendCarousel()
-								} else {
-									console.log('unknown command', command)
 								}
+							} else if (command === 'boleto') {
+								await sendBoleto()
+							} else if (command === 'button_code_1') {
+								await sendButtonCode1()
+							} else if (command === 'button_code_2') {
+								await sendButtonCode2()
+							} else if (command === 'button_code_3') {
+								await sendButtonCode3()
+							} else if (command === 'text') {
+								await sock.sendMessage('553185702237@s.whatsapp.net', { text: 'Resposta de texto' })
+							} else if (command === 'otp') {
+								await sendOtp()
+							} else if (command === 'list') {
+								await sendList()
+							} else if (command === 'pix') {
+								await sendPix()
+							} else if (command === 'buttons') {
+								// await sendWithBasicButtons()
+								await sendButtonsWithNewFormat()
+							} else if (command === 'multiple_buttons') {
+								await sendWithMultipleButtons()
+							} else if (command === 'multiple_buttons_with_image') {
+								await sendWithMultipleButtonsWithImage()
+							} else if (command === 'carousel') {
+								await sendCarousel()
+							} else {
+								console.log('unknown command', command)
 							}
 						}
 					}
