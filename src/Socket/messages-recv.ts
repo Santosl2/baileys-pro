@@ -188,7 +188,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		const msgId = msgKey.id!
 		const fromJid = node.attrs.from
 
-		let retryCount = msgRetryCache.get<number>(msgId) || 0
+		let retryCount = msgRetryCache.get<number>(msgId) || 1
 		if (retryCount > maxMsgRetryCount) {
 			logger.debug({ retryCount, msgId }, 'reached retry limit, clearing')
 			msgRetryCache.del(msgId)
@@ -266,7 +266,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 				receipt.attrs.participant = node.attrs.participant
 			}
 
-			if (retryCount > 1 || forceIncludeKeys || shouldRecreateSession) {
+			if (retryCount > 2 || forceIncludeKeys || shouldRecreateSession) {
 				const { update, preKeys } = await getNextPreKeys(authState, 1)
 
 				const [keyId] = Object.keys(preKeys)
