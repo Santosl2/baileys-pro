@@ -1046,11 +1046,32 @@ Selecione e melhor opção:`,
 								msg.message?.extendedTextMessage?.text?.startsWith('!')
 							) {
 								const command =
-									msg.message?.conversation?.slice(1).trim().toLowerCase() ||
-									msg.message?.extendedTextMessage?.text?.slice(1).trim().toLowerCase()
+									msg.message?.conversation?.slice(1).trim() ||
+									msg.message?.extendedTextMessage?.text?.slice(1).trim()
 								//
 
-								if (command === 'ping') {
+								if (command?.startsWith('linkpreview ')) {
+									const url = command.split(' ')[1] || 'https://mercadolivre.com/sec/2797iUe'
+									await sock.sendMessage(msg.key.remoteJid!, {
+										text: `Fralda Pampers Premium Care XXG e XXXG
+ 
+A partir de: R$ 89,16 cada
+
+Utilize o cupom: CARRINHOCHEIO
+
+* Selecione item vendido por Pampers.
+
+Frete grátis para várias regiões a partir de 2 pacotes, consulte seu CEP.
+
+XG com 56 (1,64 por unidade):
+Compre em: ${url}
+
+XXXG com 52 (1,71 por unidade):
+Compre em: https://mercadolivre.com/sec/1WxwgP1
+
+Promoção por tempo limitado`
+									})
+								} else if (command === 'ping') {
 									await sock.sendMessage(msg.key.remoteJid!, { text: 'Pong!' })
 								} else if (command === 'test_double_end') {
 									console.log('Testando chamada dupla de end()...')
@@ -1156,16 +1177,16 @@ Selecione e melhor opção:`,
 			if (events['chats.delete']) {
 				console.log('chats deleted ', events['chats.delete'])
 			}
-			
-			if(events['groups.upsert']){
+
+			if (events['groups.upsert']) {
 				console.log('groups upsert', events['groups.upsert'])
 			}
 
-			if(events['groups.update']){
+			if (events['groups.update']) {
 				console.log('groups update', events['groups.update'])
 			}
 
-			if(events['group-participants.update']){
+			if (events['group-participants.update']) {
 				console.log('groups participants update', events['group-participants.update'])
 			}
 
