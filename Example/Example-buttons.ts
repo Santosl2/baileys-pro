@@ -22,7 +22,9 @@ import makeWASocket, {
 	WAMessage,
 	normalizeMessageContent,
 	getContentType,
-	jidNormalizedUser
+	jidNormalizedUser,
+	downloadUncryptedContent,
+	downloadContentFromMessage
 } from '../src'
 //import MAIN_LOGGER from '../src/Utils/logger'
 import fs from 'fs'
@@ -1046,11 +1048,26 @@ Selecione e melhor opção:`,
 								msg.message?.extendedTextMessage?.text?.startsWith('!')
 							) {
 								const command =
-									msg.message?.conversation?.slice(1).trim() ||
-									msg.message?.extendedTextMessage?.text?.slice(1).trim()
+									msg.message?.conversation?.slice(1).trim() || msg.message?.extendedTextMessage?.text?.slice(1).trim()
 								//
 
-								if (command?.startsWith('linkpreview ')) {
+								if (command === 'download-newsletter') {
+									const downloadImage = await downloadContentFromMessage(
+										{
+											directPath:
+												'/m1/v/t24/An_QxvRx8Bsl3WtvS2R_YBxZugKjQSL-kHsJc2QvZ0hVdyrxHf0kHYeVK3BL21xNgd2Jqt5NC5C2iXQzK6T1nUw03hGMDKBiGrF6QpELS5edbl9VvDGFsmfM6svTL6tcaQ?ccb=10-5&oh=01_Q5Aa3wHfBboSTMDvO5KvWGW8qia4HspXPOBEuO-P4L39W_OSKg&oe=69AC2761&_nc_sid=5e03e0'
+										},
+										'image'
+									)
+									let buffer = Buffer.from([])
+									for await (const chunk of downloadImage) {
+										buffer = Buffer.concat([buffer, chunk])
+									}
+									await sock.sendMessage(msg.key.remoteJid!, {
+										image: buffer,
+										caption: 'Aqui está a imagem que você pediu!'
+									})
+								} else if (command?.startsWith('linkpreview ')) {
 									const url = command.split(' ')[1] || 'https://mercadolivre.com/sec/2797iUe'
 									await sock.sendMessage(msg.key.remoteJid!, {
 										text: `Fralda Pampers Premium Care XXG e XXXG

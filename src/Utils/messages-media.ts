@@ -517,9 +517,23 @@ export const downloadContentFromMessage = async (
 		throw new Boom('No valid media URL or directPath present in message', { statusCode: 400 })
 	}
 
+	// encrypted content
+	if (!mediaKey && downloadUrl) {
+		return downloadUncryptedContent(downloadUrl, opts.options)
+	}
+
 	const keys = await getMediaKeys(mediaKey, type)
 
 	return downloadEncryptedContent(downloadUrl, keys, opts)
+}
+
+/**
+ * Downloads an unencrypted file from the given url
+ * @param url
+ */
+export const downloadUncryptedContent = async (url: string, options?: MediaDownloadOptions['options']) => {
+	const stream = await getHttpStreamFetch(url, options as RequestInit)
+	return stream
 }
 
 /**
