@@ -110,22 +110,23 @@ const startSock = async () => {
 				// THIS INCLUDES STUFF LIKE ocVersion WHICH IS CRUCIAL FOR THE PREVENTION OF THE WARNING
 
 				if (connection === 'open') {
-					sock.newsletterFetchAllParticipating().then(groups => {
+					
+					sock.newsletterFetchAllParticipating().then(newsletter => {
 						console.log('fetching all newsletter')
-						console.log(groups)
+						//console.log(newsletter)
 					})
 
 					sock.groupFetchAllParticipating().then(groups => {
 						console.log('fetching all groups')
-						console.log(groups)
+						//	console.log(groups)
 					})
 				}
 			}
 
-			sock.ws.on('CB:message', data => {
-				// Usado para debugar novas features
-				console.log('CB:message', data)
-			})
+			// sock.ws.on('CB:message', data => {
+			// 	// Usado para debugar novas features
+			// 	console.log('CB:message', data)
+			// })
 
 			async function sendOtp() {
 				await sock.sendMessage('553185702237@s.whatsapp.net', {
@@ -1032,6 +1033,7 @@ Selecione e melhor opção:`,
 
 			// received a new message
 			if (events['messages.upsert']) {
+				console.log('messages.upsert', JSON.stringify(events['messages.upsert'], null, 2))
 				const upsert = events['messages.upsert']
 
 				if (upsert.type === 'notify') {

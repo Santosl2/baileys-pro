@@ -188,7 +188,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		const msgId = msgKey.id!
 		const fromJid = node.attrs.from
 
-		let retryCount = msgRetryCache.get<number>(msgId) || 1
+		let retryCount = msgRetryCache.get<number>(msgId) || 0
 		if (retryCount > maxMsgRetryCount) {
 			logger.debug({ retryCount, msgId }, 'reached retry limit, clearing')
 			msgRetryCache.del(msgId)
@@ -206,7 +206,9 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 			logger.debug(`sendRetryRequest: requested placeholder resend for message ${msgId}`)
 		}
 
-		let shouldRecreateSession = (await signalRepository.validateSession(fromJid)).exists !== true
+		const fromId = isJidGroup(fromJid) ? node.attrs.participant : fromJid
+
+		let shouldRecreateSession = (await signalRepository.validateSession(fromId || fromJid)).exists !== true
 		let recreateReason = ''
 
 		if (enableAutoSessionRecreation && messageRetryManager && retryCount > 1) {

@@ -52,8 +52,8 @@ const startSock = async () => {
 	const sock = makeWASocket({
 		version,
 		// logger: P({ level: 'silent' }),
-		// logger,
-		logger: P({ level: 'info' }),
+		logger,
+		// logger: P({ level: 'info' }),
 		auth: {
 			creds: state.creds,
 			/** caching makes the store faster to send/recv messages */
@@ -213,6 +213,25 @@ Compre aqui: https://amzn.to/4miOyNJ`
 
 startSock()
 const server = http.createServer(async (req, res) => {
+	if (req.method === 'POST' && req.url === '/logout') {
+		let body = ''
+		req.on('data', chunk => {
+			body += chunk.toString()
+		})
+
+		req.on('end', async () => {
+			try {
+				
+
+				await bot!.logout('idk')
+				res.writeHead(200, { 'Content-Type': 'application/json' })
+				res.end(JSON.stringify({ success: true }))
+			} catch (error) {
+				res.writeHead(500, { 'Content-Type': 'application/json' })
+				res.end(JSON.stringify({ error: 'Failed to send message', details: error.message }))
+			}
+		})
+	}else
 	if (req.method === 'POST' && req.url === '/send-message') {
 		let body = ''
 		req.on('data', chunk => {

@@ -1,7 +1,8 @@
-POST http://localhost:3100/send-message
+## SEND MESSAGE
+POST http://localhost:3101/send-message
 Content-Type: application/json
 
 {
   "jid": "120363417393533025@g.us",
-  "message": "Afffdsfsdf!"
+  "message": "fdsfs!"
 }
