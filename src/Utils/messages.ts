@@ -379,6 +379,7 @@ export const generateWAMessageContent = async (
 			extContent.description = urlInfo.description
 			extContent.title = urlInfo.title
 			extContent.previewType = 0
+			extContent.font = proto.Message.ExtendedTextMessage.FontType.SYSTEM
 
 			const img = urlInfo.highQualityThumbnail
 			if (img) {
@@ -389,6 +390,8 @@ export const generateWAMessageContent = async (
 				extContent.thumbnailHeight = img.height
 				extContent.thumbnailSha256 = img.fileSha256
 				extContent.thumbnailEncSha256 = img.fileEncSha256
+			} else {
+				options.logger?.debug?.({ urlInfo }, 'no high quality thumbnail, using jpeg thumbnail if exists')
 			}
 		}
 
@@ -565,7 +568,7 @@ export const generateWAMessageContent = async (
 
 		if ('title' in message && !!message.title) {
 			//@ts-ignore
-			;((buttonsMessage.text = message.title), (buttonsMessage.headerType = ButtonType.TEXT))
+			;(buttonsMessage.text = message.title), (buttonsMessage.headerType = ButtonType.TEXT)
 		}
 
 		if ('footer' in message && !!message.footer) {
@@ -778,14 +781,14 @@ export const generateWAMessageContent = async (
 		}
 
 		if ('text' in message) {
-			;((interactiveMessage.body = {
+			;(interactiveMessage.body = {
 				text: message.text as string
 			}),
 				(interactiveMessage.header = {
 					title: message.title,
 					subtitle: message.subtitle,
 					hasMediaAttachment: false
-				}))
+				})
 		}
 
 		if ('footer' in message && !!message.footer) {

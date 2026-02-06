@@ -25,7 +25,13 @@ export type URLGenerationOptions = {
 	logger?: ILogger
 }
 
-type LoadOgImageProps = { title: string | null; description?: string | null; images?: string[] | null; url: string }
+type LoadOgImageProps = {
+	title: string | null
+	description?: string | null
+	images?: string[] | null
+	favicon?: string | null
+	url: string
+}
 
 async function loadOgImage(url: string, logger?: ILogger): Promise<LoadOgImageProps | undefined> {
 	const origin = new URL(url).origin
@@ -65,7 +71,8 @@ async function loadOgImage(url: string, logger?: ILogger): Promise<LoadOgImagePr
 			title: get('title') || $('title').text() || null,
 			description: get('description'),
 			images: [get('image') || null].filter(Boolean) as string[],
-			url: get('url') || url
+			url: get('url') || url,
+			favicon: $('link[rel="icon"]').attr('href') || $('link[rel="shortcut icon"]').attr('href') || null
 		}
 	} catch (error) {
 		logger?.debug({ err: error.stack, url }, 'error in fetching og image')
