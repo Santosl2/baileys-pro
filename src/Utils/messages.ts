@@ -36,8 +36,8 @@ import {
 	getRawMediaUploadData,
 	MediaDownloadOptions
 } from './messages-media'
-import { shouldIncludeReportingToken } from './reporting-utils'
 import { PaymentOrderFunctions } from './payment-order'
+import { shouldIncludeReportingToken } from './reporting-utils'
 
 type MediaUploadData = {
 	media: WAMediaUpload
@@ -391,7 +391,7 @@ export const generateWAMessageContent = async (
 				extContent.thumbnailSha256 = img.fileSha256
 				extContent.thumbnailEncSha256 = img.fileEncSha256
 			} else {
-				options.logger?.debug?.({ urlInfo }, 'no high quality thumbnail, using jpeg thumbnail if exists')
+				options.logger?.error?.({ urlInfo }, 'no high quality thumbnail, using jpeg thumbnail if exists')
 			}
 		}
 
@@ -546,7 +546,7 @@ export const generateWAMessageContent = async (
 
 	if ('buttons' in message && !!message.buttons) {
 		const buttonsMessage: proto.Message.IButtonsMessage = {
-			buttons: message.buttons!.map(b => ({
+			buttons: message.buttons.map(b => ({
 				...b,
 				type: proto.Message.ButtonsMessage.Button.Type.RESPONSE
 			}))

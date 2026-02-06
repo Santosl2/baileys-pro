@@ -1,7 +1,8 @@
 import NodeCache from '@cacheable/node-cache'
+import { LRUCache } from 'lru-cache'
 import { proto } from '../../WAProto'
 import { makeLibSignalRepository } from '../Signal/libsignal'
-import type { AuthenticationState, MediaType, SocketConfig, WAVersion } from '../Types'
+import type { AuthenticationState, CacheStore, MediaType, SocketConfig, WAVersion } from '../Types'
 import { Browsers } from '../Utils'
 import logger from '../Utils/logger'
 import { version } from './baileys-version.json'
@@ -58,6 +59,18 @@ const cachedGroupMetadata = new NodeCache({
 	stdTTL: DEFAULT_CACHE_TTLS.GROUP_METADATA
 })
 
+const mediaCache = new LRUCache<string, Buffer>({
+	max: 20,
+	ttl: 5 * 60 * 1000 // 5 minutes
+})
+
+const mediaCacheFactory: CacheStore = {
+	get: <T>(key: string) => mediaCache.get(key) as T | undefined,
+	set: <T = Buffer>(key: string, value: T) => mediaCache.set(key, value as any),
+	del: (key: string) => mediaCache.delete(key),
+	flushAll: () => mediaCache.clear()
+}
+
 export const DEFAULT_CONNECTION_CONFIG: SocketConfig = {
 	version: version as WAVersion,
 	browser: Browsers.macOS('Chrome'),
@@ -90,6 +103,7 @@ export const DEFAULT_CONNECTION_CONFIG: SocketConfig = {
 	// cachedGroupMetadata: async () => undefined,
 	makeSignalRepository: makeLibSignalRepository,
 
+	mediaCache: mediaCacheFactory,
 	groupMetadataCache: cachedGroupMetadata as any,
 
 	enableAutoSessionRecreation: false,

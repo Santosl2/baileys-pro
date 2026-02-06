@@ -1077,7 +1077,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 						getUrlInfo(text, {
 							thumbnailWidth: linkPreviewImageThumbnailWidth,
 							fetchOpts: {
-								timeout: 3_000,
+								timeout: 10_000,
 								...(axiosOptions || {})
 							},
 							logger,
