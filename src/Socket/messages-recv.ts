@@ -1200,7 +1200,10 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 					const nodeProcessor = nodeProcessorMap.get(type)
 
 					if (!nodeProcessor) {
-						onUnexpectedError(new Error(`unknown offline node type: ${type}`), 'processing offline node')
+						onUnexpectedError(
+							new Error(`unknown offline node type: ${type}`),
+							`processing offline node ${type} (unknown type)`
+						)
 						continue
 					}
 
