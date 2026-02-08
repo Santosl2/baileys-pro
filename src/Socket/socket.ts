@@ -146,7 +146,7 @@ export const makeSocket = (config: SocketConfig) => {
 
 	/** log & process any unexpected errors */
 	const onUnexpectedError = (err: Error | Boom, msg: string) => {
-		logger.error({ err }, `unexpected error in '${msg}'`)
+		logger.error({ err, message: err.message }, `unexpected error in '${msg}'`)
 	}
 
 	/** await the next incoming message */
