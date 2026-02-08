@@ -64,6 +64,14 @@ export class GroupCipher {
 			const senderKeyState = record.getSenderKeyState(senderKeyMessage.getKeyId())
 
 			if (!senderKeyState) {
+				console.log(
+					JSON.stringify(
+						{ senderKeyMessage, senderKeyMessageBytes, record, keyId: senderKeyMessage.getKeyId() },
+						null,
+						2
+					),
+					'No session found to decrypt message'
+				)
 				throw new Error('No session found to decrypt message')
 			}
 
