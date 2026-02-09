@@ -155,7 +155,9 @@ export const getUrlInfo = async (
 						options: opts.fetchOpts
 					}
 				)
-				urlInfo.jpegThumbnail = imageMessage?.jpegThumbnail ? Buffer.from(imageMessage.jpegThumbnail) : undefined
+				urlInfo.jpegThumbnail = imageMessage?.jpegThumbnail
+					? Buffer.from(imageMessage.jpegThumbnail)
+					: (await getCompressedJpegThumbnail(image, opts)).buffer
 				urlInfo.highQualityThumbnail = imageMessage || undefined
 			} else {
 				try {
