@@ -987,7 +987,7 @@ export const makeChatsSocket = (config: SocketConfig) => {
 
 	const upsertMessage = ev.createBufferedFunction(async (msg: WAMessage, type: MessageUpsertType) => {
 		if (signalRepository.erroredMessages.has(msg.key.id!)) {
-			logger.debug({ msgId: msg.key.id }, 'errored message recovered')
+			logger.error({ msgId: msg.key.id }, 'errored message recovered')
 			signalRepository.erroredMessages.delete(msg.key.id!)
 		}
 

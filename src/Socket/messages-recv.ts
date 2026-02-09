@@ -188,7 +188,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		const msgId = msgKey.id!
 		const fromJid = node.attrs.from
 
-		let retryCount = msgRetryCache.get<number>(msgId) || 1
+		let retryCount = Number(msgRetryCache.get(msgId) || 1) || 1
 		if (retryCount > maxMsgRetryCount) {
 			logger.debug({ retryCount, msgId }, 'reached retry limit, clearing')
 			msgRetryCache.del(msgId)
