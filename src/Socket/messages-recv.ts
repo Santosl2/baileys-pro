@@ -3,14 +3,18 @@ import { Boom } from '@hapi/boom'
 import { randomBytes } from 'crypto'
 import Long from 'long'
 import { proto } from '../../WAProto'
-import { DEFAULT_CACHE_TTLS, KEY_BUNDLE_TYPE, MIN_PREKEY_COUNT, STATUS_EXPIRY_SECONDS } from '../Defaults'
+import {
+	DEFAULT_CACHE_MAX_KEYS,
+	DEFAULT_CACHE_TTLS,
+	KEY_BUNDLE_TYPE,
+	MIN_PREKEY_COUNT,
+	STATUS_EXPIRY_SECONDS
+} from '../Defaults'
 import {
 	MessageReceiptType,
 	MessageRelayOptions,
 	MessageUserReceipt,
 	NewsletterEventPayloads,
-	NewsletterJoinPayload,
-	NewsletterMetadataUpdate,
 	SocketConfig,
 	WACallEvent,
 	WAMessageKey,
@@ -99,26 +103,33 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 	/** this mutex ensures that each retryRequest will wait for the previous one to finish */
 	const retryMutex = makeMutex()
 
-	const identityAssertDebounce = new NodeCache({ stdTTL: 5, useClones: false })
+	const identityAssertDebounce = new NodeCache({
+		stdTTL: 5,
+		useClones: false,
+		maxKeys: DEFAULT_CACHE_MAX_KEYS.IDENTITY_ASSERT
+	})
 
 	const msgRetryCache =
 		config.msgRetryCounterCache ||
 		new NodeCache({
 			stdTTL: DEFAULT_CACHE_TTLS.MSG_RETRY, // 1 hour
-			useClones: false
+			useClones: false,
+			maxKeys: DEFAULT_CACHE_MAX_KEYS.MSG_RETRY
 		})
 	const callOfferCache =
 		config.callOfferCache ||
 		new NodeCache({
 			stdTTL: DEFAULT_CACHE_TTLS.CALL_OFFER, // 5 mins
-			useClones: false
+			useClones: false,
+			maxKeys: DEFAULT_CACHE_MAX_KEYS.CALL_OFFER
 		})
 
 	const placeholderResendCache =
 		config.placeholderResendCache ||
 		new NodeCache({
 			stdTTL: DEFAULT_CACHE_TTLS.MSG_RETRY, // 1 hour
-			useClones: false
+			useClones: false,
+			maxKeys: DEFAULT_CACHE_MAX_KEYS.PLACEHOLDER_RESEND
 		})
 
 	let sendActiveReceipts = false
@@ -912,6 +923,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 					}
 
 					const errorMessage = msg?.messageStubParameters?.[0] || ''
+					const isNoSenderKeyError = errorMessage.includes('No SenderKeyRecord')
 					const isPreKeyError = errorMessage.includes('PreKey')
 
 					logger.debug(`[handleMessage] Attempting retry request for failed decryption`)
@@ -938,8 +950,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 								}
 							}
 
-							const encNode = getBinaryNodeChild(node, 'enc')
-							await sendRetryRequest(node, !encNode)
+							await sendRetryRequest(node, !encNode || isNoSenderKeyError)
 							if (retryRequestDelayMs) {
 								await delay(retryRequestDelayMs)
 							}
@@ -947,8 +958,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 							logger.error({ err, isPreKeyError }, 'Failed to handle retry, attempting basic retry')
 							// Still attempt retry even if pre-key upload failed
 							try {
-								const encNode = getBinaryNodeChild(node, 'enc')
-								await sendRetryRequest(node, !encNode)
+								await sendRetryRequest(node, !encNode || isNoSenderKeyError)
 							} catch (retryErr) {
 								logger.error({ retryErr }, 'Failed to send retry after error handling')
 							}

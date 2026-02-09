@@ -1,5 +1,4 @@
 import { decrypt, encrypt } from 'libsignal/src/crypto'
-import { SessionLock } from '../session-lock'
 import { SenderKeyMessage } from './sender-key-message'
 import { SenderKeyName } from './sender-key-name'
 import { SenderKeyRecord } from './sender-key-record'
@@ -50,7 +49,7 @@ export class GroupCipher {
 			return senderKeyMessage.serialize()
 		}
 
-		return SessionLock.queueJobForNumber(this.senderKeyName.toString(), runJob)
+		return runJob()
 	}
 
 	public async decrypt(senderKeyMessageBytes: Uint8Array): Promise<Uint8Array> {
@@ -65,11 +64,7 @@ export class GroupCipher {
 
 			if (!senderKeyState) {
 				console.log(
-					JSON.stringify(
-						{ senderKeyMessage, senderKeyMessageBytes, record, keyId: senderKeyMessage.getKeyId() },
-						null,
-						2
-					),
+					{ senderKeyMessageBytes, record, keyId: senderKeyMessage.getKeyId() },
 					'No session found to decrypt message'
 				)
 				throw new Error('No session found to decrypt message')
@@ -88,7 +83,7 @@ export class GroupCipher {
 			return plaintext
 		}
 
-		return SessionLock.queueJobForNumber(this.senderKeyName.toString(), runJob)
+		return runJob()
 	}
 
 	private getSenderKey(senderKeyState: SenderKeyState, iteration: number) {

@@ -150,31 +150,28 @@ export function makeCacheableSignalKeyStore(
 	}
 }
 
-// Module-level specialized mutexes for pre-key operations
-const preKeyMutex = new Mutex()
-const signedPreKeyMutex = new Mutex()
-
-/**
- * Get the appropriate mutex for the key type
- */
-const getPreKeyMutex = (keyType: string): Mutex => {
-	return keyType === 'signed-pre-key' ? signedPreKeyMutex : preKeyMutex
-}
-
 /**
  * Handles pre-key operations with mutex protection
  */
-async function handlePreKeyOperations(
-	data: SignalDataSet,
-	keyType: string,
-	transactionCache: SignalDataSet,
-	mutations: SignalDataSet,
-	logger: ILogger,
-	isInTransaction: boolean,
+async function handlePreKeyOperations({
+	data,
+	isInTransaction,
+	logger,
+	mutations,
+	transactionCache,
+	keyType,
+	state,
+	mutex
+}: {
+	data: SignalDataSet
+	keyType: string
+	transactionCache: SignalDataSet
+	mutations: SignalDataSet
+	logger: ILogger
+	isInTransaction: boolean
+	mutex: Mutex
 	state?: SignalKeyStore
-): Promise<void> {
-	const mutex = getPreKeyMutex(keyType)
-
+}): Promise<void> {
 	await mutex.runExclusive(async () => {
 		const keyData = data[keyType]
 		if (!keyData) return
@@ -250,14 +247,19 @@ function handleNormalKeyOperations(
 /**
  * Process pre-key deletions with validation
  */
-async function processPreKeyDeletions(
-	data: SignalDataSet,
-	keyType: string,
-	state: SignalKeyStore,
+async function processPreKeyDeletions({
+	data,
+	keyType,
+	logger,
+	state,
+	mutex
+}: {
+	data: SignalDataSet
+	keyType: string
+	state: SignalKeyStore
 	logger: ILogger
-): Promise<void> {
-	const mutex = getPreKeyMutex(keyType)
-
+	mutex: Mutex
+}): Promise<void> {
 	await mutex.runExclusive(async () => {
 		const keyData = data[keyType]
 		if (!keyData) return
@@ -361,6 +363,17 @@ export const addTransactionCapability = (
 	logger: ILogger,
 	{ maxCommitRetries, delayBetweenTriesMs }: TransactionCapabilityOptions
 ): SignalKeyStoreWithTransaction => {
+	// Module-level specialized mutexes for pre-key operations
+	const preKeyMutex = new Mutex()
+	const signedPreKeyMutex = new Mutex()
+
+	/**
+	 * Get the appropriate mutex for the key type
+	 */
+	const getPreKeyMutex = (keyType: string): Mutex => {
+		return keyType === 'signed-pre-key' ? signedPreKeyMutex : preKeyMutex
+	}
+
 	// Mutex for each key type (session, pre-key, etc.)
 	const keyTypeMutexes = new Map<string, Mutex>()
 
@@ -538,8 +551,18 @@ export const addTransactionCapability = (
 					transactionCache[key] = transactionCache[key] || {}
 
 					// Special handling for pre-keys and signed-pre-keys
+					const mutex = getPreKeyMutex(key)
 					if (key === 'pre-key' || key === 'signed-pre-key') {
-						await handlePreKeyOperations(data, key, transactionCache, mutations, logger, true)
+						await handlePreKeyOperations({
+							data,
+							keyType: key,
+							transactionCache,
+							mutations,
+							logger,
+							isInTransaction: true,
+							mutex,
+							state
+						})
 					} else {
 						// Normal handling for other key types
 						handleNormalKeyOperations(data, key, transactionCache, mutations)
@@ -579,7 +602,13 @@ export const addTransactionCapability = (
 							// Process pre-keys and signed-pre-keys separately with specialized mutexes
 							for (const keyType in nonSenderKeyData) {
 								if (keyType === 'pre-key' || keyType === 'signed-pre-key') {
-									await processPreKeyDeletions(nonSenderKeyData, keyType, state, logger)
+									await processPreKeyDeletions({
+										data: nonSenderKeyData,
+										keyType,
+										state,
+										logger,
+										mutex: getPreKeyMutex(keyType)
+									})
 								}
 							}
 
@@ -593,7 +622,7 @@ export const addTransactionCapability = (
 						// Process pre-keys and signed-pre-keys separately with specialized mutexes
 						for (const keyType in data) {
 							if (keyType === 'pre-key' || keyType === 'signed-pre-key') {
-								await processPreKeyDeletions(data, keyType, state, logger)
+								await processPreKeyDeletions({ data, keyType, state, logger, mutex: getPreKeyMutex(keyType) })
 							}
 						}
 

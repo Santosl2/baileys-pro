@@ -1,7 +1,7 @@
 import NodeCache from '@cacheable/node-cache'
 import { Boom } from '@hapi/boom'
 import { proto } from '../../WAProto'
-import { DEFAULT_CACHE_TTLS, PROCESSABLE_HISTORY_TYPES } from '../Defaults'
+import { DEFAULT_CACHE_MAX_KEYS, DEFAULT_CACHE_TTLS, PROCESSABLE_HISTORY_TYPES } from '../Defaults'
 import {
 	ALL_WA_PATCH_NAMES,
 	BotListInfo,
@@ -43,6 +43,12 @@ import {
 import { makeMutex } from '../Utils/make-mutex'
 import processMessage from '../Utils/process-message'
 import {
+	BlockedCollectionsManager,
+	classifySyncError,
+	prepareCollectionSyncNode,
+	SyncErrorAction
+} from '../Utils/sync-action-utils'
+import {
 	BinaryNode,
 	getBinaryNodeChild,
 	getBinaryNodeChildren,
@@ -65,7 +71,7 @@ export const makeChatsSocket = (config: SocketConfig) => {
 		shouldSyncHistoryMessage
 	} = config
 	const sock = makeUSyncSocket(config)
-	const { ev, ws, authState, generateMessageTag, sendNode, query, signalRepository, onUnexpectedError } = sock
+	const { ev, ws, authState, generateMessageTag, sendNode, query, onUnexpectedError } = sock
 
 	let privacySettings: { [_: string]: string } | undefined
 	let syncState: SyncState = SyncState.Connecting
@@ -82,13 +88,17 @@ export const makeChatsSocket = (config: SocketConfig) => {
 	/** this mutex ensures that notifications are processed in order */
 	const notificationMutex = makeMutex()
 
+	/** Manager for collections blocked on missing app-state-sync-keys (will retry when keys arrive) */
+	const blockedCollections = new BlockedCollectionsManager()
+
 	let awaitingSyncTimeout: NodeJS.Timeout | undefined
 
 	const placeholderResendCache =
 		config.placeholderResendCache ||
 		new NodeCache({
 			stdTTL: DEFAULT_CACHE_TTLS.MSG_RETRY, // 1 hour
-			useClones: false
+			useClones: false,
+			maxKeys: DEFAULT_CACHE_MAX_KEYS.PLACEHOLDER_RESEND
 		})
 
 	if (!config.placeholderResendCache) {
@@ -490,7 +500,7 @@ export const makeChatsSocket = (config: SocketConfig) => {
 					const states = {} as { [T in WAPatchName]: LTHashState }
 					const nodes: BinaryNode[] = []
 
-					for (const name of collectionsToHandle) {
+					for (const name of collectionsToHandle as Set<WAPatchName>) {
 						const result = await authState.keys.get('app-state-sync-version', [name])
 						let state = result[name]
 
@@ -506,15 +516,7 @@ export const makeChatsSocket = (config: SocketConfig) => {
 
 						logger.info(`resyncing ${name} from v${state.version}`)
 
-						nodes.push({
-							tag: 'collection',
-							attrs: {
-								name,
-								version: state.version.toString(),
-								// return snapshot if being synced from scratch
-								return_snapshot: (!state.version).toString()
-							}
-						})
+						nodes.push(prepareCollectionSyncNode(name, state))
 					}
 
 					const result = await query({
@@ -583,23 +585,38 @@ export const makeChatsSocket = (config: SocketConfig) => {
 								collectionsToHandle.delete(name)
 							}
 						} catch (error) {
-							// if retry attempts overshoot
-							// or key not found
-							const isIrrecoverableError =
-								attemptsMap[name]! >= MAX_SYNC_ATTEMPTS ||
-								error.output?.statusCode === 404 ||
-								error.name === 'TypeError'
-							logger.info(
-								{ name, error: error.stack },
-								`failed to sync state from version${isIrrecoverableError ? '' : ', removing and trying from scratch'}`
-							)
-							await authState.keys.set({ 'app-state-sync-version': { [name]: null } })
-							// increment number of retries
-							attemptsMap[name] = (attemptsMap[name] || 0) + 1
+							const classification = classifySyncError(error, attemptsMap[name] ?? 0, MAX_SYNC_ATTEMPTS)
 
-							if (isIrrecoverableError) {
-								// stop retrying
-								collectionsToHandle.delete(name)
+							switch (classification.action) {
+								case SyncErrorAction.BLOCK_ON_KEY:
+									// Key not found - mark as blocked, will retry when keys arrive
+									logger.info(
+										{ name, error: classification.errorMessage },
+										'collection blocked waiting for app-state-sync-key'
+									)
+									blockedCollections.block(name)
+									collectionsToHandle.delete(name)
+									break
+
+								case SyncErrorAction.RETRY:
+									// Retriable error - reset state and try again
+									logger.info(
+										{ name, error: classification.errorStack ?? classification.errorMessage },
+										'failed to sync state from version, removing and trying from scratch'
+									)
+									await authState.keys.set({ 'app-state-sync-version': { [name]: null } })
+									attemptsMap[name] = (attemptsMap[name] ?? 0) + 1
+									break
+
+								case SyncErrorAction.ABORT:
+									// Irrecoverable error - stop trying
+									logger.info(
+										{ name, error: classification.errorStack ?? classification.errorMessage },
+										'failed to sync state from version'
+									)
+									await authState.keys.set({ 'app-state-sync-version': { [name]: null } })
+									collectionsToHandle.delete(name)
+									break
 							}
 						}
 					}
@@ -986,11 +1003,6 @@ export const makeChatsSocket = (config: SocketConfig) => {
 	}
 
 	const upsertMessage = ev.createBufferedFunction(async (msg: WAMessage, type: MessageUpsertType) => {
-		if (signalRepository.erroredMessages.has(msg.key.id!)) {
-			logger.error({ msgId: msg.key.id }, 'errored message recovered')
-			signalRepository.erroredMessages.delete(msg.key.id!)
-		}
-
 		ev.emit('messages.upsert', { messages: [msg], type })
 
 		if (!!msg.pushName) {
@@ -1074,7 +1086,7 @@ export const makeChatsSocket = (config: SocketConfig) => {
 	ws.on('CB:chatstate', handlePresenceUpdate)
 
 	ws.on('CB:ib,,dirty', async (node: BinaryNode) => {
-		const { attrs } = getBinaryNodeChild(node, 'dirty')!
+		const { attrs } = getBinaryNodeChild(node, 'dirty')
 		const type = attrs.type
 		switch (type) {
 			case 'account_sync':
@@ -1143,6 +1155,24 @@ export const makeChatsSocket = (config: SocketConfig) => {
 				ev.flush()
 			}
 		}, 20_000)
+	})
+
+	// Retry blocked collections when app-state-sync-keys arrive
+	ev.on('creds.update', async update => {
+		if (update.myAppStateKeyId && blockedCollections.hasBlocked) {
+			const collectionsToRetry = blockedCollections.flush()
+
+			logger.info(
+				{ collections: collectionsToRetry, newKeyId: update.myAppStateKeyId },
+				'app-state-sync-key arrived, retrying blocked collections'
+			)
+
+			try {
+				await resyncAppState(collectionsToRetry, false)
+			} catch (error) {
+				logger.warn({ error }, 'failed to resync blocked collections after key arrival')
+			}
+		}
 	})
 
 	return {

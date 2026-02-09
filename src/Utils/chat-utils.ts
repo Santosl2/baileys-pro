@@ -28,6 +28,7 @@ import { toNumber } from './generics'
 import logger, { ILogger } from './logger'
 import { LT_HASH_ANTI_TAMPERING } from './lt-hash'
 import { downloadContentFromMessage } from './messages-media'
+import { SyncdMissingKeyError } from './sync-action-utils'
 
 type FetchAppStateSyncKey = (keyId: string) => Promise<proto.Message.IAppStateSyncKeyData | null | undefined>
 
@@ -95,7 +96,7 @@ const makeLtHashGenerator = ({ indexValueMap, hash }: Pick<LTHashState, 'hash' |
 			const prevOp = indexValueMap[indexMacBase64]
 			if (operation === proto.SyncdMutation.SyncdOperation.REMOVE) {
 				if (!prevOp) {
-					logger.info('tried remove, but no previous op', { data: { indexMac, valueMac } })
+					logger?.warn({ indexMac: indexMacBase64 }, 'REMOVE mutation missing in local state, skipping')
 					return
 				}
 
@@ -262,10 +263,7 @@ export const decodeSyncdMutations = async (
 		const base64Key = Buffer.from(keyId).toString('base64')
 		const keyEnc = await getAppStateSyncKey(base64Key)
 		if (!keyEnc) {
-			throw new Boom(`failed to find key "${base64Key}" to decode mutation`, {
-				statusCode: 404,
-				data: { msgMutations }
-			})
+			throw new SyncdMissingKeyError(base64Key, { msgMutations })
 		}
 
 		return mutationKeys(keyEnc.keyData!)
@@ -284,7 +282,7 @@ export const decodeSyncdPatch = async (
 		const base64Key = Buffer.from(msg.keyId!.id!).toString('base64')
 		const mainKeyObj = await getAppStateSyncKey(base64Key)
 		if (!mainKeyObj) {
-			throw new Boom(`failed to find key "${base64Key}" to decode patch`, { statusCode: 404, data: { msg } })
+			throw new SyncdMissingKeyError(base64Key, { msg })
 		}
 
 		const mainKey = await mutationKeys(mainKeyObj.keyData!)
@@ -406,7 +404,7 @@ export const decodeSyncdSnapshot = async (
 		const base64Key = Buffer.from(snapshot.keyId!.id!).toString('base64')
 		const keyEnc = await getAppStateSyncKey(base64Key)
 		if (!keyEnc) {
-			throw new Boom(`failed to find key "${base64Key}" to decode mutation`)
+			throw new SyncdMissingKeyError(base64Key)
 		}
 
 		const result = await mutationKeys(keyEnc.keyData!)
@@ -474,7 +472,7 @@ export const decodePatches = async (
 			const base64Key = Buffer.from(keyId!.id!).toString('base64')
 			const keyEnc = await getAppStateSyncKey(base64Key)
 			if (!keyEnc) {
-				throw new Boom(`failed to find key "${base64Key}" to decode mutation`)
+				throw new SyncdMissingKeyError(base64Key)
 			}
 
 			const result = await mutationKeys(keyEnc.keyData!)

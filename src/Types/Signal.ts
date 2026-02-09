@@ -50,7 +50,6 @@ type E2ESessionOpts = {
 }
 
 export type SignalRepository = {
-	erroredMessages: Map<string, string>
 	decryptGroupMessage(opts: DecryptGroupSignalOpts): Promise<Uint8Array>
 	processSenderKeyDistributionMessage(opts: ProcessSenderKeyDistributionMessageOpts): Promise<void>
 	decryptMessage(opts: DecryptSignalProtoOpts): Promise<Uint8Array>

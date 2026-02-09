@@ -1,6 +1,5 @@
 import * as libsignal from 'libsignal'
 import { PreKeyWhisperMessage } from 'libsignal/src/protobufs'
-import { LRUCache } from 'lru-cache'
 import { SignalAuthState, SignalKeyStoreWithTransaction } from '../Types'
 import { SignalRepository } from '../Types/Signal'
 import { generateSignalPubKey } from '../Utils'
@@ -37,10 +36,8 @@ function extractIdentityFromPkmsg(ciphertext: Uint8Array): Uint8Array | undefine
 
 export function makeLibSignalRepository(auth: SignalAuthState): SignalRepository {
 	const storage: SenderKeyStore = signalStorage(auth)
+
 	return {
-		erroredMessages: new LRUCache({
-			max: 20
-		}),
 		async validateSession(jid: string) {
 			try {
 				const addr = jidToSignalProtocolAddress(jid)

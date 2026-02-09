@@ -15,6 +15,16 @@ export const DEFAULT_CACHE_TTLS = {
 	GROUP_METADATA: 15 * 60 // 15 minutes
 }
 
+export const DEFAULT_CACHE_MAX_KEYS = {
+	SIGNAL_STORE: 5000,
+	MSG_RETRY: 1000,
+	CALL_OFFER: 200,
+	USER_DEVICES: 1000,
+	GROUP_METADATA: 500,
+	IDENTITY_ASSERT: 500,
+	PLACEHOLDER_RESEND: 500
+}
+
 export const UNAUTHORIZED_CODES = [401, 403, 419]
 
 export const DEFAULT_ORIGIN = 'https://web.whatsapp.com'
@@ -54,21 +64,18 @@ export const KEEPALIVE_INTERVAL_MAX = 30_000
 const MAX_RECENT_MESSAGE_SENT_HISTORY = 256
 const recentMessageSentHistory = new Map<string, proto.IMessage>()
 
-const cachedGroupMetadata = new NodeCache({
-	useClones: false,
-	stdTTL: DEFAULT_CACHE_TTLS.GROUP_METADATA
-})
+const mediaCacheFactory = (): CacheStore => {
+	const mediaCache = new LRUCache<string, Buffer>({
+		max: 20,
+		ttl: 5 * 60 * 1000 // 5 minutes
+	})
 
-const mediaCache = new LRUCache<string, Buffer>({
-	max: 20,
-	ttl: 5 * 60 * 1000 // 5 minutes
-})
-
-const mediaCacheFactory: CacheStore = {
-	get: <T>(key: string) => mediaCache.get(key) as T | undefined,
-	set: <T = Buffer>(key: string, value: T) => mediaCache.set(key, value as any),
-	del: (key: string) => mediaCache.delete(key),
-	flushAll: () => mediaCache.clear()
+	return {
+		get: <T>(key: string) => mediaCache.get(key) as T | undefined,
+		set: <T = Buffer>(key: string, value: T) => mediaCache.set(key, value as any),
+		del: (key: string) => mediaCache.delete(key),
+		flushAll: () => mediaCache.clear()
+	}
 }
 
 export const DEFAULT_CONNECTION_CONFIG: SocketConfig = {
@@ -103,8 +110,12 @@ export const DEFAULT_CONNECTION_CONFIG: SocketConfig = {
 	// cachedGroupMetadata: async () => undefined,
 	makeSignalRepository: makeLibSignalRepository,
 
-	mediaCache: mediaCacheFactory,
-	groupMetadataCache: cachedGroupMetadata as any,
+	mediaCache: mediaCacheFactory(),
+	groupMetadataCache: new NodeCache({
+		useClones: false,
+		stdTTL: DEFAULT_CACHE_TTLS.GROUP_METADATA,
+		maxKeys: DEFAULT_CACHE_MAX_KEYS.GROUP_METADATA
+	}) as any,
 
 	enableAutoSessionRecreation: false,
 	sendReportingTag: true,
