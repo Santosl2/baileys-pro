@@ -1,10 +1,7 @@
 import { Boom } from '@hapi/boom'
 import NodeCache from '@cacheable/node-cache'
 import readline from 'readline'
-import makeWASocket, { AnyMessageContent, BinaryInfo, CacheStore, delay, DisconnectReason, downloadAndProcessHistorySyncNotification, encodeWAM, fetchLatestBaileysVersion, getAggregateVotesInPollMessage, getHistoryMsg, isJidNewsletter, jidDecode, makeCacheableSignalKeyStore, normalizeMessageContent, PatchedMessageWithRecipientJID, proto, useMultiFileAuthState, WAMessageContent, WAMessageKey } from '../src'
-//import MAIN_LOGGER from '../src/Utils/logger'
-import open from 'open'
-import fs from 'fs'
+import makeWASocket, { CacheStore, DEFAULT_CONNECTION_CONFIG, DisconnectReason, fetchLatestBaileysVersion, generateMessageIDV2, getAggregateVotesInPollMessage, isJidNewsletter, makeCacheableSignalKeyStore, proto, useMultiFileAuthState, WAMessageContent, WAMessageKey } from '../src'
 import P from 'pino'
 
 const logger = P({
@@ -72,9 +69,13 @@ function patchMessageBeforeSending(msg: proto.IMessage, jid: string[]): Promise<
 // start a connection
 const startSock = async () => {
 	const { state, saveCreds } = await useMultiFileAuthState('baileys_auth_info')
+	// NOTE: For unit testing purposes only
+	if (process.env.ADV_SECRET_KEY) {
+		state.creds.advSecretKey = process.env.ADV_SECRET_KEY
+	}
 	// fetch latest version of WA Web
 	const { version, isLatest } = await fetchLatestBaileysVersion()
-	console.log(`using WA v${version.join('.')}, isLatest: ${isLatest}`)
+	logger.debug({version: version.join('.'), isLatest}, `using latest WA version`)
 
 	const sock = makeWASocket({
 		// version,
@@ -82,6 +83,7 @@ const startSock = async () => {
 
 		// logger: P({level: 'silent'}),
 		logger,
+		waWebSocketUrl: process.env.SOCKET_URL ?? DEFAULT_CONNECTION_CONFIG.waWebSocketUrl,
 		auth: {
 			creds: state.creds,
 			/** caching makes the store faster to send/recv messages */
@@ -136,7 +138,7 @@ const startSock = async () => {
 					if ((lastDisconnect?.error as Boom)?.output?.statusCode !== DisconnectReason.loggedOut) {
 						startSock()
 					} else {
-						console.log('Connection closed. You are logged out.')
+						logger.fatal('Connection closed. You are logged out.')
 					}
 				}
 
@@ -195,6 +197,7 @@ const startSock = async () => {
 			// credentials updated -- save them
 			if (events['creds.update']) {
 				await saveCreds()
+				logger.debug({}, 'creds save triggered')
 			}
 
 			if (events['labels.association']) {
@@ -213,7 +216,7 @@ const startSock = async () => {
 			if (events['messaging-history.set']) {
 				const { chats, contacts, messages, isLatest, progress, syncType } = events['messaging-history.set']
 				if (syncType === proto.HistorySync.HistorySyncType.ON_DEMAND) {
-					console.log('received on-demand history sync, messages=', messages)
+					logger.debug(messages, 'received on-demand history sync')
 				}
 				console.log(
 					`recv ${chats.length} chats, ${contacts.length} contacts, ${messages.length} msgs (is latest: ${isLatest}, progress: ${progress}%), type: ${syncType}`
@@ -223,10 +226,10 @@ const startSock = async () => {
 			// received a new message
       if (events['messages.upsert']) {
         const upsert = events['messages.upsert']
-        console.log('recv messages ', JSON.stringify(upsert, undefined, 2))
+        logger.debug(upsert, 'messages.upsert fired')
 
         if (!!upsert.requestId) {
-          console.log("placeholder message received for request of id=" + upsert.requestId, upsert)
+          logger.debug(upsert, 'placeholder request message received')
         }
 
 
@@ -237,20 +240,19 @@ const startSock = async () => {
               const text = msg.message?.conversation || msg.message?.extendedTextMessage?.text
               if (text == "requestPlaceholder" && !upsert.requestId) {
                 const messageId = await sock.requestPlaceholderResend(msg.key)
-                console.log('requested placeholder resync, id=', messageId)
+								logger.debug({ id: messageId }, 'requested placeholder resync')
               }
 
               // go to an old chat and send this
               if (text == "onDemandHistSync") {
                 const messageId = await sock.fetchMessageHistory(50, msg.key, msg.messageTimestamp!)
-                console.log('requested on-demand sync, id=', messageId)
+                logger.debug({ id: messageId }, 'requested on-demand history resync')
               }
 
               if (!msg.key.fromMe && doReplies && !isJidNewsletter(msg.key?.remoteJid!)) {
-
-                console.log('replying to', msg.key.remoteJid)
-                await sock!.readMessages([msg.key])
-                await sendMessageWTyping({ text: 'Hello there!' }, msg.key.remoteJid!)
+              	const id = generateMessageIDV2(sock.user?.id)
+              	logger.debug({id, orig_id: msg.key.id }, 'replying to message')
+                await sock.sendMessage(msg.key.remoteJid!, { text: 'pong '+msg.key.id }, {messageId: id })
               }
             }
           }

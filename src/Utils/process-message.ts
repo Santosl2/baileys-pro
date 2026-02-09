@@ -285,7 +285,14 @@ const processMessage = async (
 						})
 					}
 
-					const data = await downloadAndProcessHistorySyncNotification(histNotification, options)
+					const data = await downloadAndProcessHistorySyncNotification(histNotification, options, logger)
+
+					if (data.lidPnMappings?.length) {
+						logger?.debug({ count: data.lidPnMappings.length }, 'processing LID-PN mappings from history sync')
+						await signalRepository.lidMapping
+							.storeLIDPNMappings(data.lidPnMappings)
+							.catch(err => logger?.warn({ err }, 'failed to store LID-PN mappings from history sync'))
+					}
 
 					ev.emit('messaging-history.set', {
 						...data,
@@ -349,13 +356,11 @@ const processMessage = async (
 							const webMessageInfo = proto.WebMessageInfo.decode(retryResponse.webMessageInfoBytes!)
 							// wait till another upsert event is available, don't want it to be part of the PDO response message
 							// TODO: parse through proper message handling utilities (to add relevant key fields)
-							setTimeout(() => {
-								ev.emit('messages.upsert', {
-									messages: [webMessageInfo as WAMessage],
-									type: 'notify',
-									requestId: response.stanzaId!
-								})
-							}, 500)
+							ev.emit('messages.upsert', {
+								messages: [webMessageInfo as WAMessage],
+								type: 'notify',
+								requestId: response.stanzaId!
+							})
 						}
 					}
 				}
@@ -378,6 +383,19 @@ const processMessage = async (
 						}
 					}
 				])
+				break
+			case proto.Message.ProtocolMessage.Type.GROUP_MEMBER_LABEL_CHANGE:
+				const labelAssociationMsg = protocolMsg.memberLabel
+				if (labelAssociationMsg?.label) {
+					ev.emit('group.member-tag.update', {
+						groupId: chat.id!,
+						label: labelAssociationMsg.label,
+						participant: message.key.participant!,
+						participantAlt: message.key.participantAlt!,
+						messageTimestamp: Number(message.messageTimestamp)
+					})
+				}
+
 				break
 			case proto.Message.ProtocolMessage.Type.LID_MIGRATION_MAPPING_SYNC:
 				const encodedPayload = protocolMsg.lidMigrationMappingSyncMessage?.encodedMappingPayload!
