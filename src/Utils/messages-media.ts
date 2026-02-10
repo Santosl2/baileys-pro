@@ -602,8 +602,7 @@ export const downloadEncryptedContent = async (
 
 	const output = new Transform({
 		transform(chunk, _, callback) {
-			let data = Buffer.concat([remainingBytes, chunk])
-
+			let data = remainingBytes.length ? Buffer.concat([remainingBytes, chunk]) : chunk
 			const decryptLength = toSmallestChunkSize(data.length)
 			remainingBytes = data.slice(decryptLength)
 			data = data.slice(0, decryptLength)
