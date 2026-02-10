@@ -11,6 +11,7 @@ import {
 	RequestJoinMethod,
 	SignalKeyStoreWithTransaction,
 	SocketConfig,
+	WAMessage,
 	WAMessageStubType
 } from '../Types'
 import { getContentType, normalizeMessageContent } from '../Utils/messages'
@@ -314,22 +315,32 @@ const processMessage = async (
 			case proto.Message.ProtocolMessage.Type.PEER_DATA_OPERATION_REQUEST_RESPONSE_MESSAGE:
 				const response = protocolMsg.peerDataOperationRequestResponseMessage!
 				if (response) {
-					placeholderResendCache?.del(response.stanzaId!)
 					// TODO: IMPLEMENT HISTORY SYNC ETC (sticker uploads etc.).
-					const { peerDataOperationResult } = response
-					for (const result of peerDataOperationResult!) {
-						const { placeholderMessageResendResponse: retryResponse } = result
+					const peerDataOperationResult = response.peerDataOperationResult || []
+					for (const result of peerDataOperationResult) {
+						const retryResponse = result?.placeholderMessageResendResponse
 						//eslint-disable-next-line max-depth
-						if (retryResponse) {
-							const webMessageInfo = proto.WebMessageInfo.decode(retryResponse.webMessageInfoBytes!)
-							// wait till another upsert event is available, don't want it to be part of the PDO response message
-							setTimeout(() => {
-								ev.emit('messages.upsert', {
-									messages: [webMessageInfo],
-									type: 'notify',
-									requestId: response.stanzaId!
-								})
-							}, 500)
+						if (!retryResponse?.webMessageInfoBytes) {
+							continue
+						}
+
+						//eslint-disable-next-line max-depth
+						try {
+							const webMessageInfo = proto.WebMessageInfo.decode(retryResponse.webMessageInfoBytes)
+							// Clean up placeholder resend cache using the original message ID
+							//eslint-disable-next-line max-depth
+							if (webMessageInfo.key?.id) {
+								placeholderResendCache?.del(webMessageInfo.key.id)
+							}
+
+							// TODO: parse through proper message handling utilities (to add relevant key fields)
+							ev.emit('messages.upsert', {
+								messages: [webMessageInfo as WAMessage],
+								type: 'notify',
+								requestId: response.stanzaId!
+							})
+						} catch (err) {
+							logger?.warn({ err, stanzaId: response.stanzaId }, 'failed to decode placeholder resend response')
 						}
 					}
 				}
