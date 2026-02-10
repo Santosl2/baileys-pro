@@ -1,7 +1,7 @@
 import NodeCache from '@cacheable/node-cache'
 import { Boom } from '@hapi/boom'
 import { proto } from '../../WAProto'
-import { DEFAULT_CACHE_MAX_KEYS, DEFAULT_CACHE_TTLS, WA_DEFAULT_EPHEMERAL } from '../Defaults'
+import { DEFAULT_CACHE_TTLS, WA_DEFAULT_EPHEMERAL } from '../Defaults'
 import {
 	AnyMessageContent,
 	DisconnectReason,
@@ -84,8 +84,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		config.userDevicesCache ||
 		new NodeCache({
 			stdTTL: DEFAULT_CACHE_TTLS.USER_DEVICES, // 5 minutes
-			useClones: false,
-			maxKeys: DEFAULT_CACHE_MAX_KEYS.USER_DEVICES
+			useClones: false
 		})
 
 	const messageRetryManager = new MessageRetryManager(logger, maxMsgRetryCount)

@@ -16,11 +16,8 @@ export const DEFAULT_CACHE_TTLS = {
 }
 
 export const DEFAULT_CACHE_MAX_KEYS = {
-	SIGNAL_STORE: 5000,
 	MSG_RETRY: 1000,
 	CALL_OFFER: 200,
-	USER_DEVICES: 1000,
-	GROUP_METADATA: 500,
 	IDENTITY_ASSERT: 500,
 	PLACEHOLDER_RESEND: 500
 }
@@ -113,8 +110,7 @@ export const DEFAULT_CONNECTION_CONFIG: SocketConfig = {
 	mediaCache: mediaCacheFactory(),
 	groupMetadataCache: new NodeCache({
 		useClones: false,
-		stdTTL: DEFAULT_CACHE_TTLS.GROUP_METADATA,
-		maxKeys: DEFAULT_CACHE_MAX_KEYS.GROUP_METADATA
+		stdTTL: DEFAULT_CACHE_TTLS.GROUP_METADATA
 	}) as any,
 
 	enableAutoSessionRecreation: false,
