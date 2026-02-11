@@ -327,15 +327,34 @@ const processMessage = async (
 						//eslint-disable-next-line max-depth
 						try {
 							const webMessageInfo = proto.WebMessageInfo.decode(retryResponse.webMessageInfoBytes)
-							// Clean up placeholder resend cache using the original message ID
+							const msgId = webMessageInfo.key?.id
+							// Retrieve cached original message data (preserves LID details,
+							// timestamps, etc. that the phone may omit in its PDO response)
+							const cachedData = msgId ? await placeholderResendCache?.get<Partial<WAMessage> | true>(msgId) : undefined
 							//eslint-disable-next-line max-depth
-							if (webMessageInfo.key?.id) {
-								placeholderResendCache?.del(webMessageInfo.key.id)
+							if (msgId) {
+								await placeholderResendCache?.del(msgId)
 							}
 
-							// TODO: parse through proper message handling utilities (to add relevant key fields)
+							let finalMsg: WAMessage
+							//eslint-disable-next-line max-depth
+							if (cachedData && typeof cachedData === 'object') {
+								// Apply decoded message content onto cached metadata (preserves LID etc.)
+								cachedData.message = webMessageInfo.message
+								//eslint-disable-next-line max-depth
+								if (webMessageInfo.messageTimestamp) {
+									cachedData.messageTimestamp = webMessageInfo.messageTimestamp
+								}
+
+								finalMsg = cachedData as WAMessage
+							} else {
+								finalMsg = webMessageInfo as WAMessage
+							}
+
+							logger?.debug({ msgId, requestId: response.stanzaId }, 'received placeholder resend')
+
 							ev.emit('messages.upsert', {
-								messages: [webMessageInfo as WAMessage],
+								messages: [finalMsg],
 								type: 'notify',
 								requestId: response.stanzaId!
 							})
@@ -344,6 +363,8 @@ const processMessage = async (
 						}
 					}
 				}
+
+				break
 
 			case proto.Message.ProtocolMessage.Type.MESSAGE_EDIT:
 				ev.emit('messages.update', [

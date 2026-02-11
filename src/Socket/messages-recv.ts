@@ -8,6 +8,7 @@ import {
 	DEFAULT_CACHE_TTLS,
 	KEY_BUNDLE_TYPE,
 	MIN_PREKEY_COUNT,
+	PLACEHOLDER_MAX_AGE_SECONDS,
 	STATUS_EXPIRY_SECONDS
 } from '../Defaults'
 import {
@@ -17,6 +18,7 @@ import {
 	NewsletterEventPayloads,
 	SocketConfig,
 	WACallEvent,
+	WAMessage,
 	WAMessageKey,
 	WAMessageStatus,
 	WAMessageStubType,
@@ -859,8 +861,8 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 
 			logger.debug('received unavailable message, acked and requested resend from phone')
 		} else {
-			if (placeholderResendCache.get(node.attrs.id)) {
-				placeholderResendCache.del(node.attrs.id)
+			if (await placeholderResendCache.get(node.attrs.id)) {
+				await placeholderResendCache.del(node.attrs.id)
 			}
 		}
 
@@ -896,7 +898,11 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 						// Check if this is eligible for placeholder resend (matching WA Web filters).
 						const unavailableNode = getBinaryNodeChild(node, 'unavailable')
 						const unavailableType = unavailableNode?.attrs?.type
-						if (unavailableType === 'bot_unavailable_fanout' || unavailableType === 'hosted_unavailable_fanout') {
+						if (
+							unavailableType === 'bot_unavailable_fanout' ||
+							unavailableType === 'hosted_unavailable_fanout' ||
+							unavailableType === 'view_once_unavailable_fanout'
+						) {
 							logger.debug(
 								{ msgId: msg.key.id, unavailableType },
 								'skipping placeholder resend for excluded unavailable type'
@@ -904,8 +910,6 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 							return sendMessageAck(node)
 						}
 
-						// WA Web enforces a 14-day maximum age for placeholder resend requests
-						const PLACEHOLDER_MAX_AGE_SECONDS = 14 * 24 * 60 * 60
 						const messageAge = unixTimestampSeconds() - toNumber(msg.messageTimestamp)
 						if (messageAge > PLACEHOLDER_MAX_AGE_SECONDS) {
 							logger.debug({ msgId: msg.key.id, messageAge }, 'skipping placeholder resend for old message')
@@ -913,79 +917,98 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 						}
 
 						// Request the real content from the phone via placeholder resend PDO.
+						// Upsert the CIPHERTEXT stub as a placeholder (like WA Web's processPlaceholderMsg),
+						// and store the requestId in stubParameters[1] so users can correlate
+						// with the incoming PDO response event.
 						const cleanKey: proto.IMessageKey = {
 							remoteJid: msg.key.remoteJid,
 							fromMe: msg.key.fromMe,
 							id: msg.key.id,
 							participant: msg.key.participant
 						}
-						requestPlaceholderResend(cleanKey)
+						// Cache the original message metadata so the PDO response handler
+						// can preserve key fields (LID details etc.) that the phone may omit
+						const msgData: Partial<WAMessage> = {
+							key: msg.key,
+							messageTimestamp: msg.messageTimestamp,
+							pushName: msg.pushName,
+							participant: msg.participant,
+							verifiedBizName: msg.verifiedBizName
+						}
+						requestPlaceholderResend(cleanKey, msgData)
 							.then(requestId => {
-								if (requestId) {
+								if (requestId && requestId !== 'RESOLVED') {
 									logger.debug({ msgId: msg.key.id, requestId }, 'requested placeholder resend for unavailable message')
+									ev.emit('messages.update', [
+										{
+											key: msg.key,
+											update: { messageStubParameters: [NO_MESSAGE_FOUND_ERROR_TEXT, requestId] }
+										}
+									])
 								}
 							})
 							.catch(err => {
 								logger.warn({ err, msgId: msg.key.id }, 'failed to request placeholder resend for unavailable message')
 							})
-						return sendMessageAck(node)
-					}
-
-					if (isJidStatusBroadcast(msg.key.remoteJid!)) {
-						const messageAge = unixTimestampSeconds() - toNumber(msg.messageTimestamp)
-						if (messageAge > STATUS_EXPIRY_SECONDS) {
-							logger.debug(
-								{ msgId: msg.key.id, messageAge, remoteJid: msg.key.remoteJid },
-								'skipping retry for expired status message'
-							)
-							return sendMessageAck(node)
-						}
-					}
-
-					const errorMessage = msg?.messageStubParameters?.[0] || ''
-					const isNoSenderKeyError = errorMessage.includes('No SenderKeyRecord')
-					const isPreKeyError = errorMessage.includes('PreKey')
-
-					logger.debug(`[handleMessage] Attempting retry request for failed decryption`)
-
-					// Handle both pre-key and normal retries in single mutex
-					retryMutex.mutex(async () => {
-						try {
-							if (!ws.isOpen) {
-								logger.debug({ node }, 'Connection closed, skipping retry')
-								return
+						await sendMessageAck(node)
+						// Don't return — fall through to upsertMessage so the stub is emitted
+					} else {
+						if (isJidStatusBroadcast(msg.key.remoteJid!)) {
+							const messageAge = unixTimestampSeconds() - toNumber(msg.messageTimestamp)
+							if (messageAge > STATUS_EXPIRY_SECONDS) {
+								logger.debug(
+									{ msgId: msg.key.id, messageAge, remoteJid: msg.key.remoteJid },
+									'skipping retry for expired status message'
+								)
+								return sendMessageAck(node)
 							}
+						}
 
-							// Handle pre-key errors with upload and delay
-							if (isPreKeyError) {
-								logger.info({ error: errorMessage }, 'PreKey error detected, uploading and retrying')
+						const errorMessage = msg?.messageStubParameters?.[0] || ''
+						const isNoSenderKeyError = errorMessage.includes('No SenderKeyRecord')
+						const isPreKeyError = errorMessage.includes('PreKey')
 
+						logger.debug(`[handleMessage] Attempting retry request for failed decryption`)
+
+						// Handle both pre-key and normal retries in single mutex
+						retryMutex.mutex(async () => {
+							try {
+								if (!ws.isOpen) {
+									logger.debug({ node }, 'Connection closed, skipping retry')
+									return
+								}
+
+								// Handle pre-key errors with upload and delay
+								if (isPreKeyError) {
+									logger.info({ error: errorMessage }, 'PreKey error detected, uploading and retrying')
+
+									try {
+										logger.debug('Uploading pre-keys for error recovery')
+										await uploadPreKeys(5)
+										logger.debug('Waiting for server to process new pre-keys')
+										await delay(1000)
+									} catch (uploadErr) {
+										logger.error({ uploadErr }, 'Pre-key upload failed, proceeding with retry anyway')
+									}
+								}
+
+								await sendRetryRequest(node, !encNode || isNoSenderKeyError)
+								if (retryRequestDelayMs) {
+									await delay(retryRequestDelayMs)
+								}
+							} catch (err) {
+								logger.error({ err, isPreKeyError }, 'Failed to handle retry, attempting basic retry')
+								// Still attempt retry even if pre-key upload failed
 								try {
-									logger.debug('Uploading pre-keys for error recovery')
-									await uploadPreKeys(5)
-									logger.debug('Waiting for server to process new pre-keys')
-									await delay(1000)
-								} catch (uploadErr) {
-									logger.error({ uploadErr }, 'Pre-key upload failed, proceeding with retry anyway')
+									await sendRetryRequest(node, !encNode || isNoSenderKeyError)
+								} catch (retryErr) {
+									logger.error({ retryErr }, 'Failed to send retry after error handling')
 								}
 							}
 
-							await sendRetryRequest(node, !encNode || isNoSenderKeyError)
-							if (retryRequestDelayMs) {
-								await delay(retryRequestDelayMs)
-							}
-						} catch (err) {
-							logger.error({ err, isPreKeyError }, 'Failed to handle retry, attempting basic retry')
-							// Still attempt retry even if pre-key upload failed
-							try {
-								await sendRetryRequest(node, !encNode || isNoSenderKeyError)
-							} catch (retryErr) {
-								logger.error({ retryErr }, 'Failed to send retry after error handling')
-							}
-						}
-
-						await sendMessageAck(node, NACK_REASONS.UnhandledError)
-					})
+							await sendMessageAck(node, NACK_REASONS.UnhandledError)
+						})
+					}
 				} else {
 					const isNewsletter = isJidNewsletter(msg.key.remoteJid!)
 
@@ -1055,21 +1078,24 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		return sendPeerDataOperationMessage(pdoMessage)
 	}
 
-	const requestPlaceholderResend = async (messageKey: WAMessageKey): Promise<string | undefined> => {
+	const requestPlaceholderResend = async (
+		messageKey: WAMessageKey,
+		msgData?: Partial<WAMessage>
+	): Promise<string | undefined> => {
 		if (!authState.creds.me?.id) {
 			throw new Boom('Not authenticated')
 		}
 
-		if (placeholderResendCache.get(messageKey?.id!)) {
+		if (await placeholderResendCache.get(messageKey?.id!)) {
 			logger.debug({ messageKey }, 'already requested resend')
 			return
 		} else {
-			placeholderResendCache.set(messageKey?.id!, true)
+			await placeholderResendCache.set(messageKey?.id!, msgData || true)
 		}
 
-		await delay(5000)
+		await delay(2000)
 
-		if (!placeholderResendCache.get(messageKey?.id!)) {
+		if (!(await placeholderResendCache.get(messageKey?.id!))) {
 			logger.debug({ messageKey }, 'message received while resend requested')
 			return 'RESOLVED'
 		}
@@ -1083,12 +1109,12 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 			peerDataOperationRequestType: proto.Message.PeerDataOperationRequestType.PLACEHOLDER_MESSAGE_RESEND
 		}
 
-		setTimeout(() => {
-			if (placeholderResendCache.get(messageKey?.id!)) {
-				logger.debug({ messageKey }, 'PDO message without response after 15 seconds. Phone possibly offline')
-				placeholderResendCache.del(messageKey?.id!)
+		setTimeout(async () => {
+			if (await placeholderResendCache.get(messageKey?.id!)) {
+				logger.debug({ messageKey }, 'PDO message without response after 8 seconds. Phone possibly offline')
+				await placeholderResendCache.del(messageKey?.id!)
 			}
-		}, 15_000)
+		}, 8_000)
 
 		return sendPeerDataOperationMessage(pdoMessage)
 	}

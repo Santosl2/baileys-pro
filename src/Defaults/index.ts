@@ -47,6 +47,9 @@ export const WA_CERT_DETAILS = {
 /** Status messages older than 24 hours are considered expired */
 export const STATUS_EXPIRY_SECONDS = 24 * 60 * 60
 
+/** WA Web enforces a 14-day maximum age for placeholder resend requests */
+export const PLACEHOLDER_MAX_AGE_SECONDS = 14 * 24 * 60 * 60
+
 export const PROCESSABLE_HISTORY_TYPES = [
 	proto.Message.HistorySyncNotification.HistorySyncType.INITIAL_BOOTSTRAP,
 	proto.Message.HistorySyncNotification.HistorySyncType.PUSH_NAME,
