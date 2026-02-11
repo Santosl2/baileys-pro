@@ -3,7 +3,13 @@ import { Boom } from '@hapi/boom'
 import { randomBytes } from 'crypto'
 import Long from 'long'
 import { proto } from '../../WAProto/index.js'
-import { DEFAULT_CACHE_TTLS, KEY_BUNDLE_TYPE, MIN_PREKEY_COUNT } from '../Defaults'
+import {
+	DEFAULT_CACHE_TTLS,
+	KEY_BUNDLE_TYPE,
+	MIN_PREKEY_COUNT,
+	PLACEHOLDER_MAX_AGE_SECONDS,
+	STATUS_EXPIRY_SECONDS
+} from '../Defaults'
 import type {
 	GroupParticipant,
 	MessageReceiptType,
@@ -139,7 +145,10 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		return sendPeerDataOperationMessage(pdoMessage)
 	}
 
-	const requestPlaceholderResend = async (messageKey: WAMessageKey): Promise<string | undefined> => {
+	const requestPlaceholderResend = async (
+		messageKey: WAMessageKey,
+		msgData?: Partial<WAMessage>
+	): Promise<string | undefined> => {
 		if (!authState.creds.me?.id) {
 			throw new Boom('Not authenticated')
 		}
@@ -148,7 +157,9 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 			logger.debug({ messageKey }, 'already requested resend')
 			return
 		} else {
-			await placeholderResendCache.set(messageKey?.id!, true)
+			// Store original message data so PDO response handler can preserve
+			// metadata (LID details, timestamps, etc.) that the phone may omit
+			await placeholderResendCache.set(messageKey?.id!, msgData || true)
 		}
 
 		await delay(5000)
@@ -1226,58 +1237,128 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 				await decrypt()
 				// message failed to decrypt
 				if (msg.messageStubType === proto.WebMessageInfo.StubType.CIPHERTEXT && msg.category !== 'peer') {
-					if (
-						msg?.messageStubParameters?.[0] === MISSING_KEYS_ERROR_TEXT ||
-						msg.messageStubParameters?.[0] === NO_MESSAGE_FOUND_ERROR_TEXT
-					) {
-						return sendMessageAck(node)
+					if (msg?.messageStubParameters?.[0] === MISSING_KEYS_ERROR_TEXT) {
+						return sendMessageAck(node, NACK_REASONS.ParsingError)
 					}
 
-					const errorMessage = msg?.messageStubParameters?.[0] || ''
-					const isPreKeyError = errorMessage.includes('PreKey')
+					if (msg.messageStubParameters?.[0] === NO_MESSAGE_FOUND_ERROR_TEXT) {
+						// Message arrived without encryption (e.g. CTWA ads messages).
+						// Check if this is eligible for placeholder resend (matching WA Web filters).
+						const unavailableNode = getBinaryNodeChild(node, 'unavailable')
+						const unavailableType = unavailableNode?.attrs?.type
+						if (
+							unavailableType === 'bot_unavailable_fanout' ||
+							unavailableType === 'hosted_unavailable_fanout' ||
+							unavailableType === 'view_once_unavailable_fanout'
+						) {
+							logger.debug(
+								{ msgId: msg.key.id, unavailableType },
+								'skipping placeholder resend for excluded unavailable type'
+							)
+							return sendMessageAck(node)
+						}
 
-					logger.debug(`[handleMessage] Attempting retry request for failed decryption`)
+						const messageAge = unixTimestampSeconds() - toNumber(msg.messageTimestamp)
+						if (messageAge > PLACEHOLDER_MAX_AGE_SECONDS) {
+							logger.debug({ msgId: msg.key.id, messageAge }, 'skipping placeholder resend for old message')
+							return sendMessageAck(node)
+						}
 
-					// Handle both pre-key and normal retries in single mutex
-					await retryMutex.mutex(async () => {
-						try {
-							if (!ws.isOpen) {
-								logger.debug({ node }, 'Connection closed, skipping retry')
-								return
-							}
-
-							// Handle pre-key errors with upload and delay
-							if (isPreKeyError) {
-								logger.info({ error: errorMessage }, 'PreKey error detected, uploading and retrying')
-
-								try {
-									logger.debug('Uploading pre-keys for error recovery')
-									await uploadPreKeys(5)
-									logger.debug('Waiting for server to process new pre-keys')
-									await delay(1000)
-								} catch (uploadErr) {
-									logger.error({ uploadErr }, 'Pre-key upload failed, proceeding with retry anyway')
+						// Request the real content from the phone via placeholder resend PDO.
+						// Upsert the CIPHERTEXT stub as a placeholder (like WA Web's processPlaceholderMsg),
+						// and store the requestId in stubParameters[1] so users can correlate
+						// with the incoming PDO response event.
+						const cleanKey: proto.IMessageKey = {
+							remoteJid: msg.key.remoteJid,
+							fromMe: msg.key.fromMe,
+							id: msg.key.id,
+							participant: msg.key.participant
+						}
+						// Cache the original message metadata so the PDO response handler
+						// can preserve key fields (LID details etc.) that the phone may omit
+						const msgData: Partial<WAMessage> = {
+							key: msg.key,
+							messageTimestamp: msg.messageTimestamp,
+							pushName: msg.pushName,
+							participant: msg.participant,
+							verifiedBizName: msg.verifiedBizName
+						}
+						requestPlaceholderResend(cleanKey, msgData)
+							.then(requestId => {
+								if (requestId && requestId !== 'RESOLVED') {
+									logger.debug({ msgId: msg.key.id, requestId }, 'requested placeholder resend for unavailable message')
+									ev.emit('messages.update', [
+										{
+											key: msg.key,
+											update: { messageStubParameters: [NO_MESSAGE_FOUND_ERROR_TEXT, requestId] }
+										}
+									])
 								}
-							}
-
-							const encNode = getBinaryNodeChild(node, 'enc')
-							await sendRetryRequest(node, !encNode)
-							if (retryRequestDelayMs) {
-								await delay(retryRequestDelayMs)
-							}
-						} catch (err) {
-							logger.error({ err, isPreKeyError }, 'Failed to handle retry, attempting basic retry')
-							// Still attempt retry even if pre-key upload failed
-							try {
-								const encNode = getBinaryNodeChild(node, 'enc')
-								await sendRetryRequest(node, !encNode)
-							} catch (retryErr) {
-								logger.error({ retryErr }, 'Failed to send retry after error handling')
+							})
+							.catch(err => {
+								logger.warn({ err, msgId: msg.key.id }, 'failed to request placeholder resend for unavailable message')
+							})
+						await sendMessageAck(node)
+						// Don't return — fall through to upsertMessage so the stub is emitted
+					} else {
+						// Skip retry for expired status messages (>24h old)
+						if (isJidStatusBroadcast(msg.key.remoteJid!)) {
+							const messageAge = unixTimestampSeconds() - toNumber(msg.messageTimestamp)
+							if (messageAge > STATUS_EXPIRY_SECONDS) {
+								logger.debug(
+									{ msgId: msg.key.id, messageAge, remoteJid: msg.key.remoteJid },
+									'skipping retry for expired status message'
+								)
+								return sendMessageAck(node)
 							}
 						}
 
-						await sendMessageAck(node, NACK_REASONS.UnhandledError)
-					})
+						const errorMessage = msg?.messageStubParameters?.[0] || ''
+						const isPreKeyError = errorMessage.includes('PreKey')
+
+						logger.debug(`[handleMessage] Attempting retry request for failed decryption`)
+
+						// Handle both pre-key and normal retries in single mutex
+						await retryMutex.mutex(async () => {
+							try {
+								if (!ws.isOpen) {
+									logger.debug({ node }, 'Connection closed, skipping retry')
+									return
+								}
+
+								// Handle pre-key errors with upload and delay
+								if (isPreKeyError) {
+									logger.info({ error: errorMessage }, 'PreKey error detected, uploading and retrying')
+
+									try {
+										logger.debug('Uploading pre-keys for error recovery')
+										await uploadPreKeys(5)
+										logger.debug('Waiting for server to process new pre-keys')
+										await delay(1000)
+									} catch (uploadErr) {
+										logger.error({ uploadErr }, 'Pre-key upload failed, proceeding with retry anyway')
+									}
+								}
+
+								const encNode = getBinaryNodeChild(node, 'enc')
+								await sendRetryRequest(node, !encNode)
+								if (retryRequestDelayMs) {
+									await delay(retryRequestDelayMs)
+								}
+							} catch (err) {
+								logger.error({ err, isPreKeyError }, 'Failed to handle retry, attempting basic retry')
+								// Still attempt retry even if pre-key upload failed
+								try {
+									const encNode = getBinaryNodeChild(node, 'enc')
+									await sendRetryRequest(node, !encNode)
+								} catch (retryErr) {
+									logger.error({ retryErr }, 'Failed to send retry after error handling')
+								}
+							}
+
+							await sendMessageAck(node, NACK_REASONS.UnhandledError)
+						})
+					}
 				} else {
 					if (messageRetryManager && msg.key.id) {
 						messageRetryManager.cancelPendingPhoneRequest(msg.key.id)
