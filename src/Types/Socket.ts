@@ -20,7 +20,7 @@ export type CacheStore = {
 	/** flush all data */
 	flushAll(): void | Promise<void>
 	/** optional multi-get */
-	mget?<T>(keys: string[]): Promise<Record<string, T | undefined>>
+	mget?<T>(keys: string[]): Promise<Record<string, T | undefined>> | Record<string, T | undefined>
 
 	mset?<T>(entries: { key: string; value: T }[]): Promise<void> | void | number | boolean
 }

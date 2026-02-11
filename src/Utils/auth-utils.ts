@@ -40,7 +40,7 @@ export function makeCacheableSignalKeyStore(
 ): SignalKeyStore {
 	const cache =
 		_cache ||
-		new NodeCache<SignalDataTypeMap[keyof SignalDataTypeMap]>({
+		new NodeCache({
 			stdTTL: DEFAULT_CACHE_TTLS.SIGNAL_STORE, // 5 minutes
 			useClones: false,
 			deleteOnExpire: true
@@ -75,14 +75,22 @@ export function makeCacheableSignalKeyStore(
 				if (idsToFetch.length) {
 					logger?.trace({ items: idsToFetch.length }, 'loading from store')
 					const fetched = await store.get(type, idsToFetch)
-					for (const id of idsToFetch) {
-						const item = fetched[id]
-						if (item) {
-							data[id] = item
-							// eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
-							await cache.set(getUniqueId(type, id), item as SignalDataTypeMap[keyof SignalDataTypeMap])
-						}
-					}
+					const insertItems = idsToFetch
+						.map(id => {
+							const item = fetched[id]
+							if (item) {
+								data[id] = item
+
+								return {
+									key: getUniqueId(type, id),
+									value: fetched[id] as SignalDataTypeMap[keyof SignalDataTypeMap]
+								}
+							}
+
+							return undefined as any
+						})
+						.filter(Boolean)
+					await cache.mset?.(insertItems)
 				}
 
 				return data
