@@ -1296,7 +1296,10 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 			const shouldIgnore = await shouldIgnoreJid(from)
 
 			if (from && from !== S_WHATSAPP_NET && shouldIgnore) {
-				await sendMessageAck(node, type === 'message' ? NACK_REASONS.UnhandledError : undefined)
+				await sendMessageAck(node, type === 'message' ? NACK_REASONS.UnhandledError : undefined).catch(ackErr =>
+					logger.error({ ackErr }, `failed to ack ignored ${type} node`)
+				)
+				logger.info({ from, type }, `ignored ${type} node from blocked jid`)
 				return
 			}
 		}
