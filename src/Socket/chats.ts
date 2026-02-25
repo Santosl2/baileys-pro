@@ -1095,7 +1095,9 @@ export const makeChatsSocket = (config: SocketConfig) => {
 				if (attrs.timestamp) {
 					let { lastAccountSyncTimestamp } = authState.creds
 					if (lastAccountSyncTimestamp) {
-						await cleanDirtyBits('account_sync', lastAccountSyncTimestamp)
+						await cleanDirtyBits('account_sync', lastAccountSyncTimestamp).catch(error =>
+							logger.error({ error }, 'failed to clean dirty bits for account_sync')
+						)
 					}
 
 					lastAccountSyncTimestamp = +attrs.timestamp

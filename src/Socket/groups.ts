@@ -79,13 +79,17 @@ export const makeGroupsSocket = (config: SocketConfig) => {
 	}
 
 	sock.ws.on('CB:ib,,dirty', async (node: BinaryNode) => {
-		const { attrs } = getBinaryNodeChild(node, 'dirty')!
-		if (attrs.type !== 'groups') {
-			return
-		}
+		try {
+			const { attrs } = getBinaryNodeChild(node, 'dirty')!
+			if (attrs.type !== 'groups') {
+				return
+			}
 
-		await groupFetchAllParticipating()
-		await sock.cleanDirtyBits('groups')
+			await groupFetchAllParticipating()
+			await sock.cleanDirtyBits('groups')
+		} catch (error) {
+			config.logger?.error?.({ error }, 'failed to handle dirty groups event')
+		}
 	})
 
 	return {

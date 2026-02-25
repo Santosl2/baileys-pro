@@ -1613,7 +1613,11 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 	})
 
 	ws.on('CB:notification', async (node: BinaryNode) => {
-		await processNode('notification', node, 'handling notification', handleNotification)
+		try {
+			await processNode('notification', node, 'handling notification', handleNotification)
+		} catch (error) {
+			logger.error({ error, node }, 'error in notification handler')
+		}
 	})
 	ws.on('CB:ack,class:message', (node: BinaryNode) => {
 		handleBadAck(node).catch(error => onUnexpectedError(error, 'handling bad ack'))
