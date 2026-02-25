@@ -33,7 +33,7 @@ type LoadOgImageProps = {
 	url: string
 }
 
-async function loadOgImage(url: string, logger?: ILogger): Promise<LoadOgImageProps | undefined> {
+async function loadOgImage(url: string, headers?: AxiosRequestConfig<{}>['headers'], logger?: ILogger): Promise<LoadOgImageProps | undefined> {
 	const origin = new URL(url).origin
 	try {
 		const request = async (link = url) =>
@@ -48,7 +48,7 @@ async function loadOgImage(url: string, logger?: ILogger): Promise<LoadOgImagePr
 					'Upgrade-Insecure-Requests': '1',
 					// https://github.com/jhy/jsoup/issues/976
 					'User-Agent':
-						'Mozilla/5.0 (Linux; Android 6.0.1; Nexus 5X Build/MMB29P) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.7093.0 Mobile Safari/537.36 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
+						headers?.['User-Agent'] || 'Mozilla/5.0 (Linux; Android 6.0.1; Nexus 5X Build/MMB29P) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.7093.0 Mobile Safari/537.36 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
 					Accept:
 						'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
 					'Sec-Fetch-Site': 'none',
@@ -113,7 +113,7 @@ export const getUrlInfo = async (
 			previewLink = 'https://' + previewLink
 		}
 
-		const ogImageFromHttpRequest = await loadOgImage(previewLink, opts.logger)
+		const ogImageFromHttpRequest = await loadOgImage(previewLink, opts.fetchOpts?.headers, opts.logger)
 		let info: Awaited<ReturnType<typeof getLinkPreview>> | LoadOgImageProps | undefined =
 			ogImageFromHttpRequest || undefined
 
