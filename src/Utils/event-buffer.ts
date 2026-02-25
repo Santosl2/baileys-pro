@@ -62,6 +62,8 @@ type BaileysBufferableEventEmitter = BaileysEventEmitter & {
 	flush(): boolean
 	/** is there an ongoing buffer */
 	isBuffering(): boolean
+	/** destroy the event buffer, clearing all resources */
+	destroy(): void
 }
 
 /**
@@ -165,7 +167,7 @@ export const makeEventBuffer = (logger: ILogger): BaileysBufferableEventEmitter 
 		isBuffering() {
 			return isBuffering
 		},
-		listenerCount(data){
+		listenerCount(data) {
 			return ev.listenerCount(data)
 		},
 		buffer,
@@ -183,7 +185,16 @@ export const makeEventBuffer = (logger: ILogger): BaileysBufferableEventEmitter 
 		},
 		on: (...args) => ev.on(...args),
 		off: (...args) => ev.off(...args),
-		removeAllListeners: (...args) => ev.removeAllListeners(...args)
+		removeAllListeners: (...args) => ev.removeAllListeners(...args),
+		destroy() {
+			historyCache.clear()
+			// Reset buffer data
+			data = makeBufferData()
+			isBuffering = false
+			// Remove all listeners
+			ev.removeAllListeners()
+			logger.debug('Event buffer destroyed')
+		}
 	}
 }
 

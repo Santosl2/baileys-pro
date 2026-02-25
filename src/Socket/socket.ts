@@ -395,6 +395,8 @@ export const makeSocket = (config: SocketConfig) => {
 			}
 		})
 		ev.removeAllListeners('connection.update')
+		// remove all listeners to prevent memory leaks
+		ev.destroy()
 	}
 
 	const waitForSocketOpen = async () => {
