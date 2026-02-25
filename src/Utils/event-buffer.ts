@@ -165,8 +165,9 @@ export const makeEventBuffer = (logger: ILogger): BaileysBufferableEventEmitter 
 		isBuffering() {
 			return isBuffering
 		},
-		listenerCount: ev.listenerCount.bind(ev),
-		listeners: ev.listeners.bind(ev),
+		listenerCount(data){
+			return ev.listenerCount(data)
+		},
 		buffer,
 		flush,
 		createBufferedFunction(work) {
