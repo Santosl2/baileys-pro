@@ -63,7 +63,8 @@ const startSock = async () => {
 			keys: makeCacheableSignalKeyStore(state.keys, logger)
 		},
 		msgRetryCounterCache,
-		generateHighQualityLinkPreview: true
+		generateHighQualityLinkPreview: true,
+		shouldSyncHistoryMessage: () => false,
 		// ignore all broadcast messages -- to receive the same
 		// comment the line below out
 		// shouldIgnoreJid: jid => isJidBroadcast(jid) || isJidNewsletter(jid),

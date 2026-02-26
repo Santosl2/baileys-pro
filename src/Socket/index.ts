@@ -9,10 +9,6 @@ const makeWASocket = (config: UserFacingSocketConfig) => {
 		...config
 	}
 
-	if (config.shouldSyncHistoryMessage === undefined) {
-		newConfig.shouldSyncHistoryMessage = () => !!newConfig.syncFullHistory
-	}
-
 	return makeBusinessSocket(newConfig)
 }
 

@@ -95,7 +95,9 @@ export const DEFAULT_CONNECTION_CONFIG: SocketConfig = {
 	markOnlineOnConnect: true,
 	syncFullHistory: false,
 	patchMessageBeforeSending: msg => msg,
-	shouldSyncHistoryMessage: () => true,
+	shouldSyncHistoryMessage: ({ syncType }: proto.Message.IHistorySyncNotification) => {
+		return syncType === proto.HistorySync.HistorySyncType.RECENT
+	},
 	shouldIgnoreJid: async () => Promise.resolve(false),
 	linkPreviewImageThumbnailWidth: 192,
 	transactionOpts: { maxCommitRetries: 10, delayBetweenTriesMs: 3000 },

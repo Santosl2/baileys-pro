@@ -36,7 +36,21 @@ export const executeWMexQuery = async <T>(
 	const result = await wMexQuery(variables, queryId, query, generateMessageTag)
 	const child = getBinaryNodeChild(result, 'result')
 	if (child?.content) {
-		const data = JSON.parse(child.content.toString())
+		let data: {
+			errors?: { message?: string; extensions?: { error_code?: number } }[]
+			data?: Record<string, unknown>
+		} = {
+			errors: undefined
+		}
+
+		try {
+			data = JSON.parse(child.content.toString())
+		} catch (err) {
+			console.log('Failed to parse GraphQL response', {
+				statusCode: 500,
+				data: { error: err instanceof Error ? err.message : 'Unknown error' }
+			})
+		}
 
 		if (data.errors && data.errors.length > 0) {
 			const errorMessages = data.errors.map((err: Error) => err.message || 'Unknown error').join(', ')

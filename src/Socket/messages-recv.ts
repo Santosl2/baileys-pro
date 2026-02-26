@@ -209,9 +209,6 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 			return
 		}
 
-		retryCount += 1
-		msgRetryCache.set(msgId, retryCount)
-
 		const { account, signedPreKey, signedIdentityKey: identityKey } = authState.creds
 
 		if (retryCount === 1) {
@@ -301,6 +298,9 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 
 				ev.emit('creds.update', update)
 			}
+
+			retryCount += 1
+			msgRetryCache.set(msgId, retryCount)
 
 			await sendNode(receipt)
 
