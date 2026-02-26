@@ -72,7 +72,7 @@ export const makeChatsSocket = (config: SocketConfig) => {
 		shouldSyncHistoryMessage
 	} = config
 	const sock = makeUSyncSocket(config)
-	const { ev, ws, authState, generateMessageTag, sendNode, query, onUnexpectedError } = sock
+	const { ev, ws, authState, generateMessageTag, sendNode, query, onUnexpectedError, sendUnifiedSession } = sock
 
 	let privacySettings: { [_: string]: string } | undefined
 	let syncState: SyncState = SyncState.Connecting
@@ -657,18 +657,19 @@ export const makeChatsSocket = (config: SocketConfig) => {
 	}
 
 	const sendPresenceUpdate = async (type: WAPresence, toJid?: string) => {
-		if (!ws.isOpen) {
-			throw new Boom('Connection Closed', { statusCode: DisconnectReason.connectionClosed })
-		}
-
 		const me = authState.creds.me!
-		if (type === 'available' || type === 'unavailable') {
+		const isAvailableType = type === 'available'
+		if (isAvailableType || type === 'unavailable') {
 			if (!me.name) {
 				logger.warn('no name present, ignoring presence update request...')
 				return
 			}
 
-			ev.emit('connection.update', { isOnline: type === 'available' })
+			ev.emit('connection.update', { isOnline: isAvailableType })
+
+			if (isAvailableType) {
+				void sendUnifiedSession()
+			}
 
 			await sendNode({
 				tag: 'presence',
