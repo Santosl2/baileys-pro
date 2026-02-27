@@ -1,5 +1,5 @@
 import axios, { AxiosRequestConfig } from 'axios'
-import { CacheStore, CacheStoreWithGeneric, WAMediaUploadFunction, WAUrlInfo } from '../Types'
+import { CacheStoreWithGeneric, WAMediaUploadFunction, WAUrlInfo } from '../Types'
 import { ILogger } from './logger'
 import { prepareWAMessageMedia } from './messages'
 import { extractImageThumb, getHttpStream } from './messages-media'
