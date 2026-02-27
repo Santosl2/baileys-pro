@@ -1,5 +1,5 @@
 import axios, { AxiosRequestConfig } from 'axios'
-import { WAMediaUploadFunction, WAUrlInfo } from '../Types'
+import { CacheStore, WAMediaUploadFunction, WAUrlInfo } from '../Types'
 import { ILogger } from './logger'
 import { prepareWAMessageMedia } from './messages'
 import { extractImageThumb, getHttpStream } from './messages-media'
@@ -15,6 +15,7 @@ const getCompressedJpegThumbnail = async (url: string, { thumbnailWidth, fetchOp
 
 export type URLGenerationOptions = {
 	thumbnailWidth: number
+	cache?: CacheStore
 	fetchOpts: {
 		/** Timeout in ms */
 		timeout: number
@@ -25,7 +26,7 @@ export type URLGenerationOptions = {
 	logger?: ILogger
 }
 
-type LoadOgImageProps = {
+export type LoadOgImageProps = {
 	title: string | null
 	description?: string | null
 	images?: string[] | null
@@ -33,7 +34,11 @@ type LoadOgImageProps = {
 	url: string
 }
 
-async function loadOgImage(url: string, headers?: AxiosRequestConfig<{}>['headers'], logger?: ILogger): Promise<LoadOgImageProps | undefined> {
+async function loadOgImage(
+	url: string,
+	headers?: AxiosRequestConfig<{}>['headers'],
+	logger?: ILogger
+): Promise<LoadOgImageProps | undefined> {
 	const origin = new URL(url).origin
 	try {
 		const request = async (link = url) =>
@@ -48,7 +53,8 @@ async function loadOgImage(url: string, headers?: AxiosRequestConfig<{}>['header
 					'Upgrade-Insecure-Requests': '1',
 					// https://github.com/jhy/jsoup/issues/976
 					'User-Agent':
-						headers?.['User-Agent'] || 'Mozilla/5.0 (Linux; Android 6.0.1; Nexus 5X Build/MMB29P) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.7093.0 Mobile Safari/537.36 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
+						headers?.['User-Agent'] ||
+						'Mozilla/5.0 (Linux; Android 6.0.1; Nexus 5X Build/MMB29P) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.7093.0 Mobile Safari/537.36 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
 					Accept:
 						'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
 					'Sec-Fetch-Site': 'none',
@@ -98,6 +104,7 @@ async function loadOgImage(url: string, headers?: AxiosRequestConfig<{}>['header
 export const getUrlInfo = async (
 	text: string,
 	opts: URLGenerationOptions = {
+		cache: undefined,
 		thumbnailWidth: THUMBNAIL_WIDTH_PX,
 		fetchOpts: { timeout: 3000 }
 	}
@@ -113,9 +120,19 @@ export const getUrlInfo = async (
 			previewLink = 'https://' + previewLink
 		}
 
-		const ogImageFromHttpRequest = await loadOgImage(previewLink, opts.fetchOpts?.headers, opts.logger)
+		let cached: LoadOgImageProps | undefined
+		if (opts.cache) {
+			cached = await opts.cache.get(previewLink)
+			if (cached) {
+				opts.logger?.debug({ url: previewLink }, 'cache hit for url preview')
+			}
+		}
+
+		const ogImageFromHttpRequest = !cached
+			? await loadOgImage(previewLink, opts.fetchOpts?.headers, opts.logger)
+			: undefined
 		let info: Awaited<ReturnType<typeof getLinkPreview>> | LoadOgImageProps | undefined =
-			ogImageFromHttpRequest || undefined
+			cached || ogImageFromHttpRequest || undefined
 
 		if (!info) {
 			info = await getLinkPreview(previewLink, {
@@ -153,6 +170,11 @@ export const getUrlInfo = async (
 				title: info.title,
 				description: info.description || undefined,
 				originalThumbnailUrl: image
+			}
+
+			if (opts.cache) {
+				opts.logger?.debug({ url: previewLink }, 'caching url preview')
+				await opts.cache.set(previewLink, info)
 			}
 
 			if (opts.uploadImage) {
