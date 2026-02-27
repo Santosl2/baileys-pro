@@ -15,7 +15,6 @@ import { trimUndefined } from './generics'
 import type { ILogger } from './logger'
 import { updateMessageWithReaction, updateMessageWithReceipt } from './messages'
 import { isRealMessage, shouldIncrementChatUnread } from './process-message'
-import logger from './logger'
 
 const BUFFERABLE_EVENT = [
 	'messaging-history.set',
