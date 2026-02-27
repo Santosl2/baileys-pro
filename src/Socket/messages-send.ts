@@ -1081,6 +1081,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 								...(axiosOptions || {})
 							},
 							logger,
+							cache: config.linkPreviewCache,
 							uploadImage: generateHighQualityLinkPreview ? waUploadToServer : undefined
 						}),
 					//TODO: CACHE

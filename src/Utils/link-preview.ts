@@ -1,5 +1,5 @@
 import axios, { AxiosRequestConfig } from 'axios'
-import { CacheStore, WAMediaUploadFunction, WAUrlInfo } from '../Types'
+import { CacheStore, CacheStoreWithGeneric, WAMediaUploadFunction, WAUrlInfo } from '../Types'
 import { ILogger } from './logger'
 import { prepareWAMessageMedia } from './messages'
 import { extractImageThumb, getHttpStream } from './messages-media'
@@ -15,7 +15,7 @@ const getCompressedJpegThumbnail = async (url: string, { thumbnailWidth, fetchOp
 
 export type URLGenerationOptions = {
 	thumbnailWidth: number
-	cache?: CacheStore
+	cache?: CacheStoreWithGeneric<LoadOgImageProps | undefined>
 	fetchOpts: {
 		/** Timeout in ms */
 		timeout: number

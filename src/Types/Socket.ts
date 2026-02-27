@@ -7,6 +7,7 @@ import { AuthenticationState, SignalAuthState, TransactionCapabilityOptions } fr
 import { GroupMetadata } from './GroupMetadata'
 import { MediaConnInfo } from './Message'
 import { SignalRepository } from './Signal'
+import { LoadOgImageProps } from '../Utils'
 
 export type WAVersion = [number, number, number]
 export type WABrowserDescription = [string, string, string]
@@ -161,6 +162,8 @@ export type SocketConfig = {
 	cachedGroupMetadata?: (jid: string) => Promise<GroupMetadata | undefined>
 
 	groupMetadataCache?: CacheStoreWithGeneric<GroupMetadata | undefined>
+
+	linkPreviewCache?: CacheStoreWithGeneric<LoadOgImageProps | undefined>
 
 	makeSignalRepository: (auth: SignalAuthState) => SignalRepository
 

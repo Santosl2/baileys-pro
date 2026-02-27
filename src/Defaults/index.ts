@@ -113,6 +113,10 @@ export const DEFAULT_CONNECTION_CONFIG: SocketConfig = {
 	makeSignalRepository: makeLibSignalRepository,
 
 	mediaCache: mediaCacheFactory(),
+	linkPreviewCache: new NodeCache({
+		useClones: false,
+		stdTTL: DEFAULT_CACHE_TTLS.GROUP_METADATA
+	}) as any,
 	groupMetadataCache: new NodeCache({
 		useClones: false,
 		stdTTL: DEFAULT_CACHE_TTLS.GROUP_METADATA

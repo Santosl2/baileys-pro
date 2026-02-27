@@ -64,7 +64,7 @@ const startSock = async () => {
 		},
 		msgRetryCounterCache,
 		generateHighQualityLinkPreview: true,
-		shouldSyncHistoryMessage: () => false,
+		shouldSyncHistoryMessage: () => false
 		// ignore all broadcast messages -- to receive the same
 		// comment the line below out
 		// shouldIgnoreJid: jid => isJidBroadcast(jid) || isJidNewsletter(jid),
@@ -111,7 +111,6 @@ const startSock = async () => {
 				// THIS INCLUDES STUFF LIKE ocVersion WHICH IS CRUCIAL FOR THE PREVENTION OF THE WARNING
 
 				if (connection === 'open') {
-					
 					sock.newsletterFetchAllParticipating().then(newsletter => {
 						console.log('fetching all newsletter')
 						//console.log(newsletter)
@@ -1055,7 +1054,20 @@ Selecione e melhor opção:`,
 								msg.message?.conversation?.slice(1).trim() || msg.message?.extendedTextMessage?.text?.slice(1).trim()
 							//
 
-							if (command === 'download-newsletter') {
+							if (command === 'peer-link-preview') {
+								sock
+									.sendPeerDataOperationMessage({
+										requestUrlPreview: [
+											{
+												url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+												includeHqThumbnail: true
+											}
+										]
+									})
+									.then(res => {
+										console.log('res of request preview', res)
+									})
+							} else if (command === 'download-newsletter') {
 								const downloadImage = await downloadContentFromMessage(
 									{
 										directPath:
