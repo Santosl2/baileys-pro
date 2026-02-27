@@ -95,6 +95,21 @@ async function loadOgImage(
 	}
 }
 
+async function loadOgImageSize(
+	url: string,
+	headers?: AxiosRequestConfig<{}>['headers'],
+	logger?: ILogger
+): Promise<{ width: number; height: number } | undefined> {
+	try {
+		const stream = await getHttpStream(url, { headers })
+		const result = await extractImageThumb(stream, THUMBNAIL_WIDTH_PX)
+		return result.original
+	} catch (error) {
+		logger?.debug({ err: error.stack, url }, 'error in fetching og image size')
+		return undefined
+	}
+}
+
 /**
  * Given a piece of text, checks for any URL present, generates link preview for the same and returns it
  * Return undefined if the fetch failed or no URL was found
@@ -178,6 +193,8 @@ export const getUrlInfo = async (
 			}
 
 			if (opts.uploadImage) {
+				const ogImageSize = await loadOgImageSize(image, opts.fetchOpts?.headers, opts.logger).catch(() => undefined)
+
 				const { imageMessage } = await prepareWAMessageMedia(
 					{ image: { url: image } },
 					{
@@ -190,9 +207,20 @@ export const getUrlInfo = async (
 					? Buffer.from(imageMessage.jpegThumbnail)
 					: (await getCompressedJpegThumbnail(image, opts)).buffer
 				urlInfo.highQualityThumbnail = imageMessage || undefined
+				urlInfo.thumbnailWidth = imageMessage?.width || ogImageSize?.width || undefined
+				urlInfo.thumbnailHeight = imageMessage?.height || ogImageSize?.height || undefined
 			} else {
 				try {
-					urlInfo.jpegThumbnail = image ? (await getCompressedJpegThumbnail(image, opts)).buffer : undefined
+					// eslint-disable-next-line max-depth
+					if (image) {
+						const thumb = await getCompressedJpegThumbnail(image, opts)
+						urlInfo.jpegThumbnail = thumb.buffer
+						urlInfo.thumbnailWidth = opts.thumbnailWidth
+						urlInfo.thumbnailHeight =
+							thumb.original?.width && thumb.original?.height
+								? Math.round((opts.thumbnailWidth * thumb.original.height) / thumb.original.width)
+								: undefined
+					}
 				} catch (error) {
 					opts.logger?.debug({ err: error.stack, url: previewLink }, 'error in generating thumbnail')
 				}

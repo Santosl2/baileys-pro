@@ -64,6 +64,8 @@ export interface WAUrlInfo {
 	title: string
 	description?: string
 	jpegThumbnail?: Buffer
+	thumbnailWidth?: number
+	thumbnailHeight?: number
 	highQualityThumbnail?: proto.Message.IImageMessage
 	faviconMMSMetadata?: proto.Message.IMMSThumbnailMetadata
 	originalThumbnailUrl?: string

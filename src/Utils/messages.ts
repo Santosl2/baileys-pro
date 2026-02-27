@@ -386,8 +386,8 @@ export const generateWAMessageContent = async (
 				extContent.thumbnailDirectPath = img.directPath
 				extContent.mediaKey = img.mediaKey
 				extContent.mediaKeyTimestamp = img.mediaKeyTimestamp
-				extContent.thumbnailWidth = img.width
-				extContent.thumbnailHeight = img.height
+				extContent.thumbnailWidth = urlInfo.thumbnailWidth
+				extContent.thumbnailHeight = urlInfo.thumbnailHeight
 				extContent.thumbnailSha256 = img.fileSha256
 				extContent.thumbnailEncSha256 = img.fileEncSha256
 			} else {

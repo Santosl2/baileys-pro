@@ -24,7 +24,9 @@ import makeWASocket, {
 	getContentType,
 	jidNormalizedUser,
 	downloadUncryptedContent,
-	downloadContentFromMessage
+	downloadContentFromMessage,
+	generateMessageID,
+	jidDecode
 } from '../src'
 //import MAIN_LOGGER from '../src/Utils/logger'
 import fs from 'fs'
@@ -1055,18 +1057,41 @@ Selecione e melhor opção:`,
 							//
 
 							if (command === 'peer-link-preview') {
-								sock
-									.sendPeerDataOperationMessage({
-										requestUrlPreview: [
-											{
-												url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
-												includeHqThumbnail: true
+								async function requestLinkPreview(sock, url) {
+									// Primary phone is always device :0
+									// sock.user.id example: "5511999999999@s.whatsapp.net"
+									const userD = jidDecode(sock.user.id)
+
+									if (!userD) return
+									const { server, user } = userD
+									const primaryJid = `${user}:0@${server}` // "5511999999999:0@s.whatsapp.net"
+
+									const msgId = generateMessageID()
+
+									const message = {
+										protocolMessage: {
+											// type = 16 = PEER_DATA_OPERATION_REQUEST_MESSAGE
+											type: proto.Message.ProtocolMessage.Type.PEER_DATA_OPERATION_REQUEST_MESSAGE,
+											peerDataOperationRequestMessage: {
+												// peerDataOperationRequestType = 2 = GENERATE_LINK_PREVIEW
+												peerDataOperationRequestType: proto.Message.PeerDataOperationRequestType.GENERATE_LINK_PREVIEW,
+												requestUrlPreview: [
+													{
+														url,
+														includeHqThumbnail: true
+													}
+												]
 											}
-										]
-									})
-									.then(res => {
-										console.log('res of request preview', res)
-									})
+										}
+									}
+
+									// Send to own primary device (phone)
+									await sock.relayMessage(primaryJid, message, { messageId: msgId })
+
+									// Wait for response — phone responds with a protocol message whose
+									// peerDataOperationRequestResponseMessage.stanzaId matches msgId
+								}
+								requestLinkPreview(sock, 'https://s.shopee.com.br/1gDUTLWq7L?lp=aff')
 							} else if (command === 'download-newsletter') {
 								const downloadImage = await downloadContentFromMessage(
 									{
