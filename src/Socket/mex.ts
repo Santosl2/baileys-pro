@@ -42,7 +42,6 @@ export const executeWMexQuery = async <T>(
 		} = {
 			errors: undefined
 		}
-
 		try {
 			data = JSON.parse(child.content.toString())
 		} catch (err) {
