@@ -387,7 +387,9 @@ export const makeSocket = (config: SocketConfig) => {
 					logger.error({ err: err })
 				})
 				ws.close()
-			} catch {}
+			} catch (err) {
+				logger.error({ err }, 'error in closing websocket')
+			}
 		}
 
 		ev.emit('connection.update', {
