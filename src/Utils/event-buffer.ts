@@ -134,28 +134,6 @@ export const makeEventBuffer = (logger: ILogger): BaileysBufferableEventEmitter 
 			}
 		},
 		emit<T extends BaileysEvent>(event: BaileysEvent, evData: BaileysEventMap[T]) {
-			// Check if this is a messages.upsert with a different type than what's buffered
-			// If so, flush the buffered messages first to avoid type overshadowing
-			if (event === 'messages.upsert') {
-				const { type } = evData as BaileysEventMap['messages.upsert']
-				const existingUpserts = Object.values(data.messageUpserts)
-				if (existingUpserts.length > 0) {
-					const bufferedType = existingUpserts[0].type
-					if (bufferedType !== type) {
-						logger.debug({ bufferedType, newType: type }, 'messages.upsert type mismatch, emitting buffered messages')
-						// Emit the buffered messages with their correct type
-						ev.emit('event', {
-							'messages.upsert': {
-								messages: existingUpserts.map(m => m.message),
-								type: bufferedType
-							}
-						})
-						// Clear the message upserts from the buffer
-						data.messageUpserts = {}
-					}
-				}
-			}
-
 			if (isBuffering && BUFFERABLE_EVENT_SET.has(event)) {
 				append(data, historyCache, event as BufferableEvent, evData, logger)
 				return true
@@ -211,7 +189,6 @@ const makeBufferData = (): BufferedEventData => {
 		chatDeletes: new Set(),
 		contactUpserts: {},
 		contactUpdates: {},
-		messageUpserts: {},
 		messageUpdates: {},
 		messageReactions: {},
 		messageDeletes: {},
@@ -390,44 +367,11 @@ function append<E extends BufferableEvent>(
 			}
 
 			break
-		case 'messages.upsert':
-			const { messages, type } = eventData as BaileysEventMap['messages.upsert']
-			for (const message of messages) {
-				const key = stringifyMessageKey(message.key)
-				let existing = data.messageUpserts[key]?.message
-				if (!existing) {
-					existing = data.historySets.messages[key]
-					if (existing) {
-						logger.debug({ messageId: key }, 'absorbed message upsert in message set')
-					}
-				}
-
-				if (existing) {
-					message.messageTimestamp = existing.messageTimestamp
-				}
-
-				if (data.messageUpdates[key]) {
-					logger.debug('absorbed prior message update in message upsert')
-					Object.assign(message, data.messageUpdates[key].update)
-					delete data.messageUpdates[key]
-				}
-
-				if (data.historySets.messages[key]) {
-					data.historySets.messages[key] = message
-				} else {
-					data.messageUpserts[key] = {
-						message,
-						type: type === 'notify' || data.messageUpserts[key]?.type === 'notify' ? 'notify' : type
-					}
-				}
-			}
-
-			break
 		case 'messages.update':
 			const msgUpdates = eventData as BaileysEventMap['messages.update']
 			for (const { key, update } of msgUpdates) {
 				const keyStr = stringifyMessageKey(key)
-				const existing = data.historySets.messages[keyStr] || data.messageUpserts[keyStr]?.message
+				const existing = data.historySets.messages[keyStr]
 				if (existing) {
 					Object.assign(existing, update)
 					// if the message was received & read by us
@@ -454,10 +398,6 @@ function append<E extends BufferableEvent>(
 						data.messageDeletes[keyStr] = key
 					}
 
-					if (data.messageUpserts[keyStr]) {
-						delete data.messageUpserts[keyStr]
-					}
-
 					if (data.messageUpdates[keyStr]) {
 						delete data.messageUpdates[keyStr]
 					}
@@ -471,13 +411,8 @@ function append<E extends BufferableEvent>(
 			const reactions = eventData as BaileysEventMap['messages.reaction']
 			for (const { key, reaction } of reactions) {
 				const keyStr = stringifyMessageKey(key)
-				const existing = data.messageUpserts[keyStr]
-				if (existing) {
-					updateMessageWithReaction(existing.message, reaction)
-				} else {
-					data.messageReactions[keyStr] = data.messageReactions[keyStr] || { key, reactions: [] }
-					updateMessageWithReaction(data.messageReactions[keyStr], reaction)
-				}
+				data.messageReactions[keyStr] = data.messageReactions[keyStr] || { key, reactions: [] }
+				updateMessageWithReaction(data.messageReactions[keyStr], reaction)
 			}
 
 			break
@@ -485,24 +420,8 @@ function append<E extends BufferableEvent>(
 			const receipts = eventData as BaileysEventMap['message-receipt.update']
 			for (const { key, receipt } of receipts) {
 				const keyStr = stringifyMessageKey(key)
-				const existing = data.messageUpserts[keyStr]
-				if (existing) {
-					updateMessageWithReceipt(existing.message, receipt)
-				} else {
-					data.messageReceipts[keyStr] = data.messageReceipts[keyStr] || { key, userReceipt: [] }
-					updateMessageWithReceipt(data.messageReceipts[keyStr], receipt)
-				}
-			}
-
-			break
-		case 'groups.update':
-			const groupUpdates = eventData as BaileysEventMap['groups.update']
-			for (const update of groupUpdates) {
-				const id = update.id!
-				const groupUpdate = data.groupUpdates[id] || {}
-				if (!data.groupUpdates[id]) {
-					data.groupUpdates[id] = Object.assign(groupUpdate, update)
-				}
+				data.messageReceipts[keyStr] = data.messageReceipts[keyStr] || { key, userReceipt: [] }
+				updateMessageWithReceipt(data.messageReceipts[keyStr], receipt)
 			}
 
 			break
@@ -575,25 +494,6 @@ function consolidateEvents(data: BufferedEventData) {
 	const chatDeleteList = Array.from(data.chatDeletes)
 	if (chatDeleteList.length) {
 		map['chats.delete'] = chatDeleteList
-	}
-
-	const messageUpsertList = Object.values(data.messageUpserts)
-	if (messageUpsertList.length) {
-		const type = messageUpsertList[0]!.type
-		const notify = messageUpsertList.filter(m => m.type === 'notify')
-		const append = messageUpsertList.filter(m => m.type === 'append')
-
-		if (notify.length > 0 && append.length > 0) {
-			console.warn(
-				{ notifyCount: notify.length, appendCount: append.length, type, messageUpsertList },
-				'Mixed message upsert types in buffer, this may lead to unexpected behavior'
-			)
-		}
-
-		map['messages.upsert'] = {
-			messages: messageUpsertList.map(m => m.message),
-			type
-		}
 	}
 
 	const messageUpdateList = Object.values(data.messageUpdates)

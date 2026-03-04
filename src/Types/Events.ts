@@ -115,7 +115,7 @@ export type BufferedEventData = {
 	chatDeletes: Set<string>
 	contactUpserts: { [jid: string]: Contact }
 	contactUpdates: { [jid: string]: Partial<Contact> }
-	messageUpserts: { [key: string]: { type: MessageUpsertType; message: WAMessage } }
+	// messageUpserts: { [key: string]: { type: MessageUpsertType; message: WAMessage } }
 	messageUpdates: { [key: string]: WAMessageUpdate }
 	messageDeletes: { [key: string]: WAMessageKey }
 	messageReactions: { [key: string]: { key: WAMessageKey; reactions: proto.IReaction[] } }
