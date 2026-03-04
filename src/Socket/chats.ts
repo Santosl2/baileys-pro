@@ -1005,7 +1005,7 @@ export const makeChatsSocket = (config: SocketConfig) => {
 		await Promise.all([fetchProps(), fetchBlocklist(), fetchPrivacySettings()])
 	}
 
-	const upsertMessage = ev.createBufferedFunction(async (msg: WAMessage, type: MessageUpsertType) => {
+	const upsertMessage = async (msg: WAMessage, type: MessageUpsertType) => {
 		ev.emit('messages.upsert', { messages: [msg], type })
 
 		if (!!msg.pushName) {
@@ -1083,7 +1083,7 @@ export const makeChatsSocket = (config: SocketConfig) => {
 			logger.info('App state sync key arrived, triggering app state sync')
 			await doAppStateSync()
 		}
-	})
+	}
 
 	ws.on('CB:presence', handlePresenceUpdate)
 	ws.on('CB:chatstate', handlePresenceUpdate)

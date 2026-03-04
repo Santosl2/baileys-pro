@@ -23,12 +23,12 @@ const BUFFERABLE_EVENT = [
 	'chats.delete',
 	'contacts.upsert',
 	'contacts.update',
-	'messages.upsert',
+	// 'messages.upsert',
 	'messages.update',
 	'messages.delete',
 	'messages.reaction',
-	'message-receipt.update',
-	'groups.update'
+	'message-receipt.update'
+	// 'groups.update'
 ] as const
 
 type BufferableEvent = (typeof BUFFERABLE_EVENT)[number]
