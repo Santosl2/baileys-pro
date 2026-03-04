@@ -1006,7 +1006,9 @@ export const makeChatsSocket = (config: SocketConfig) => {
 	}
 
 	const upsertMessage = async (msg: WAMessage, type: MessageUpsertType) => {
-		ev.emit('messages.upsert', { messages: [msg], type })
+		if (msg.messageStubType !== proto.WebMessageInfo.StubType.CIPHERTEXT) {
+			ev.emit('messages.upsert', { messages: [msg], type })
+		}
 
 		if (!!msg.pushName) {
 			let jid = msg.key.fromMe ? authState.creds.me!.id : msg.key.participant || msg.key.remoteJid
