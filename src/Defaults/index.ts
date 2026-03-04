@@ -51,11 +51,13 @@ export const STATUS_EXPIRY_SECONDS = 24 * 60 * 60
 export const PLACEHOLDER_MAX_AGE_SECONDS = 14 * 24 * 60 * 60
 
 export const PROCESSABLE_HISTORY_TYPES = [
-	proto.Message.HistorySyncNotification.HistorySyncType.INITIAL_BOOTSTRAP,
-	proto.Message.HistorySyncNotification.HistorySyncType.PUSH_NAME,
-	proto.Message.HistorySyncNotification.HistorySyncType.RECENT,
-	proto.Message.HistorySyncNotification.HistorySyncType.FULL,
-	proto.Message.HistorySyncNotification.HistorySyncType.ON_DEMAND
+	proto.HistorySync.HistorySyncType.INITIAL_BOOTSTRAP,
+	proto.HistorySync.HistorySyncType.PUSH_NAME,
+	proto.HistorySync.HistorySyncType.RECENT,
+	proto.HistorySync.HistorySyncType.FULL,
+	proto.HistorySync.HistorySyncType.ON_DEMAND,
+	proto.HistorySync.HistorySyncType.NON_BLOCKING_DATA,
+	proto.HistorySync.HistorySyncType.INITIAL_STATUS_V3
 ]
 
 export const KEEPALIVE_INTERVAL_MIN = 20_000
