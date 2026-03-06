@@ -1056,7 +1056,12 @@ Selecione e melhor opção:`,
 								msg.message?.conversation?.slice(1).trim() || msg.message?.extendedTextMessage?.text?.slice(1).trim()
 							//
 
-							if (command === 'peer-link-preview') {
+							if (command === 'mention-all' && msg.key.remoteJid?.endsWith('@g.us')) {
+								await sock.sendMessage(msg.key.remoteJid!, {
+									text: '@all Mencionando todo mundo!',
+									mentionAll: true
+								})
+							} else if (command === 'peer-link-preview') {
 								async function requestLinkPreview(sock, url) {
 									// Primary phone is always device :0
 									// sock.user.id example: "5511999999999@s.whatsapp.net"

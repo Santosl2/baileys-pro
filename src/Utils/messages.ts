@@ -815,6 +815,14 @@ export const generateWAMessageContent = async (
 		m[messageType].contextInfo.mentionedJid = message.mentions
 	}
 
+	if ('mentionAll' in message && message.mentionAll) {
+		const [messageType] = Object.keys(m)
+		m[messageType].contextInfo = m[messageType] || {}
+		m[messageType].contextInfo.nonJidMentions = 1
+		m[messageType].contextInfo.mentionedJid = []
+		m[messageType].contextInfo.groupMentions = []
+	}
+
 	if ('edit' in message) {
 		m = {
 			protocolMessage: {
