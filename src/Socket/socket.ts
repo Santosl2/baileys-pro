@@ -326,9 +326,9 @@ export const makeSocket = (config: SocketConfig) => {
 		}
 	}
 
-	const onMessageReceived = (data: Buffer) => {
-		noise
-			.decodeFrame(data, frame => {
+	const onMessageReceived = async (data: Buffer) => {
+		try {
+			await noise.decodeFrame(data, frame => {
 				// reset ping timeout
 				lastDateRecv = new Date()
 
@@ -364,10 +364,10 @@ export const makeSocket = (config: SocketConfig) => {
 					}
 				}
 			})
-			.catch(error => {
-				logger.error({ error }, 'error decoding frame')
-				end(new Boom('Decode frame error', { statusCode: DisconnectReason.badSession, data: { error } }))
-			})
+		} catch (error) {
+			logger.error({ error }, 'error decoding frame')
+			end(new Boom('Decode frame error', { statusCode: DisconnectReason.badSession, data: { error } }))
+		}
 	}
 
 	const end = (error: Error | undefined) => {
