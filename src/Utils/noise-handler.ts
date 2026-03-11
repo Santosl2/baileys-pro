@@ -146,6 +146,7 @@ export const makeNoiseHandler = ({
 
 	const processData = async (onFrame: (buff: Uint8Array | BinaryNode) => void) => {
 		let size: number | undefined
+		let frameCount = 0
 
 		while (true) {
 			if (inBytes.length < 3) return
@@ -155,6 +156,8 @@ export const makeNoiseHandler = ({
 			if (inBytes.length < size + 3) return
 
 			let frame: Uint8Array | BinaryNode = inBytes.subarray(3, size + 3)
+			// Copy the slice instead of using a subarray view — a subarray keeps
+			// a reference to the entire parent buffer, preventing GC on large reads.
 			inBytes = inBytes.subarray(size + 3)
 
 			if (transport) {
@@ -167,6 +170,12 @@ export const makeNoiseHandler = ({
 			}
 
 			onFrame(frame)
+
+			// Yield to the macrotask queue every 10 frames so I/O callbacks
+			// (timers, socket events) are not starved during high-throughput bursts.
+			if (++frameCount % 10 === 0) {
+				await new Promise<void>(resolve => setImmediate(resolve))
+			}
 		}
 	}
 
