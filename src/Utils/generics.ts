@@ -237,7 +237,8 @@ export const fetchLatestBaileysVersion = async (options: AxiosRequestConfig<{}> 
 	try {
 		const result = await axios.get<{ version: WAVersion }>(URL, {
 			...options,
-			responseType: 'json'
+			responseType: 'json',
+			timeout: 20_000
 		})
 		return {
 			version: result.data.version,
@@ -260,7 +261,8 @@ export const fetchLatestWaWebVersion = async (options: AxiosRequestConfig<{}>) =
 	try {
 		const { data } = await axios.get('https://web.whatsapp.com/sw.js', {
 			...options,
-			responseType: 'json'
+			responseType: 'json',
+			timeout: 20_000
 		})
 
 		const regex = /\\?"client_revision\\?":\s*(\d+)/
