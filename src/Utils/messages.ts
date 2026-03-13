@@ -1152,6 +1152,8 @@ export const aggregateMessageKeysNotFromMe = (keys: proto.IMessageKey[]) => {
 type DownloadMediaMessageContext = {
 	reuploadRequest: (msg: WAMessage) => Promise<WAMessage>
 	logger: ILogger
+	/** timeout in ms for each download attempt */
+	timeoutMs?: number
 }
 
 const REUPLOAD_REQUIRED_STATUS = [410, 404]
@@ -1165,7 +1167,20 @@ export const downloadMediaMessage = async <Type extends 'buffer' | 'stream'>(
 	options: MediaDownloadOptions,
 	ctx?: DownloadMediaMessageContext
 ) => {
-	const result = await downloadMsg().catch(async error => {
+	const withTimeout = <T>(promise: Promise<T>): Promise<T> => {
+		if (!ctx?.timeoutMs) {
+			return promise
+		}
+
+		let timeoutHandle: ReturnType<typeof setTimeout>
+		const timeoutPromise = new Promise<never>((_, reject) => {
+			timeoutHandle = setTimeout(() => reject(new Boom('Download timed out', { statusCode: 408 })), ctx.timeoutMs)
+		})
+
+		return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timeoutHandle))
+	}
+
+	const result = await withTimeout(downloadMsg()).catch(async error => {
 		if (
 			ctx &&
 			axios.isAxiosError(error) && // check if the message requires a reupload
@@ -1174,7 +1189,7 @@ export const downloadMediaMessage = async <Type extends 'buffer' | 'stream'>(
 			ctx.logger.info({ key: message.key }, 'sending reupload media request...')
 			// request reupload
 			message = await ctx.reuploadRequest(message)
-			const result = await downloadMsg()
+			const result = await withTimeout(downloadMsg())
 			return result
 		}
 
