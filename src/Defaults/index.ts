@@ -68,8 +68,7 @@ const recentMessageSentHistory = new Map<string, proto.IMessage>()
 
 const mediaCacheFactory = (): CacheStore => {
 	const mediaCache = new LRUCache<string, Buffer>({
-		max: 20,
-		ttl: 5 * 60 * 1000 // 5 minutes
+		max: 15
 	})
 
 	return {
