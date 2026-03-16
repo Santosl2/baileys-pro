@@ -14,6 +14,8 @@ import type {
 import { Curve, signedKeyPair } from './crypto'
 import { delay, generateRegistrationId } from './generics'
 import { ILogger } from './logger'
+import { MutexWithRefCount } from './mutex'
+import { PreKeyManager, PreKeyType } from './pre-key-manager'
 
 /**
  * Adds caching capability to a SignalKeyStore
@@ -151,86 +153,6 @@ export function makeCacheableSignalKeyStore(
 }
 
 /**
- * Handles pre-key operations with mutex protection
- */
-async function handlePreKeyOperations({
-	data,
-	isInTransaction,
-	logger,
-	mutations,
-	transactionCache,
-	keyType,
-	state,
-	mutex
-}: {
-	data: SignalDataSet
-	keyType: string
-	transactionCache: SignalDataSet
-	mutations: SignalDataSet
-	logger: ILogger
-	isInTransaction: boolean
-	mutex: Mutex
-	state?: SignalKeyStore
-}): Promise<void> {
-	await mutex.runExclusive(async () => {
-		const keyData = data[keyType]
-		if (!keyData) return
-
-		// Ensure structures exist
-		transactionCache[keyType] = transactionCache[keyType] || {}
-		mutations[keyType] = mutations[keyType] || {}
-
-		// Separate deletions from updates for batch processing
-		const deletionKeys: string[] = []
-		const updateKeys: string[] = []
-
-		for (const keyId in keyData) {
-			if (keyData[keyId] === null) {
-				deletionKeys.push(keyId)
-			} else {
-				updateKeys.push(keyId)
-			}
-		}
-
-		// Process updates first (no validation needed)
-		for (const keyId of updateKeys) {
-			transactionCache[keyType][keyId] = keyData[keyId]
-			mutations[keyType][keyId] = keyData[keyId]
-		}
-
-		// Process deletions with validation
-		if (deletionKeys.length === 0) return
-
-		if (isInTransaction) {
-			// In transaction, only allow deletion if key exists in cache
-			for (const keyId of deletionKeys) {
-				if (transactionCache[keyType][keyId]) {
-					transactionCache[keyType][keyId] = null
-					mutations[keyType][keyId] = null
-				} else {
-					logger.warn(`Skipping deletion of non-existent ${keyType} in transaction: ${keyId}`)
-				}
-			}
-
-			return
-		}
-
-		// Outside transaction, batch validate all deletions
-		if (!state) return
-
-		const existingKeys = await state.get(keyType as keyof SignalDataTypeMap, deletionKeys)
-		for (const keyId of deletionKeys) {
-			if (existingKeys[keyId]) {
-				transactionCache[keyType][keyId] = null
-				mutations[keyType][keyId] = null
-			} else {
-				logger.warn(`Skipping deletion of non-existent ${keyType}: ${keyId}`)
-			}
-		}
-	})
-}
-
-/**
  * Handles normal key operations for transactions
  */
 function handleNormalKeyOperations(
@@ -242,39 +164,6 @@ function handleNormalKeyOperations(
 	Object.assign(transactionCache[key], data[key])
 	mutations[key] = mutations[key] || {}
 	Object.assign(mutations[key], data[key])
-}
-
-/**
- * Process pre-key deletions with validation
- */
-async function processPreKeyDeletions({
-	data,
-	keyType,
-	logger,
-	state,
-	mutex
-}: {
-	data: SignalDataSet
-	keyType: string
-	state: SignalKeyStore
-	logger: ILogger
-	mutex: Mutex
-}): Promise<void> {
-	await mutex.runExclusive(async () => {
-		const keyData = data[keyType]
-		if (!keyData) return
-
-		// Validate deletions
-		for (const keyId in keyData) {
-			if (keyData[keyId] === null) {
-				const existingKeys = await state.get(keyType as keyof SignalDataTypeMap, [keyId])
-				if (!existingKeys[keyId]) {
-					logger.warn(`Skipping deletion of non-existent ${keyType}: ${keyId}`)
-					delete data[keyType][keyId]
-				}
-			}
-		}
-	})
 }
 
 /**
@@ -309,7 +198,6 @@ async function withMutexes<T>(
 
 		return await fn()
 	} finally {
-		// Release in reverse order
 		while (releases.length > 0) {
 			const release = releases.pop()
 			if (release) release()
@@ -340,6 +228,7 @@ async function commitWithRetry(
 				await state.set(mutations)
 				logger.trace('committed transaction')
 			})
+			return
 		} catch (error) {
 			logger.error(`failed to commit ${Object.keys(mutations).length} mutations, tries left=${tries}`, error)
 
@@ -362,28 +251,7 @@ export const addTransactionCapability = (
 	logger: ILogger,
 	{ maxCommitRetries, delayBetweenTriesMs }: TransactionCapabilityOptions
 ): SignalKeyStoreWithTransaction => {
-	// Module-level specialized mutexes for pre-key operations
-	const preKeyMutex = new Mutex()
-	const signedPreKeyMutex = new Mutex()
-
-	/**
-	 * Get the appropriate mutex for the key type
-	 */
-	const getPreKeyMutex = (keyType: string): Mutex => {
-		return keyType === 'signed-pre-key' ? signedPreKeyMutex : preKeyMutex
-	}
-
-	// Mutex for each key type (session, pre-key, etc.)
-	const keyTypeMutexes = new Map<string, Mutex>()
-
-	// Per-sender-key-name mutexes for fine-grained serialization
-	const senderKeyMutexes = new Map<
-		string,
-		{
-			mutex: Mutex
-			refCount: number
-		}
-	>()
+	const preKeyManager = new PreKeyManager(logger)
 
 	// Global transaction mutex
 	const transactionMutex = new Mutex()
@@ -396,70 +264,12 @@ export const addTransactionCapability = (
 
 	let transactionsInProgress = 0
 
-	// Get or create a mutex for a specific key type
-	function getKeyTypeMutex(type: string): Mutex {
-		let mutex = keyTypeMutexes.get(type)
-		if (!mutex) {
-			// Create regular mutex, timeout only for critical operations
-			mutex = new Mutex()
-			keyTypeMutexes.set(type, mutex)
-		}
+	const keyTypeMutexManager = new MutexWithRefCount(logger)
+	const senderKeyMutexManager = new MutexWithRefCount(logger)
+	const getKeyTypeMutex = keyTypeMutexManager.getMutexByKey.bind(keyTypeMutexManager)
+	const queueSenderKeyOperation = senderKeyMutexManager.runMutexWithAcquire.bind(senderKeyMutexManager)
 
-		return mutex
-	}
-
-	// Get or create a mutex for a specific sender key name
-	function getSenderKeyMutex(senderKeyName: string): Mutex {
-		let mutex = senderKeyMutexes.get(senderKeyName)
-		if (!mutex) {
-			mutex = {
-				mutex: new Mutex(),
-				refCount: 0
-			}
-			senderKeyMutexes.set(senderKeyName, mutex)
-
-			logger.info({ senderKeyName }, 'created new sender key mutex')
-		}
-
-		return mutex.mutex
-	}
-
-	function acquireSenderKey(senderKeyName: string) {
-		const entry = senderKeyMutexes.get(senderKeyName)
-		if (entry) {
-			logger.trace({ senderKeyName, refCount: entry.refCount }, 'acquiring sender key mutex')
-			entry.refCount += 1
-		}
-	}
-
-	function releaseSenderKey(name: string) {
-		const data = senderKeyMutexes.get(name)
-
-		if (!data) return
-
-		const count = (data.refCount ?? 1) - 1
-		data.refCount = count
-
-		if (count <= 0) {
-			if (data && !data.mutex.isLocked()) {
-				// safe cleanup
-				logger.trace({ name }, 'cleaning up sender key mutex')
-				senderKeyMutexes.delete(name)
-			}
-		}
-	}
-
-	// Sender key operations with proper mutex sequencing
-	async function queueSenderKeyOperation<T>(senderKeyName: string, op: () => Promise<T>): Promise<T> {
-		const mutex = getSenderKeyMutex(senderKeyName)
-		acquireSenderKey(senderKeyName)
-
-		try {
-			return await mutex.runExclusive(op)
-		} finally {
-			releaseSenderKey(senderKeyName)
-		}
-	}
+	const mutexRun = (type: string) => getKeyTypeMutex(type)?.mutex
 
 	// Check if we are currently in a transaction
 	function isInTransaction() {
@@ -493,20 +303,9 @@ export const addTransactionCapability = (
 						)
 						await Promise.allSettled(updatePromises)
 						logger.info({ count: idsRequiringFetch.length }, 'sender keys fetched and cached in transaction')
-
-						// for (const senderKeyName of idsRequiringFetch) {
-						// 	await queueSenderKeyOperation(senderKeyName, async () => {
-						// 		logger.info({ senderKeyName }, 'fetching sender key in transaction')
-						// 		const result = await state.get(type, [senderKeyName])
-						// 		// Update transaction cache
-						// 		transactionCache[type] ||= {}
-						// 		Object.assign(transactionCache[type]!, result)
-						// 		logger.info({ senderKeyName, hasResult: !!result[senderKeyName] }, 'sender key fetch complete')
-						// 	})
-						// }
 					} else {
 						// Use runExclusive for cleaner mutex handling
-						await getKeyTypeMutex(type as string).runExclusive(async () => {
+						await mutexRun(type as string)?.runExclusive(async () => {
 							const result = await state.get(type, idsRequiringFetch)
 
 							// Update transaction cache
@@ -539,7 +338,7 @@ export const addTransactionCapability = (
 
 					return results
 				} else {
-					return await getKeyTypeMutex(type as string).runExclusive(() => state.get(type, ids))
+					return await mutexRun(type as string)?.runExclusive(() => state.get(type, ids))
 				}
 			}
 		},
@@ -550,16 +349,13 @@ export const addTransactionCapability = (
 					transactionCache[key] = transactionCache[key] || {}
 
 					// Special handling for pre-keys and signed-pre-keys
-					const mutex = getPreKeyMutex(key)
 					if (key === 'pre-key' || key === 'signed-pre-key') {
-						await handlePreKeyOperations({
+						await preKeyManager.handlePreKeyOperations({
 							data,
-							keyType: key,
+							keyType: key as PreKeyType,
 							transactionCache,
 							mutations,
-							logger,
 							isInTransaction: true,
-							mutex,
 							state
 						})
 					} else {
@@ -597,16 +393,14 @@ export const addTransactionCapability = (
 					delete nonSenderKeyData['sender-key']
 
 					if (Object.keys(nonSenderKeyData).length > 0) {
-						await withMutexes(Object.keys(nonSenderKeyData), getKeyTypeMutex, async () => {
+						await withMutexes(Object.keys(nonSenderKeyData), mutexRun, async () => {
 							// Process pre-keys and signed-pre-keys separately with specialized mutexes
 							for (const keyType in nonSenderKeyData) {
 								if (keyType === 'pre-key' || keyType === 'signed-pre-key') {
-									await processPreKeyDeletions({
+									await preKeyManager.handlePreKeyDeletions({
 										data: nonSenderKeyData,
-										keyType,
-										state,
-										logger,
-										mutex: getPreKeyMutex(keyType)
+										keyType: keyType as PreKeyType,
+										state
 									})
 								}
 							}
@@ -617,11 +411,11 @@ export const addTransactionCapability = (
 					}
 				} else {
 					// No sender keys - use original logic
-					await withMutexes(Object.keys(data), getKeyTypeMutex, async () => {
+					await withMutexes(Object.keys(data), mutexRun, async () => {
 						// Process pre-keys and signed-pre-keys separately with specialized mutexes
 						for (const keyType in data) {
 							if (keyType === 'pre-key' || keyType === 'signed-pre-key') {
-								await processPreKeyDeletions({ data, keyType, state, logger, mutex: getPreKeyMutex(keyType) })
+								await preKeyManager.handlePreKeyDeletions({ data, keyType: keyType as PreKeyType, state })
 							}
 						}
 
@@ -633,20 +427,16 @@ export const addTransactionCapability = (
 		},
 		isInTransaction,
 		...(state.clear ? { clear: state.clear } : {}),
-		async transaction(work) {
-			return transactionMutex.acquire().then(async releaseTxMutex => {
+		async transaction(work, key) {
+			const mutex = key ? getKeyTypeMutex(key)?.mutex : transactionMutex
+
+			return mutex.runExclusive(async () => {
 				let result: Awaited<ReturnType<typeof work>>
-				let released = false
 				try {
 					transactionsInProgress += 1
 					if (transactionsInProgress === 1) {
 						logger.trace('entering transaction')
 					}
-
-					// Release the transaction mutex now that we've updated the counter
-					// This allows other transactions to start preparing
-					releaseTxMutex()
-					released = true
 
 					try {
 						result = await work()
@@ -656,7 +446,7 @@ export const addTransactionCapability = (
 
 							if (hasMutations) {
 								logger.trace('committing transaction')
-								await commitWithRetry(mutations, state, getKeyTypeMutex, maxCommitRetries, delayBetweenTriesMs, logger)
+								await commitWithRetry(mutations, state, mutexRun, maxCommitRetries, delayBetweenTriesMs, logger)
 								logger.trace({ dbQueriesInTransaction }, 'transaction completed')
 							} else {
 								logger.trace('no mutations in transaction')
@@ -664,6 +454,7 @@ export const addTransactionCapability = (
 						}
 					} finally {
 						transactionsInProgress -= 1
+
 						if (transactionsInProgress === 0) {
 							transactionCache = {}
 							mutations = {}
@@ -673,17 +464,8 @@ export const addTransactionCapability = (
 
 					return result
 				} catch (error) {
-					// If we haven't released the transaction mutex yet, release it
-					if (!released) {
-						releaseTxMutex()
-					}
-
+					logger.error('transaction failed', error)
 					throw error
-				} finally {
-					//
-					if (!released) {
-						releaseTxMutex()
-					}
 				}
 			})
 		}
