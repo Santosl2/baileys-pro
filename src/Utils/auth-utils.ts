@@ -328,6 +328,17 @@ export const addTransactionCapability = (
 				if (type === 'sender-key') {
 					// For sender keys, use individual queues to maintain per-key serialization
 					const results: { [key: string]: SignalDataTypeMap[typeof type] } = {}
+
+					// await Promise.all(
+					// 	ids.map(async senderKeyName => {
+					// 		const result = await queueSenderKeyOperation(
+					// 			senderKeyName,
+					// 			async () => await state.get(type, [senderKeyName])
+					// 		)
+					// 		Object.assign(results, result)
+					// 	})
+					// )
+
 					for (const senderKeyName of ids) {
 						const result = await queueSenderKeyOperation(
 							senderKeyName,
@@ -368,59 +379,51 @@ export const addTransactionCapability = (
 				const hasSenderKeys = 'sender-key' in data
 				const senderKeyNames = hasSenderKeys ? Object.keys(data['sender-key'] || {}) : []
 
+				// Handle any non-sender-key data with regular mutexes
+				const nonSenderKeyData = { ...data }
+				delete nonSenderKeyData['sender-key']
+
+				// Proccess sender key isolatedly with per-key queues to maintain serialization, as they are more likely to have contention
 				if (hasSenderKeys) {
 					logger.info({ senderKeyNames }, 'processing sender key set operations')
+
 					// Handle sender key operations with per-key queues
-
-					for (const senderKeyName of senderKeyNames) {
-						await queueSenderKeyOperation(senderKeyName, async () => {
-							// Create data subset for this specific sender key
-							const senderKeyData = {
-								'sender-key': {
-									[senderKeyName]: data['sender-key']![senderKeyName]
+					await Promise.all(
+						senderKeyNames.map(async senderKeyName => {
+							await queueSenderKeyOperation(senderKeyName, async () => {
+								// Create data subset for this specific sender key
+								const senderKeyData = {
+									'sender-key': {
+										[senderKeyName]: data['sender-key']![senderKeyName]
+									}
 								}
-							}
 
-							logger.trace({ senderKeyName }, 'storing sender key')
-							// Apply changes to the store
-							await state.set(senderKeyData)
-							logger.trace({ senderKeyName }, 'sender key stored')
+								logger.trace({ senderKeyName }, 'storing sender key')
+								// Apply changes to the store
+								await state.set(senderKeyData)
+								logger.trace({ senderKeyName }, 'sender key stored')
+							})
 						})
-					}
+					)
+				}
 
-					// Handle any non-sender-key data with regular mutexes
-					const nonSenderKeyData = { ...data }
-					delete nonSenderKeyData['sender-key']
-
-					if (Object.keys(nonSenderKeyData).length > 0) {
-						await withMutexes(Object.keys(nonSenderKeyData), mutexRun, async () => {
-							// Process pre-keys and signed-pre-keys separately with specialized mutexes
-							for (const keyType in nonSenderKeyData) {
-								if (keyType === 'pre-key' || keyType === 'signed-pre-key') {
-									await preKeyManager.handlePreKeyDeletions({
-										data: nonSenderKeyData,
-										keyType: keyType as PreKeyType,
-										state
-									})
-								}
-							}
-
-							// Apply changes to the store
-							await state.set(nonSenderKeyData)
-						})
-					}
-				} else {
-					// No sender keys - use original logic
-					await withMutexes(Object.keys(data), mutexRun, async () => {
-						// Process pre-keys and signed-pre-keys separately with specialized mutexes
-						for (const keyType in data) {
-							if (keyType === 'pre-key' || keyType === 'signed-pre-key') {
-								await preKeyManager.handlePreKeyDeletions({ data, keyType: keyType as PreKeyType, state })
-							}
+				if (Object.keys(nonSenderKeyData).length > 0) {
+					// Process pre-keys and signed-pre-keys separately with specialized mutexes
+					for (const keyType of Object.keys(nonSenderKeyData)) {
+						if (keyType === 'pre-key' || keyType === 'signed-pre-key') {
+							await preKeyManager.handlePreKeyDeletions({
+								data: nonSenderKeyData,
+								keyType: keyType as PreKeyType,
+								state
+							})
 						}
+					}
 
-						// Apply changes to the store
-						await state.set(data)
+					delete nonSenderKeyData['pre-key']
+					delete nonSenderKeyData['signed-pre-key']
+
+					await withMutexes(Object.keys(nonSenderKeyData), mutexRun, async () => {
+						await state.set(nonSenderKeyData)
 					})
 				}
 			}
@@ -428,7 +431,7 @@ export const addTransactionCapability = (
 		isInTransaction,
 		...(state.clear ? { clear: state.clear } : {}),
 		async transaction(work, key) {
-			const mutex = key ? getKeyTypeMutex(key)?.mutex : transactionMutex
+			const mutex: Mutex = key ? getKeyTypeMutex(key)?.mutex : transactionMutex
 
 			return mutex.runExclusive(async () => {
 				let result: Awaited<ReturnType<typeof work>>

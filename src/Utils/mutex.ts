@@ -8,9 +8,14 @@ type MutexEntry = {
 }
 
 export class MutexWithRefCount {
-	private mutex = new InMemoryStorageWithMaxItens<MutexEntry>(15)
+	private mutex: InMemoryStorageWithMaxItens<MutexEntry>
 
-	constructor(public logger: ILogger) {}
+	constructor(
+		public logger: ILogger,
+		maxItems = 20
+	) {
+		this.mutex = new InMemoryStorageWithMaxItens<MutexEntry>(maxItems)
+	}
 
 	getMutexByKey = (key: string): MutexEntry => {
 		let mutex = this.mutex.get(key)

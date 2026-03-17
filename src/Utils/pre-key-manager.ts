@@ -109,17 +109,22 @@ export class PreKeyManager {
 
 			if (!keyData) return
 
-			Promise.all(
-				keyData.forEach(async keyId => {
-					if (keyData[keyId] === null) {
-						const existingKeys = await state.get(keyType as keyof SignalDataTypeMap, [keyId])
-						if (!existingKeys[keyId]) {
-							this.logger.warn(`Skipping deletion of non-existent ${keyType}: ${keyId}`)
-							delete data[keyType][keyId]
+			try {
+				await Promise.all(
+					Object.keys(keyData).map(async keyId => {
+						if (keyData[keyId] === null) {
+							const existingKeys = await state.get(keyType as keyof SignalDataTypeMap, [keyId])
+							if (!existingKeys[keyId]) {
+								this.logger.warn(`Skipping deletion of non-existent ${keyType}: ${keyId}`)
+								delete data[keyType][keyId]
+							}
 						}
-					}
-				})
-			)
+					})
+				)
+			} catch (error) {
+				this.logger.error(`Error during pre-key deletion validation for ${keyType}: ${error}`)
+				throw error
+			}
 		})
 	}
 }
