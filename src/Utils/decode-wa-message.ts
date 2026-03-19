@@ -161,6 +161,7 @@ export const decryptMessageNode = (
 		author,
 		async decrypt() {
 			let decryptables = 0
+			let effectiveAuthor = author
 			if (Array.isArray(stanza.content)) {
 				for (const { tag, attrs, content } of stanza.content) {
 					if (tag === 'verified_name' && content instanceof Uint8Array) {
@@ -211,6 +212,7 @@ export const decryptMessageNode = (
 											authorJid: altAuthor,
 											msg: content
 										})
+										effectiveAuthor = altAuthor
 									} else {
 										throw skmsgErr
 									}
@@ -243,7 +245,7 @@ export const decryptMessageNode = (
 							//eslint-disable-next-line max-depth
 							try {
 								await repository.processSenderKeyDistributionMessage({
-									authorJid: author,
+									authorJid: effectiveAuthor,
 									item: msg.senderKeyDistributionMessage
 								})
 							} catch (err) {
