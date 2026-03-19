@@ -124,7 +124,7 @@ export const DEFAULT_CONNECTION_CONFIG: SocketConfig = {
 		stdTTL: DEFAULT_CACHE_TTLS.GROUP_METADATA
 	}) as any,
 
-	enableAutoSessionRecreation: false,
+	enableAutoSessionRecreation: true,
 	sendReportingTag: true,
 
 	recentMessageSentHistory: {

@@ -202,8 +202,10 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		const msgId = msgKey.id!
 		const fromJid = node.attrs.from
 
-		let retryCount = Number(msgRetryCache.get(msgId) || 1) || 1
+		let retryCount = Number(msgRetryCache.get(msgId) || 0) || 0
 		if (retryCount > maxMsgRetryCount) {
+			const placeholderRequest = await requestPlaceholderResend(msgKey)
+			logger.debug(`sendRetryRequest: requested placeholder resend for message ${placeholderRequest}`)
 			logger.debug({ retryCount, msgId }, 'reached retry limit, clearing')
 			msgRetryCache.del(msgId)
 			return
@@ -213,12 +215,6 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		msgRetryCache.set(msgId, retryCount)
 
 		const { account, signedPreKey, signedIdentityKey: identityKey } = authState.creds
-
-		if (retryCount === 1) {
-			//request a resend via phone
-			const msgId = await requestPlaceholderResend(msgKey)
-			logger.debug(`sendRetryRequest: requested placeholder resend for message ${msgId}`)
-		}
 
 		const fromId = isJidGroup(fromJid) ? node.attrs.participant : fromJid
 
@@ -609,7 +605,14 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 						ev.emit('blocklist.update', { blocklist, type })
 					}
 				} else if (child.tag === 'devices') {
-					console.log(node)
+					const devices = getBinaryNodeChildren(child, 'device')
+
+					for (const { attrs } of devices) {
+						const deviceJid = attrs.jid
+						const { user, device } = jidDecode(deviceJid)!
+
+						userDevicesCache?.set(user, [{ user, device }]) // cache for 1 min
+					}
 				}
 
 				break
@@ -796,66 +799,64 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		}
 
 		try {
-			await Promise.all([
-				receiptMutex.mutex(async () => {
-					const status = getStatusFromReceiptType(attrs.type)
-					if (
-						typeof status !== 'undefined' &&
-						// basically, we only want to know when a message from us has been delivered to/read by the other person
-						// or another device of ours has read some messages
-						(status >= proto.WebMessageInfo.Status.SERVER_ACK || !isNodeFromMe)
-					) {
-						if (isJidGroup(remoteJid) || isJidStatusBroadcast(remoteJid)) {
-							if (attrs.participant) {
-								const updateKey: keyof MessageUserReceipt =
-									status === proto.WebMessageInfo.Status.DELIVERY_ACK ? 'receiptTimestamp' : 'readTimestamp'
-								ev.emit(
-									'message-receipt.update',
-									ids.map(id => ({
-										key: { ...key, id },
-										receipt: {
-											userJid: jidNormalizedUser(attrs.participant),
-											[updateKey]: +attrs.t
-										}
-									}))
-								)
-							}
-						} else {
+			await receiptMutex.mutex(async () => {
+				const status = getStatusFromReceiptType(attrs.type)
+				if (
+					typeof status !== 'undefined' &&
+					// basically, we only want to know when a message from us has been delivered to/read by the other person
+					// or another device of ours has read some messages
+					(status >= proto.WebMessageInfo.Status.SERVER_ACK || !isNodeFromMe)
+				) {
+					if (isJidGroup(remoteJid) || isJidStatusBroadcast(remoteJid)) {
+						if (attrs.participant) {
+							const updateKey: keyof MessageUserReceipt =
+								status === proto.WebMessageInfo.Status.DELIVERY_ACK ? 'receiptTimestamp' : 'readTimestamp'
 							ev.emit(
-								'messages.update',
+								'message-receipt.update',
 								ids.map(id => ({
 									key: { ...key, id },
-									update: { status }
+									receipt: {
+										userJid: jidNormalizedUser(attrs.participant),
+										[updateKey]: +attrs.t
+									}
 								}))
 							)
 						}
+					} else {
+						ev.emit(
+							'messages.update',
+							ids.map(id => ({
+								key: { ...key, id },
+								update: { status }
+							}))
+						)
 					}
+				}
 
-					if (attrs.type === 'retry') {
-						// correctly set who is asking for the retry
-						key.participant = key.participant || attrs.from
-						const retryNode = getBinaryNodeChild(node, 'retry')
-						if (willSendMessageAgain(ids[0], key.participant)) {
-							if (key.fromMe) {
-								try {
-									updateSendMessageAgainCount(ids[0], key.participant)
-									logger.debug({ attrs, key }, 'recv retry request')
-									await sendMessagesAgain(key, ids, retryNode)
-								} catch (error: unknown) {
-									logger.error(
-										{ key, ids, trace: error instanceof Error ? error.stack : 'Unknown error' },
-										'error in sending message again'
-									)
-								}
-							} else {
-								logger.info({ attrs, key }, 'recv retry for not fromMe message')
+				if (attrs.type === 'retry') {
+					// correctly set who is asking for the retry
+					key.participant = key.participant || attrs.from
+					const retryNode = getBinaryNodeChild(node, 'retry')
+					if (willSendMessageAgain(ids[0], key.participant)) {
+						if (key.fromMe) {
+							try {
+								updateSendMessageAgainCount(ids[0], key.participant)
+								logger.debug({ attrs, key }, 'recv retry request')
+								await sendMessagesAgain(key, ids, retryNode)
+							} catch (error: unknown) {
+								logger.error(
+									{ key, ids, trace: error instanceof Error ? error.stack : 'Unknown error' },
+									'error in sending message again'
+								)
 							}
 						} else {
-							logger.info({ attrs, key }, 'will not send message again, as sent too many times')
+							logger.error({ attrs, key }, 'recv retry for not fromMe message')
 						}
+					} else {
+						logger.info({ attrs, key }, 'will not send message again, as sent too many times')
 					}
-				})
-			])
+				}
+			})
 		} finally {
 			await sendMessageAck(node).catch(ackErr => logger.error({ ackErr }, 'failed to ack receipt'))
 		}
@@ -1024,13 +1025,15 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 						}
 
 						const errorMessage = msg?.messageStubParameters?.[0] || ''
-						const isNoSenderKeyError = errorMessage.includes('No SenderKeyRecord')
+						const isNoSenderKeyError =
+							errorMessage.includes('No SenderKeyRecord') ||
+							errorMessage.includes('No session found to decrypt message')
 						const isPreKeyError = errorMessage.includes('PreKey')
 
 						logger.debug(`[handleMessage] Attempting retry request for failed decryption`)
 
 						// Handle both pre-key and normal retries in single mutex
-						retryMutex.mutex(async () => {
+						await retryMutex.mutex(async () => {
 							try {
 								if (!ws.isOpen) {
 									logger.debug({ node }, 'Connection closed, skipping retry')
