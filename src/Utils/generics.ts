@@ -14,6 +14,7 @@ import {
 	WAVersion
 } from '../Types'
 import { BinaryNode, getAllBinaryNodeChildren, jidDecode } from '../WABinary'
+import { sha256 } from './crypto'
 
 const PLATFORM_MAP = {
 	aix: 'AIX',
@@ -442,3 +443,10 @@ export function encodeNewsletterMessage(message: proto.IMessage): Uint8Array {
 export const isStringNullOrEmpty = (value: string | null | undefined): value is null | undefined | '' =>
 	// eslint-disable-next-line eqeqeq
 	value == null || value === ''
+
+// code is inspired by whatsmeow
+export const generateParticipantHashV2 = (participants: string[]): string => {
+	participants.sort()
+	const sha256Hash = sha256(Buffer.from(participants.join(''))).toString('base64')
+	return '2:' + sha256Hash.slice(0, 6)
+}

@@ -201,13 +201,15 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		const toFetch: string[] = []
 		jids = Array.from(new Set(jids))
 
+		const jidsWithOnlyUser = jids.map(jid => jidDecode(jid)?.user).filter(Boolean) as string[]
+
 		if (userDevicesCache.mget) {
 			// if the cache supports mget, we can fetch all devices in one go
-			const cachedDevices = await userDevicesCache.mget<JidWithDevice[]>(jids)
+			const cachedDevices = await userDevicesCache.mget<JidWithDevice[]>([...jids, ...jidsWithOnlyUser])
 			for (const jid of jids) {
 				const user = jidDecode(jid)?.user
-				if (cachedDevices[jid]) {
-					deviceResults.push(...cachedDevices[jid])
+				if (cachedDevices[jid] || cachedDevices[user!]) {
+					deviceResults.push(...(cachedDevices[jid] || cachedDevices[user!]))
 					logger.trace({ user }, 'using cache for devices')
 				} else {
 					toFetch.push(jid)
@@ -236,7 +238,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 			return deviceResults
 		}
 
-		const query = new USyncQuery().withContext('message').withDeviceProtocol()
+		const query = new USyncQuery().withContext('message').withDeviceProtocol().withLIDProtocol()
 
 		for (const jid of toFetch) {
 			query.withUser(new USyncUser().withId(jid))
