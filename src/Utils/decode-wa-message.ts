@@ -1,3 +1,4 @@
+/* eslint-disable max-depth */
 import { Boom } from '@hapi/boom'
 import { proto } from '../../WAProto'
 import { SignalRepository, WAMessage, WAMessageKey } from '../Types'
@@ -187,13 +188,37 @@ export const decryptMessageNode = (
 					try {
 						const e2eType = tag === 'plaintext' ? 'plaintext' : attrs.type
 						switch (e2eType) {
-							case 'skmsg':
-								msgBuffer = await repository.decryptGroupMessage({
-									group: sender,
-									authorJid: author,
-									msg: content
-								})
+							case 'skmsg': {
+								try {
+									msgBuffer = await repository.decryptGroupMessage({
+										group: sender,
+										authorJid: author,
+										msg: content
+									})
+								} catch (skmsgErr) {
+									// LID ↔ PNjid fallback: the senderKeyDistributionMessage may have
+									// been stored under a different JID format than what arrives in
+									// the group message (e.g. stored with PNjid but message uses LID).
+									const altAuthor = isLidUser(author) ? stanza.attrs.participant_pn : stanza.attrs.participant_lid
+									// eslint-disable-next-line max-depth
+									if (altAuthor && skmsgErr.message === 'No session found to decrypt message') {
+										logger.error(
+											{ author, altAuthor },
+											'skmsg decrypt failed with primary JID, retrying with alternative JID'
+										)
+										msgBuffer = await repository.decryptGroupMessage({
+											group: sender,
+											authorJid: altAuthor,
+											msg: content
+										})
+									} else {
+										throw skmsgErr
+									}
+								}
+
 								break
+							}
+
 							case 'pkmsg':
 							case 'msg':
 								const user = isJidUser(sender) ? sender : author
