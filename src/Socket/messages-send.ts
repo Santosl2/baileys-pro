@@ -235,7 +235,13 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		}
 
 		if (!toFetch.length) {
-			return deviceResults
+			return deviceResults.filter(({ device }) => {
+				if (ignoreZeroDevices) {
+					return device !== 0
+				}
+
+				return true
+			})
 		}
 
 		const query = new USyncQuery().withContext('message').withDeviceProtocol().withLIDProtocol()
