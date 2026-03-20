@@ -161,7 +161,7 @@ export const decryptMessageNode = (
 		author,
 		async decrypt() {
 			let decryptables = 0
-			let effectiveAuthor = author
+
 			if (Array.isArray(stanza.content)) {
 				for (const { tag, attrs, content } of stanza.content) {
 					if (tag === 'verified_name' && content instanceof Uint8Array) {
@@ -189,38 +189,13 @@ export const decryptMessageNode = (
 					try {
 						const e2eType = tag === 'plaintext' ? 'plaintext' : attrs.type
 						switch (e2eType) {
-							case 'skmsg': {
-								try {
-									msgBuffer = await repository.decryptGroupMessage({
-										group: sender,
-										authorJid: author,
-										msg: content
-									})
-								} catch (skmsgErr) {
-									// LID ↔ PNjid fallback: the senderKeyDistributionMessage may have
-									// been stored under a different JID format than what arrives in
-									// the group message (e.g. stored with PNjid but message uses LID).
-									const altAuthor = isLidUser(author) ? stanza.attrs.participant_pn : stanza.attrs.participant_lid
-									// eslint-disable-next-line max-depth
-									if (altAuthor && skmsgErr.message === 'No session found to decrypt message') {
-										logger.error(
-											{ author, altAuthor },
-											'skmsg decrypt failed with primary JID, retrying with alternative JID'
-										)
-										msgBuffer = await repository.decryptGroupMessage({
-											group: sender,
-											authorJid: altAuthor,
-											msg: content
-										})
-										effectiveAuthor = altAuthor
-									} else {
-										throw skmsgErr
-									}
-								}
-
+							case 'skmsg':
+								msgBuffer = await repository.decryptGroupMessage({
+									group: sender,
+									authorJid: author,
+									msg: content
+								})
 								break
-							}
-
 							case 'pkmsg':
 							case 'msg':
 								const user = isJidUser(sender) ? sender : author
@@ -245,7 +220,7 @@ export const decryptMessageNode = (
 							//eslint-disable-next-line max-depth
 							try {
 								await repository.processSenderKeyDistributionMessage({
-									authorJid: effectiveAuthor,
+									authorJid: author,
 									item: msg.senderKeyDistributionMessage
 								})
 							} catch (err) {
