@@ -36,6 +36,7 @@ import {
 	derivePairingCodeKey,
 	encodeBigEndian,
 	encodeSignedDeviceIdentity,
+	generateParticipantHashV2,
 	getCallStatusFromNode,
 	getHistoryMsg,
 	getNextPreKeys,
@@ -384,17 +385,30 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 					return
 			}
 
-			// const hash = generateParticipantHashV2(updatedDevices.map(d => jidEncode(d.user, 'lid', d.device)))
-
-			// // ?
-			// if (hash === deviceHash) {
-			// 	logger.debug({ from, deviceHash, expectedHash: hash }, 'device hash mismatch, skipping cache update')
-			// 	await userDevicesCache?.del(user)
-			// }
+			if (!updatedDevices.find(d => d.device === 0)) {
+				updatedDevices = [...updatedDevices, { user, device: 0 }]
+			}
 
 			if (updatedDevices.length > 0) {
 				await userDevicesCache?.set(user, updatedDevices)
 			}
+
+			const lidHash = generateParticipantHashV2(updatedDevices.map(d => `${d.user}.0:${d.device}@lid`))
+
+			if (lidHash === deviceHash) {
+				logger.debug({ from, deviceHash, lidHash }, 'device hash matches lid hash, skipping cache update')
+				return
+			}
+
+			const phoneHash = generateParticipantHashV2(updatedDevices.map(d => `${d.user}.0:${d.device}@s.whatsapp.net`))
+
+			if (phoneHash === deviceHash) {
+				logger.debug({ from, deviceHash, phoneHash }, 'device hash mismatch, skipping cache update')
+				return
+			}
+
+			// Delete cache if the hash doesn't match to prevent potential issues with outdated cache, as we can't be sure which device was added/removed
+			await userDevicesCache?.del(user)
 		})
 	}
 

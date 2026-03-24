@@ -447,6 +447,6 @@ export const isStringNullOrEmpty = (value: string | null | undefined): value is 
 // code is inspired by whatsmeow
 export const generateParticipantHashV2 = (participants: string[]): string => {
 	participants.sort()
-	const sha256Hash = sha256(Buffer.from(participants.join(''))).toString('base64')
-	return '2:' + sha256Hash.slice(0, 6)
+	const sha256Hash = sha256(Buffer.from(participants.join('')))
+	return '2:' + sha256Hash.slice(0, 6).toString('base64')
 }

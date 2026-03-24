@@ -244,7 +244,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 			})
 		}
 
-		const query = new USyncQuery().withContext('message').withDeviceProtocol().withLIDProtocol()
+		const query = new USyncQuery().withContext('message').withDeviceProtocol()
 
 		for (const jid of toFetch) {
 			query.withUser(new USyncUser().withId(jid))
