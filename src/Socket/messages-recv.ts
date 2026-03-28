@@ -36,6 +36,7 @@ import {
 	derivePairingCodeKey,
 	encodeBigEndian,
 	encodeSignedDeviceIdentity,
+	generateParticipantHashV2,
 	getCallStatusFromNode,
 	getHistoryMsg,
 	getNextPreKeys,
@@ -66,6 +67,7 @@ import {
 	isJidUser,
 	jidDecode,
 	jidNormalizedUser,
+	JidWithDevice,
 	S_WHATSAPP_NET
 } from '../WABinary'
 import { extractGroupMetadata } from './groups'
@@ -79,6 +81,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		enableAutoSessionRecreation,
 		getMessage,
 		shouldIgnoreJid,
+		userDevicesCache,
 		recentMessageSentHistory
 	} = config
 	const sock = makeMessagesSocket(config)
@@ -200,8 +203,10 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		const msgId = msgKey.id!
 		const fromJid = node.attrs.from
 
-		let retryCount = Number(msgRetryCache.get(msgId) || 1) || 1
+		let retryCount = Number(msgRetryCache.get(msgId) || 0) || 0
 		if (retryCount > maxMsgRetryCount) {
+			const placeholderRequest = await requestPlaceholderResend(msgKey)
+			logger.debug(`sendRetryRequest: requested placeholder resend for message ${placeholderRequest}`)
 			logger.debug({ retryCount, msgId }, 'reached retry limit, clearing')
 			msgRetryCache.del(msgId)
 			return
@@ -211,12 +216,6 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		msgRetryCache.set(msgId, retryCount)
 
 		const { account, signedPreKey, signedIdentityKey: identityKey } = authState.creds
-
-		if (retryCount === 1) {
-			//request a resend via phone
-			const msgId = await requestPlaceholderResend(msgKey)
-			logger.debug(`sendRetryRequest: requested placeholder resend for message ${msgId}`)
-		}
 
 		const fromId = isJidGroup(fromJid) ? node.attrs.participant : fromJid
 
@@ -331,6 +330,86 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 				logger.info({ node }, 'unknown encrypt notification')
 			}
 		}
+	}
+
+	const devicesMutex = makeMutex()
+
+	const handleDevicesNotification = async (node: BinaryNode) => {
+		const [child] = getAllBinaryNodeChildren(node)
+		const from = jidNormalizedUser(node.attrs.from)
+
+		const devices = getBinaryNodeChildren(child, 'device')
+		if (areJidsSameUser(from, authState.creds.me!.id) || areJidsSameUser(from, authState.creds.me!.lid)) {
+			const deviceJids = devices.map(d => d.attrs.jid)
+			logger.info({ deviceJids }, 'got my own devices')
+		}
+
+		const deviceJid = devices[0].attrs.jid
+		const { user, device } = jidDecode(deviceJid)!
+		const tag = child.tag as 'add' | 'remove' | 'update'
+
+		if (!deviceJid) {
+			logger.debug({ tag }, 'no device jid in notification, skipping')
+			return
+		}
+
+		await devicesMutex.mutex(async () => {
+			if (tag === 'update') {
+				logger.debug({ user }, `${user}'s device list updated, dropping cached devices`)
+				await userDevicesCache?.del(user)
+				return
+			}
+
+			const existingCache: JidWithDevice[] = (await userDevicesCache?.get(user)) || ([] as JidWithDevice[])
+
+			if (!existingCache.length) {
+				logger.debug({ user, tag }, 'device list not cached, skipping cache update')
+				return
+			}
+
+			const deviceHash = child.attrs.device_hash
+
+			let updatedDevices: JidWithDevice[] = []
+
+			switch (tag) {
+				case 'add':
+					logger.info({ deviceHash }, 'device added')
+					updatedDevices = [...existingCache.filter(d => d.device !== device), { user, device }]
+					break
+				case 'remove':
+					logger.info({ deviceHash }, 'device removed')
+					updatedDevices = existingCache.filter(d => d.device !== device) || []
+					break
+				default:
+					logger.debug({ tag }, 'Unknown device list change tag')
+					return
+			}
+
+			if (!updatedDevices.find(d => d.device === 0)) {
+				updatedDevices = [...updatedDevices, { user, device: 0 }]
+			}
+
+			if (updatedDevices.length > 0) {
+				await userDevicesCache?.set(user, updatedDevices)
+			}
+
+			const lidHash = generateParticipantHashV2(updatedDevices.map(d => `${d.user}.0:${d.device}@lid`))
+
+			if (lidHash === deviceHash) {
+				logger.debug({ from, deviceHash, lidHash }, 'device hash matches lid hash, skipping cache update')
+				return
+			}
+
+			const phoneHash = generateParticipantHashV2(updatedDevices.map(d => `${d.user}.0:${d.device}@s.whatsapp.net`))
+
+			if (phoneHash === deviceHash) {
+				logger.debug({ from, deviceHash, phoneHash }, 'device hash mismatch, skipping cache update')
+				return
+			}
+
+			// Delete cache if the hash doesn't match to prevent potential issues with outdated cache, as we can't be sure which device was added/removed
+			await userDevicesCache?.del(user)
+		})
 	}
 
 	const handleGroupNotification = (participant: string, child: BinaryNode, msg: Partial<proto.IWebMessageInfo>) => {
@@ -469,11 +548,14 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 			case 'encrypt':
 				await handleEncryptNotification(node)
 				break
+			case 'fbid:devices':
+				logger.error({ node }, 'fbid devices')
+				break
 			case 'devices':
-				const devices = getBinaryNodeChildren(child, 'device')
-				if (areJidsSameUser(child.attrs.jid, authState.creds.me!.id)) {
-					const deviceJids = devices.map(d => d.attrs.jid)
-					logger.info({ deviceJids }, 'got my own devices')
+				try {
+					await handleDevicesNotification(node)
+				} catch (error) {
+					logger.error({ error, node }, 'failed to handle devices notification')
 				}
 
 				break
@@ -535,6 +617,15 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 						const blocklist = [attrs.jid]
 						const type = attrs.action === 'block' ? 'add' : 'remove'
 						ev.emit('blocklist.update', { blocklist, type })
+					}
+				} else if (child.tag === 'devices') {
+					const devices = getBinaryNodeChildren(child, 'device')
+
+					for (const { attrs } of devices) {
+						const deviceJid = attrs.jid
+						const { user, device } = jidDecode(deviceJid)!
+
+						userDevicesCache?.set(user, [{ user, device }]) // cache for 1 min
 					}
 				}
 
@@ -722,66 +813,64 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		}
 
 		try {
-			await Promise.all([
-				receiptMutex.mutex(async () => {
-					const status = getStatusFromReceiptType(attrs.type)
-					if (
-						typeof status !== 'undefined' &&
-						// basically, we only want to know when a message from us has been delivered to/read by the other person
-						// or another device of ours has read some messages
-						(status >= proto.WebMessageInfo.Status.SERVER_ACK || !isNodeFromMe)
-					) {
-						if (isJidGroup(remoteJid) || isJidStatusBroadcast(remoteJid)) {
-							if (attrs.participant) {
-								const updateKey: keyof MessageUserReceipt =
-									status === proto.WebMessageInfo.Status.DELIVERY_ACK ? 'receiptTimestamp' : 'readTimestamp'
-								ev.emit(
-									'message-receipt.update',
-									ids.map(id => ({
-										key: { ...key, id },
-										receipt: {
-											userJid: jidNormalizedUser(attrs.participant),
-											[updateKey]: +attrs.t
-										}
-									}))
-								)
-							}
-						} else {
+			await receiptMutex.mutex(async () => {
+				const status = getStatusFromReceiptType(attrs.type)
+				if (
+					typeof status !== 'undefined' &&
+					// basically, we only want to know when a message from us has been delivered to/read by the other person
+					// or another device of ours has read some messages
+					(status >= proto.WebMessageInfo.Status.SERVER_ACK || !isNodeFromMe)
+				) {
+					if (isJidGroup(remoteJid) || isJidStatusBroadcast(remoteJid)) {
+						if (attrs.participant) {
+							const updateKey: keyof MessageUserReceipt =
+								status === proto.WebMessageInfo.Status.DELIVERY_ACK ? 'receiptTimestamp' : 'readTimestamp'
 							ev.emit(
-								'messages.update',
+								'message-receipt.update',
 								ids.map(id => ({
 									key: { ...key, id },
-									update: { status }
+									receipt: {
+										userJid: jidNormalizedUser(attrs.participant),
+										[updateKey]: +attrs.t
+									}
 								}))
 							)
 						}
+					} else {
+						ev.emit(
+							'messages.update',
+							ids.map(id => ({
+								key: { ...key, id },
+								update: { status }
+							}))
+						)
 					}
+				}
 
-					if (attrs.type === 'retry') {
-						// correctly set who is asking for the retry
-						key.participant = key.participant || attrs.from
-						const retryNode = getBinaryNodeChild(node, 'retry')
-						if (willSendMessageAgain(ids[0], key.participant)) {
-							if (key.fromMe) {
-								try {
-									updateSendMessageAgainCount(ids[0], key.participant)
-									logger.debug({ attrs, key }, 'recv retry request')
-									await sendMessagesAgain(key, ids, retryNode)
-								} catch (error: unknown) {
-									logger.error(
-										{ key, ids, trace: error instanceof Error ? error.stack : 'Unknown error' },
-										'error in sending message again'
-									)
-								}
-							} else {
-								logger.info({ attrs, key }, 'recv retry for not fromMe message')
+				if (attrs.type === 'retry') {
+					// correctly set who is asking for the retry
+					key.participant = key.participant || attrs.from
+					const retryNode = getBinaryNodeChild(node, 'retry')
+					if (willSendMessageAgain(ids[0], key.participant)) {
+						if (key.fromMe) {
+							try {
+								updateSendMessageAgainCount(ids[0], key.participant)
+								logger.debug({ attrs, key }, 'recv retry request')
+								await sendMessagesAgain(key, ids, retryNode)
+							} catch (error: unknown) {
+								logger.error(
+									{ key, ids, trace: error instanceof Error ? error.stack : 'Unknown error' },
+									'error in sending message again'
+								)
 							}
 						} else {
-							logger.info({ attrs, key }, 'will not send message again, as sent too many times')
+							logger.error({ attrs, key }, 'recv retry for not fromMe message')
 						}
+					} else {
+						logger.info({ attrs, key }, 'will not send message again, as sent too many times')
 					}
-				})
-			])
+				}
+			})
 		} finally {
 			await sendMessageAck(node).catch(ackErr => logger.error({ ackErr }, 'failed to ack receipt'))
 		}
@@ -950,13 +1039,15 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 						}
 
 						const errorMessage = msg?.messageStubParameters?.[0] || ''
-						const isNoSenderKeyError = errorMessage.includes('No SenderKeyRecord')
+						const isNoSenderKeyError =
+							errorMessage.includes('No SenderKeyRecord') ||
+							errorMessage.includes('No session found to decrypt message')
 						const isPreKeyError = errorMessage.includes('PreKey')
 
 						logger.debug(`[handleMessage] Attempting retry request for failed decryption`)
 
 						// Handle both pre-key and normal retries in single mutex
-						retryMutex.mutex(async () => {
+						await retryMutex.mutex(async () => {
 							try {
 								if (!ws.isOpen) {
 									logger.debug({ node }, 'Connection closed, skipping retry')

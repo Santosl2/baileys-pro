@@ -1,3 +1,4 @@
+/* eslint-disable max-depth */
 import { Boom } from '@hapi/boom'
 import { proto } from '../../WAProto'
 import { SignalRepository, WAMessage, WAMessageKey } from '../Types'
@@ -160,6 +161,7 @@ export const decryptMessageNode = (
 		author,
 		async decrypt() {
 			let decryptables = 0
+
 			if (Array.isArray(stanza.content)) {
 				for (const { tag, attrs, content } of stanza.content) {
 					if (tag === 'verified_name' && content instanceof Uint8Array) {

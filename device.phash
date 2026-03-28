@@ -1,0 +1,58 @@
+import { createHash } from 'crypto'
+
+function sha256(buffer: Buffer): Buffer {
+  return createHash('sha256').update(buffer).digest()
+}
+
+// Replica toString({ legacy: true, formatFull: true }) do WAWebWid.js
+function widToLegacyFormatFull(jid: string): string {
+  const atIdx = jid.lastIndexOf('@')
+  const server = jid.slice(atIdx + 1)
+  const local = jid.slice(0, atIdx)
+
+  const colonIdx = local.indexOf(':')
+  let user: string
+  let device: number
+
+  if (colonIdx !== -1) {
+    user = local.slice(0, colonIdx)
+    device = parseInt(local.slice(colonIdx + 1), 10) || 0
+  } else {
+    user = local
+    device = 0
+  }
+
+  // legacy: só c.us vira s.whatsapp.net; lid, g.us etc ficam iguais
+  const legacyServer = server === 'c.us' ? 's.whatsapp.net' : server
+
+  // formatFull: sempre "{user}.0:{device}@{server}"
+  return `${user}.0:${device}@${legacyServer}`
+}
+
+export function generateParticipantHashV2(jids: string[]): string {
+  jids.sort()
+	const sha256Hash = sha256(Buffer.from(jids.join('')))
+	return '2:' + sha256Hash.slice(0, 6).toString('base64')
+}
+
+// export function generateParticipantHashV2(jids: string[]): string {
+//   const formatted = jids
+//     .sort()
+//     .join('')
+
+//   // Bug 2 corrigido: slice nos bytes, DEPOIS base64
+//   const digest = sha256(Buffer.from(formatted, 'utf8'))
+//   return '2:' + digest.slice(0, 6).toString('base64')
+// }
+//2:LH+PTAue
+console.log(generateParticipantHashV2([ '18739093344471.0:27@lid', '18739093344471.0:26@lid','18739093344471.0:0@lid']))
+
+//'2:vFycB5Fl'
+console.log(generateParticipantHashV2([ '209925116588111.0:25@lid', '209925116588111.0:0@lid']))
+
+//'2:kbF6BDMT'
+console.log(generateParticipantHashV2([ '209925116588111.0:0@lid']))
+
+//'2:WThoBLkl'
+console.log(generateParticipantHashV2([ '168122367606809.0:0@lid', '168122367606809.0:69@lid']))
+
