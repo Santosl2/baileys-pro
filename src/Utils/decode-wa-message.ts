@@ -1,4 +1,3 @@
-/* eslint-disable max-depth */
 import { Boom } from '@hapi/boom'
 import { proto } from '../../WAProto'
 import { SignalRepository, WAMessage, WAMessageKey } from '../Types'
@@ -18,6 +17,94 @@ import { ILogger } from './logger'
 
 export const NO_MESSAGE_FOUND_ERROR_TEXT = 'Message absent from node'
 export const MISSING_KEYS_ERROR_TEXT = 'Key used already or never filled'
+
+const shouldTryGroupAuthorFallback = (err: unknown) => {
+	const errMsg = err instanceof Error ? err.message : ''
+	return errMsg.includes('No session found to decrypt message')
+}
+
+const getGroupAuthorJids = (author: string, key: WAMessageKey) => {
+	return Array.from(new Set([author, key.participantLid, key.participantPn].filter(Boolean))) as string[]
+}
+
+const decryptGroupWithAuthorFallback = async (
+	repository: SignalRepository,
+	logger: ILogger,
+	params: {
+		group: string
+		author: string
+		content: Uint8Array
+		fullMessageKey: WAMessageKey
+		groupAuthorJids: string[]
+	}
+) => {
+	const { group, author, content, groupAuthorJids } = params
+	let lastDecryptErr: unknown
+	for (const authorJid of groupAuthorJids) {
+		try {
+			return await repository.decryptGroupMessage({
+				group,
+				authorJid,
+				msg: content
+			})
+		} catch (err) {
+			lastDecryptErr = err
+			const isLastAuthorJid = authorJid === groupAuthorJids[groupAuthorJids.length - 1]
+
+			if (!shouldTryGroupAuthorFallback(err) || isLastAuthorJid) {
+				throw err
+			}
+
+			logger.error(
+				{ group, author, triedAuthorJid: authorJid, fallbackAuthorJids: groupAuthorJids },
+				'group decrypt had no sender session for author jid, trying fallback jid'
+			)
+		}
+	}
+
+	throw lastDecryptErr
+}
+
+const processSenderKeyDistributionWithFallback = async (
+	repository: SignalRepository,
+	groupAuthorJids: string[],
+	item: proto.Message.ISenderKeyDistributionMessage
+) => {
+	let processErr: unknown
+	for (const authorJid of groupAuthorJids) {
+		try {
+			await repository.processSenderKeyDistributionMessage({ authorJid, item })
+			return
+		} catch (err) {
+			processErr = err
+		}
+	}
+
+	if (processErr) {
+		throw processErr
+	}
+}
+
+const processSenderKeyDistributionWithFallbackAndLog = async (
+	repository: SignalRepository,
+	logger: ILogger,
+	params: {
+		groupAuthorJids: string[]
+		item: proto.Message.ISenderKeyDistributionMessage
+		fullMessageKey: WAMessageKey
+		content: Uint8Array
+	}
+) => {
+	const { groupAuthorJids, item, fullMessageKey, content } = params
+	try {
+		await processSenderKeyDistributionWithFallback(repository, groupAuthorJids, item)
+	} catch (err) {
+		logger.error(
+			{ key: fullMessageKey, err, msg: content, fallbackAuthorJids: groupAuthorJids },
+			'failed to process sender key distribution message'
+		)
+	}
+}
 
 export const NACK_REASONS = {
 	ParsingError: 487,
@@ -161,7 +248,6 @@ export const decryptMessageNode = (
 		author,
 		async decrypt() {
 			let decryptables = 0
-
 			if (Array.isArray(stanza.content)) {
 				for (const { tag, attrs, content } of stanza.content) {
 					if (tag === 'verified_name' && content instanceof Uint8Array) {
@@ -184,17 +270,21 @@ export const decryptMessageNode = (
 
 					decryptables += 1
 
-					let msgBuffer: Uint8Array
+					let msgBuffer!: Uint8Array
+					const groupAuthorJids = getGroupAuthorJids(author, fullMessage.key)
 
 					try {
 						const e2eType = tag === 'plaintext' ? 'plaintext' : attrs.type
 						switch (e2eType) {
 							case 'skmsg':
-								msgBuffer = await repository.decryptGroupMessage({
+								msgBuffer = await decryptGroupWithAuthorFallback(repository, logger, {
 									group: sender,
-									authorJid: author,
-									msg: content
+									author,
+									content,
+									fullMessageKey: fullMessage.key,
+									groupAuthorJids
 								})
+
 								break
 							case 'pkmsg':
 							case 'msg':
@@ -217,18 +307,12 @@ export const decryptMessageNode = (
 						)
 						msg = msg.deviceSentMessage?.message || msg
 						if (msg.senderKeyDistributionMessage) {
-							//eslint-disable-next-line max-depth
-							try {
-								await repository.processSenderKeyDistributionMessage({
-									authorJid: author,
-									item: msg.senderKeyDistributionMessage
-								})
-							} catch (err) {
-								logger.error(
-									{ key: fullMessage.key, err, msg: content },
-									'failed to process sender key distribution message'
-								)
-							}
+							await processSenderKeyDistributionWithFallbackAndLog(repository, logger, {
+								groupAuthorJids,
+								item: msg.senderKeyDistributionMessage,
+								fullMessageKey: fullMessage.key,
+								content
+							})
 						}
 
 						if (fullMessage.message) {
