@@ -73,45 +73,43 @@ export function makeCacheableSignalKeyStore(
 
 	return {
 		async get(type, ids) {
-			return cacheMutex.runExclusive(async () => {
-				const data: { [_: string]: SignalDataTypeMap[typeof type] } = {}
-				const idsToFetch: string[] = []
+			const data: { [_: string]: SignalDataTypeMap[typeof type] } = {}
+			const idsToFetch: string[] = []
 
-				const items = await cacheGet(type, ids)
-				if (items) {
-					for (const id of ids) {
-						const item = items[getUniqueId(type, id)]
-						if (typeof item !== 'undefined') {
-							data[id] = item
-						} else {
-							idsToFetch.push(id)
-						}
+			const items = await cacheGet(type, ids)
+			if (items) {
+				for (const id of ids) {
+					const item = items[getUniqueId(type, id)]
+					if (typeof item !== 'undefined') {
+						data[id] = item
+					} else {
+						idsToFetch.push(id)
 					}
 				}
+			}
 
-				if (idsToFetch.length) {
-					logger?.trace({ items: idsToFetch.length }, 'loading from store')
-					const fetched = await store.get(type, idsToFetch)
-					const insertItems = idsToFetch
-						.map(id => {
-							const item = fetched[id]
-							if (item) {
-								data[id] = item
+			if (idsToFetch.length) {
+				logger?.trace({ items: idsToFetch.length }, 'loading from store')
+				const fetched = await store.get(type, idsToFetch)
+				const insertItems = idsToFetch
+					.map(id => {
+						const item = fetched[id]
+						if (item) {
+							data[id] = item
 
-								return {
-									key: getUniqueId(type, id),
-									value: fetched[id] as SignalDataTypeMap[keyof SignalDataTypeMap]
-								}
+							return {
+								key: getUniqueId(type, id),
+								value: fetched[id] as SignalDataTypeMap[keyof SignalDataTypeMap]
 							}
+						}
 
-							return undefined as any
-						})
-						.filter(Boolean)
-					await cache.mset?.(insertItems)
-				}
+						return undefined as any
+					})
+					.filter(Boolean)
+				await cache.mset?.(insertItems)
+			}
 
-				return data
-			})
+			return data
 		},
 		async set(data) {
 			return cacheMutex.runExclusive(async () => {
