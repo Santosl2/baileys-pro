@@ -717,6 +717,7 @@ export const addTransactionCapabilityOld = (
 			dbQueriesInTransaction += 1
 			const result = await state.get(type, idsRequiringFetch)
 
+			//@ts-ignore
 			transactionCache[type] = Object.assign(transactionCache[type] || {}, result)
 		}
 	}
