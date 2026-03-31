@@ -140,10 +140,8 @@ export function makeCacheableSignalKeyStore(
 		},
 		async clear() {
 			logger?.info('clearing signal store cache')
-			return cacheMutex.runExclusive(async () => {
-				await cache.flushAll()
-				await store.clear?.()
-			})
+			await cache.flushAll()
+			await store.clear?.()
 		}
 	}
 }
