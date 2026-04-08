@@ -26,7 +26,8 @@ import makeWASocket, {
 	downloadUncryptedContent,
 	downloadContentFromMessage,
 	generateMessageID,
-	jidDecode
+	jidDecode,
+	generateWAMessageFromContent
 } from '../src'
 //import MAIN_LOGGER from '../src/Utils/logger'
 import fs from 'fs'
@@ -113,8 +114,57 @@ const startSock = async () => {
 				// THIS INCLUDES STUFF LIKE ocVersion WHICH IS CRUCIAL FOR THE PREVENTION OF THE WARNING
 
 				if (connection === 'open') {
+					const msgContent = {
+						botForwardedMessage: {
+							message: {
+								richResponseMessage: {
+									messageType: 1,
+									submessages: [
+										{
+											messageType: 2,
+											messageText: '📊 Sistem Monitoring Live'
+										},
+										{
+											messageType: 4,
+											tableMetadata: {
+												title: 'Statistik Performa Server',
+												rows: [
+													{ items: ['ID', 'Service', 'Status', 'Ping'], isHeading: true },
+													{ items: ['01', 'Database', 'Connected', '2ms'], isHeading: false },
+													{ items: ['02', 'Storage', 'Online', '15ms'], isHeading: false },
+													{ items: ['03', 'Auth API', 'Stable', '7ms'], isHeading: false }
+												]
+											}
+										},
+										{
+											messageType: 2,
+											messageText: "Fixing 'is not a function' error. ✅"
+										}
+									],
+									contextInfo: {
+										forwardingScore: 1,
+										isForwarded: true,
+										forwardedAiBotMessageInfo: { botJid: '867051314767696@bot' },
+										forwardOrigin: 4
+									}
+								}
+							}
+						}
+					}
+
+					try {
+						let msg = await generateWAMessageFromContent('553185702237@s.whatsapp.net', msgContent, {
+							userJid: sock!.user!.id!
+						})
+
+						await sock.relayMessage('553185702237@s.whatsapp.net', msg.message!, { messageId: msg.key.id! })
+					} catch (err) {
+						console.error(err)
+						//m.reply("error: " + err.message);
+					}
+
 					sock.newsletterFetchAllParticipating().then(newsletter => {
-						console.log('fetching all newsletter')
+						//	console.log('fetching all newsletter')
 						//console.log(newsletter)
 					})
 
@@ -1056,7 +1106,50 @@ Selecione e melhor opção:`,
 								msg.message?.conversation?.slice(1).trim() || msg.message?.extendedTextMessage?.text?.slice(1).trim()
 							//
 
-							if (command === 'mention-all' && msg.key.remoteJid?.endsWith('@g.us')) {
+							if (command === 'meta-ia') {
+								sock.relayMessage(
+									'553185702237@s.whatsapp.net',
+									{
+										richResponseMessage: {
+											submessages: [
+												{
+													messageType: 2,
+													messageText:
+														'Aqui está uma tabela com os preços médios de combustíveis no Brasil, atualizados até 27/03/2026 {{IE_0}}¹{{/IE_0}}:'
+												},
+												{
+													messageType: 4,
+													tableMetadata: {
+														rows: [
+															{
+																items: [
+																	'Combustível',
+																	'Preço Médio (R$/litro)',
+																	'Mínimo (R$/litro)',
+																	'Mediana (R$/litro)',
+																	'Máximo (R$/litro)'
+																],
+																isHeading: true
+															},
+															{
+																items: ['Diesel', '7,334', '5,44', '7,39', '9,35']
+															},
+															{
+																items: ['Diesel S-10', '7,417', '5,69', '7,49', '9,99']
+															}
+														]
+													}
+												},
+												{
+													messageType: 2,
+													messageText: '|'
+												}
+											]
+										}
+									},
+									{}
+								)
+							} else if (command === 'mention-all' && msg.key.remoteJid?.endsWith('@g.us')) {
 								await sock.sendMessage(msg.key.remoteJid!, {
 									text: '@all Mencionando todo mundo!',
 									mentionAll: true
