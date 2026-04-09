@@ -797,13 +797,7 @@ const uploadWithFetch = async ({
  * across all runtimes. Monitor the GitHub issue for updates.
  */
 const uploadMedia = async (params: UploadParams, logger?: ILogger): Promise<MediaUploadResult | undefined> => {
-	if (isNodeRuntime()) {
-		logger?.debug('Using Node.js https module for upload (avoids undici buffering bug)')
-		return uploadWithNodeHttp(params)
-	} else {
-		logger?.debug('Using web-standard Fetch API for upload')
-		return uploadWithFetch(params)
-	}
+	return uploadWithFetch(params)
 }
 
 export const getWAUploadToServer = (
