@@ -813,42 +813,45 @@ export const getWAUploadToServer = (
 
 		fileEncSha256B64 = encodeBase64EncodedStringForUpload(fileEncSha256B64)
 
-		// Prepare common headers
-		const customHeaders = (() => {
-			const hdrs = options?.headers
-			if (!hdrs) return {}
-			return Array.isArray(hdrs) ? Object.fromEntries(hdrs) : (hdrs as Record<string, string>)
-		})()
-
-		const headers = {
-			...customHeaders,
-			'Content-Type': 'application/octet-stream',
-			Origin: DEFAULT_ORIGIN
-		}
-
 		for (const { hostname } of hosts) {
 			logger.debug(`uploading to "${hostname}"`)
 
-			const auth = encodeURIComponent(uploadInfo.auth)
+			const auth = encodeURIComponent(uploadInfo.auth) // the auth token
 			const url = `https://${hostname}${MEDIA_PATH_MAP[mediaType]}/${fileEncSha256B64}?auth=${auth}&token=${fileEncSha256B64}`
-
-			let result: MediaUploadResult | undefined
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			let result: any
 			try {
-				result = await uploadMedia(
-					{
-						url,
-						filePath,
-						headers,
-						timeoutMs,
-						agent: fetchAgent
+				const stream = createReadStream(filePath)
+				const response = await fetch(url, {
+					dispatcher: fetchAgent,
+					method: 'POST',
+					body: stream as any,
+					headers: {
+						...(() => {
+							const hdrs = options?.headers
+							if (!hdrs) return {}
+							return Array.isArray(hdrs) ? Object.fromEntries(hdrs) : (hdrs as Record<string, string>)
+						})(),
+						'Content-Type': 'application/octet-stream',
+						Origin: DEFAULT_ORIGIN
 					},
-					logger
-				)
+					duplex: 'half',
+					// Note: custom agents/proxy require undici Agent; omitted here.
+					signal: timeoutMs ? AbortSignal.timeout(timeoutMs) : undefined
+				})
+				let parsed: any = undefined
+				try {
+					parsed = await response.json()
+				} catch {
+					parsed = undefined
+				}
 
-				if (result?.url || result?.direct_path) {
+				result = parsed
+
+				if (result?.url || result?.directPath) {
 					urls = {
-						mediaUrl: result.url!,
-						directPath: result.direct_path!,
+						mediaUrl: result.url,
+						directPath: result.direct_path,
 						meta_hmac: result.meta_hmac,
 						fbid: result.fbid,
 						ts: result.ts
