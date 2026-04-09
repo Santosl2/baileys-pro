@@ -844,15 +844,15 @@ export const makeChatsSocket = (config: SocketConfig) => {
 			tag: 'iq',
 			attrs: {
 				to: S_WHATSAPP_NET,
-				xmlns: 'w',
+				xmlns: 'abt',
 				type: 'get'
 			},
 			content: [
 				{
 					tag: 'props',
 					attrs: {
-						protocol: '2',
-						hash: authState?.creds?.lastPropHash || ''
+						protocol: '1',
+						...(authState?.creds?.lastPropHash ? { hash: authState.creds.lastPropHash } : {})
 					}
 				}
 			]
