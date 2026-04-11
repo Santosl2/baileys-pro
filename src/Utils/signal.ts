@@ -23,6 +23,7 @@ import {
 import { DeviceListData, ParsedDeviceInfo, USyncQueryResultList } from '../WAUSync'
 import { Curve, generateSignalPubKey } from './crypto'
 import { encodeBigEndian } from './generics'
+import { ILogger } from './logger'
 
 export const createSignalIdentity = (wid: string, accountSignatureKey: Uint8Array): SignalIdentity => {
 	return {
@@ -119,36 +120,46 @@ export const parseAndInjectE2ESessions = async (node: BinaryNode, repository: Si
 	}
 }
 
-export const extractDeviceJids = async (result: USyncQueryResultList[], myJid: string, excludeZeroDevices: boolean) => {
+export const extractDeviceJids = (
+	result: USyncQueryResultList[],
+	myJid: string,
+	excludeZeroDevices: boolean,
+	logger?: ILogger
+) => {
+	const start = performance.now()
 	const { user: myUser, device: myDevice } = jidDecode(myJid)!
 
 	const extracted: JidWithDevice[] = []
 
-	// Process in chunks and yield between them to avoid blocking the event loop
-	// for large groups (same pattern as parseAndInjectE2ESessions above)
-	const chunks = chunk(result, 100)
-	for (let i = 0; i < chunks.length; i++) {
-		for (const userResult of chunks[i]) {
-			const { devices, id } = userResult as { devices: ParsedDeviceInfo; id: string }
-			const { user } = jidDecode(id)!
-			const deviceList = devices?.deviceList as DeviceListData[]
-			if (Array.isArray(deviceList)) {
-				for (const { id: device, keyIndex } of deviceList) {
-					// eslint-disable-next-line max-depth
-					if (
-						(!excludeZeroDevices || device !== 0) &&
-						(myUser !== user || myDevice !== device) &&
-						(device === 0 || !!keyIndex)
-					) {
-						extracted.push({ user, device })
-					}
+	for (const userResult of result) {
+		const { devices, id } = userResult as { devices: ParsedDeviceInfo; id: string }
+		const { user } = jidDecode(id)!
+		const deviceList = devices?.deviceList as DeviceListData[]
+		if (Array.isArray(deviceList)) {
+			for (const { id: device, keyIndex } of deviceList) {
+				if (
+					(!excludeZeroDevices || device !== 0) && // if zero devices are not-excluded, or device is non zero
+					(myUser !== user || myDevice !== device) && // either different user or if me user, not this device
+					(device === 0 || !!keyIndex) // ensure that "key-index" is specified for "non-zero" devices, produces a bad req otherwise
+				) {
+					extracted.push({ user, device })
 				}
 			}
 		}
+	}
 
-		// Yield só entre chunks, não depois do último
-		if (i < chunks.length - 1) {
-			await new Promise<void>(resolve => setImmediate(resolve))
+	const end = performance.now()
+
+	if (end - start > 1000) {
+		if (logger) {
+			logger.error(
+				{ duration: end - start, count: result.length },
+				`Extracting device JIDs took ${end - start}ms, consider optimizing this function if you have many devices`
+			)
+		} else {
+			console.warn(
+				`Extracting device JIDs took ${end - start}ms, consider optimizing this function if you have many devices`
+			)
 		}
 	}
 
