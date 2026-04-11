@@ -850,6 +850,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		}
 
 		if (isJidGroup(remoteJid)) {
+			// on group retries, we need to clear the sender key memory for the participant to ensure the new session gets picked up, as the retry receipt doesn't include a new SKDM
 			await authState.keys.set({ 'sender-key-memory': { [remoteJid]: null } })
 		}
 
@@ -885,7 +886,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 					}
 				}
 
-				const msgToRelay = freshSkdm
+				const msgToRelay: proto.IMessage = freshSkdm
 					? {
 							...msg,
 							senderKeyDistributionMessage: {
