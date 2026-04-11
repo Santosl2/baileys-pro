@@ -1,6 +1,5 @@
 import NodeCache from '@cacheable/node-cache'
 import { Boom } from '@hapi/boom'
-import { chunk } from 'lodash'
 import { proto } from '../../WAProto'
 import { DEFAULT_CACHE_TTLS, WA_DEFAULT_EPHEMERAL } from '../Defaults'
 import {
@@ -205,6 +204,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		const jidsWithOnlyUser = jids.map(jid => jidDecode(jid)?.user).filter(Boolean) as string[]
 
 		if (userDevicesCache.mget) {
+			// if the cache supports mget, we can fetch all devices in one go
 			const cachedDevices = await userDevicesCache.mget<JidWithDevice[]>([...jids, ...jidsWithOnlyUser])
 			for (const jid of jids) {
 				const user = jidDecode(jid)?.user
@@ -223,6 +223,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 					const devices = userDevicesCache.get<JidWithDevice[]>(user!)
 					if (devices) {
 						deviceResults.push(...devices)
+
 						logger.trace({ user }, 'using cache for devices')
 					} else {
 						toFetch.push(jid)
@@ -250,31 +251,36 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		}
 
 		const result = await sock.executeUSyncQuery(query)
+		const start = performance.now()
 
 		if (result) {
-			const extracted = await extractDeviceJids(result?.list, authState.creds.me!.id, ignoreZeroDevices)
+			const extracted = extractDeviceJids(result?.list, authState.creds.me!.id, ignoreZeroDevices, logger)
 			const deviceMap: { [_: string]: JidWithDevice[] } = {}
 
-			const chunks = chunk(extracted, 50)
-			for (let i = 0; i < chunks.length; i++) {
-				for (const item of chunks[i]) {
-					deviceMap[item.user] = deviceMap[item.user] || []
-					deviceMap[item.user].push(item)
-					deviceResults.push(item)
-				}
+			for (const item of extracted) {
+				deviceMap[item.user] = deviceMap[item.user] || []
+				deviceMap[item.user].push(item)
 
-				if (i < chunks.length - 1) {
-					await new Promise<void>(resolve => setImmediate(resolve))
-				}
+				deviceResults.push(item)
 			}
 
 			if (userDevicesCache.mset) {
+				// if the cache supports mset, we can set all devices in one go
 				await Promise.resolve(userDevicesCache.mset(Object.entries(deviceMap).map(([key, value]) => ({ key, value }))))
 			} else {
 				for (const key in deviceMap) {
 					if (deviceMap[key]) userDevicesCache.set(key, deviceMap[key])
 				}
 			}
+		}
+
+		const end = performance.now()
+
+		if (end - start > 1000) {
+			logger.error(
+				{ duration: end - start, count: toFetch.length },
+				`fetching devices for ${toFetch.length} JIDs took ${end - start}ms, consider optimizing this function if you have many devices`
+			)
 		}
 
 		return deviceResults
