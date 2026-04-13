@@ -562,10 +562,16 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 					}
 
 					const additionalDevices = await getUSyncDevices(participantsList, !!useUserDevicesCache, false)
+					const devicesByUser = additionalDevices.reduce<Record<string, typeof additionalDevices>>((acc, d) => {
+						;(acc[d.user] ??= []).push(d)
+						return acc
+					}, {})
+
 					const newParticipantList = participantsList.flatMap(jid => {
 						const [user, server] = jid.split('@')
+						const devices = devicesByUser[user]
+						if (!devices) return []
 
-						const devices = additionalDevices.filter(d => d.user === user)
 						return devices.map(d => `${d.user}.0:${d.device}@${server}`)
 					})
 
