@@ -25,6 +25,7 @@ import {
 	encryptMediaRetryRequest,
 	extractDeviceJids,
 	generateMessageIDV2,
+	generateParticipantHashV2,
 	generateWAMessage,
 	getStatusCodeForMediaRetry,
 	getUrlFromDirectPath,
@@ -449,6 +450,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		const isRetryResend = Boolean(participant?.jid)
 
 		let shouldIncludeDeviceIdentity = isRetryResend
+		let participantListPhash: string | undefined = undefined
 
 		const { user, server } = jidDecode(jid)!
 		const statusJid = 'status@broadcast'
@@ -560,6 +562,15 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 					}
 
 					const additionalDevices = await getUSyncDevices(participantsList, !!useUserDevicesCache, false)
+					const newParticipantList = participantsList.flatMap(jid => {
+						const [user, server] = jid.split('@')
+
+						const devices = additionalDevices.filter(d => d.user === user)
+						return devices.map(d => `${d.user}.0:${d.device}@${server}`)
+					})
+
+					participantListPhash = generateParticipantHashV2(newParticipantList)
+
 					devices.push(...additionalDevices)
 				}
 
@@ -808,7 +819,12 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 
 			logger.debug({ msgId }, `sending message to ${participants.length} devices`)
 
-			await sendNode(stanza)
+			const data = await query(stanza)
+			const phash = data.attrs.phash
+			if (phash && participantListPhash && phash !== participantListPhash) {
+				await groupMetadataCache?.del(jid)
+				logger.debug({ jid, msgId, phash, participantListPhash }, 'message sent with phash')
+			}
 		})
 
 		return msgId
