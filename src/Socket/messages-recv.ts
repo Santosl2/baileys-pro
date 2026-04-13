@@ -37,6 +37,7 @@ import {
 	encodeBigEndian,
 	encodeSignedDeviceIdentity,
 	generateParticipantHashV2,
+	generateSignalPubKey,
 	getCallStatusFromNode,
 	getHistoryMsg,
 	getNextPreKeys,
@@ -61,6 +62,7 @@ import {
 	getBinaryNodeChildBuffer,
 	getBinaryNodeChildren,
 	getBinaryNodeChildString,
+	getBinaryNodeChildUInt,
 	isJidGroup,
 	isJidNewsletter,
 	isJidStatusBroadcast,
@@ -204,6 +206,21 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		const fromJid = node.attrs.from
 
 		let retryCount = Number(msgRetryCache.get(msgId) || 0) || 0
+
+		// After a restart the cache is empty (retryCount === 0), but the sender may already
+		// be on a higher retry cycle. Read the count embedded in the enc node to catch up,
+		// so we don't loop unnecessary retries. Mirrors whatsmeow sendRetryReceipt logic.
+		if (retryCount === 0) {
+			const children = Array.isArray(node.content) ? (node.content as BinaryNode[]) : []
+			const encChild = children.find(c => c.tag === 'enc')
+			const msgRetryCountInNode = encChild ? Number(encChild.attrs?.count || 0) : 0
+			if (msgRetryCountInNode > 0) {
+				retryCount = msgRetryCountInNode
+				msgRetryCache.set(msgId, retryCount)
+				logger.debug({ msgId, retryCount }, 'recovered retry count from enc node after restart')
+			}
+		}
+
 		if (retryCount > maxMsgRetryCount) {
 			const placeholderRequest = await requestPlaceholderResend(msgKey)
 			logger.debug(`sendRetryRequest: requested placeholder resend for message ${placeholderRequest}`)
@@ -751,7 +768,54 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		}
 	}
 
-	const sendMessagesAgain = async (key: proto.IMessageKey, ids: string[], retryNode: BinaryNode) => {
+	/**
+	 * Attempts to establish a Signal session for `jid` using a prekey bundle embedded
+	 * in an incoming retry receipt node.
+	 *
+	 * Returns `true` if the session was injected from the bundle, `false` if the
+	 * keys node was absent or incomplete (caller should fall back to a server fetch).
+	 */
+	const injectSessionFromReceiptKeys = async (receiptNode: BinaryNode, jid: string): Promise<boolean> => {
+		const keysNode = getBinaryNodeChild(receiptNode, 'keys')
+		if (!keysNode) {
+			return false
+		}
+
+		const signedKeyNode = getBinaryNodeChild(keysNode, 'skey')!
+		const preKeyNode = getBinaryNodeChild(keysNode, 'key')!
+		const identity = getBinaryNodeChildBuffer(keysNode, 'identity')!
+		const registrationId = getBinaryNodeChildUInt(receiptNode, 'registration', 4)
+
+		if (!signedKeyNode || !preKeyNode || !identity || !registrationId) {
+			return false
+		}
+
+		await signalRepository.injectE2ESession({
+			jid,
+			session: {
+				registrationId,
+				identityKey: generateSignalPubKey(identity),
+				signedPreKey: {
+					keyId: getBinaryNodeChildUInt(signedKeyNode, 'id', 3)!,
+					publicKey: generateSignalPubKey(getBinaryNodeChildBuffer(signedKeyNode, 'value')!),
+					signature: getBinaryNodeChildBuffer(signedKeyNode, 'signature')!
+				},
+				preKey: {
+					keyId: getBinaryNodeChildUInt(preKeyNode, 'id', 3)!,
+					publicKey: generateSignalPubKey(getBinaryNodeChildBuffer(preKeyNode, 'value')!)
+				}
+			}
+		})
+
+		return true
+	}
+
+	const sendMessagesAgain = async (
+		key: proto.IMessageKey,
+		ids: string[],
+		retryNode: BinaryNode,
+		receiptNode: BinaryNode
+	) => {
 		const msgs = await Promise.all(ids.map(id => getMessageForRetry({ ...key, id })))
 
 		const remoteJid = key.remoteJid!
@@ -760,13 +824,53 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		// just re-send the message to everyone
 		// prevents the first message decryption failure
 		const sendToAll = !jidDecode(participant)?.device
-		await assertSessions([participant], true)
+		const retryCount = +retryNode.attrs.count
+
+		const injected = await injectSessionFromReceiptKeys(receiptNode, participant)
+		if (injected) {
+			logger.debug({ participant, retryCount }, 'injected session from prekey bundle in retry receipt')
+		} else if (getBinaryNodeChild(receiptNode, 'keys')) {
+			// keys node was present but incomplete
+			logger.warn({ participant, retryCount }, 'incomplete keys node in retry receipt, falling back to server fetch')
+			await assertSessions([participant], true)
+		} else {
+			// No prekey bundle — only fetch from server when session recreation is needed
+			const sessionCheck = await signalRepository.validateSession(participant)
+			const shouldRecreate = messageRetryManager
+				? messageRetryManager.shouldRecreateSession(participant, sessionCheck.exists).recreate
+				: !sessionCheck.exists
+
+			if (shouldRecreate) {
+				logger.debug(
+					{ participant, retryCount },
+					'fetching prekeys from server for retry resend (no bundle in receipt)'
+				)
+				await assertSessions([participant], true)
+			}
+		}
 
 		if (isJidGroup(remoteJid)) {
+			// on group retries, we need to clear the sender key memory for the participant to ensure the new session gets picked up, as the retry receipt doesn't include a new SKDM
 			await authState.keys.set({ 'sender-key-memory': { [remoteJid]: null } })
 		}
 
 		logger.debug({ participant, sendToAll }, 'forced new session for retry recp')
+
+		// For group retries targeting a specific participant (not send-to-all),
+		// the message gets re-encrypted pairwise — the SKDM is NOT included automatically.
+		// Generate a fresh one and embed it so the receiver can update their sender key state.
+		// Mirrors whatsmeow's handleRetryReceipt: builder.Create(senderName) before re-encrypting.
+		let freshSkdm: Uint8Array | undefined
+		if (isJidGroup(remoteJid) && !sendToAll) {
+			try {
+				freshSkdm = await signalRepository.createSenderKeyDistributionMessage({
+					group: remoteJid,
+					meId: authState.creds.me!.id
+				})
+			} catch (err) {
+				logger.warn({ err, remoteJid, participant }, 'failed to generate SKDM for group retry, proceeding without it')
+			}
+		}
 
 		for (const [i, msg] of msgs.entries()) {
 			if (msg && willSendMessageAgain(ids[i], participant)) {
@@ -782,7 +886,17 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 					}
 				}
 
-				await relayMessage(key.remoteJid!, msg, msgRelayOpts)
+				const msgToRelay: proto.IMessage = freshSkdm
+					? {
+							...msg,
+							senderKeyDistributionMessage: {
+								groupId: remoteJid,
+								axolotlSenderKeyDistributionMessage: freshSkdm
+							}
+						}
+					: msg
+
+				await relayMessage(key.remoteJid!, msgToRelay, msgRelayOpts)
 			} else {
 				logger.debug({ jid: key.remoteJid, id: ids[i] }, 'recv retry request, but message not available')
 			}
@@ -856,7 +970,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 							try {
 								updateSendMessageAgainCount(ids[0], key.participant)
 								logger.debug({ attrs, key }, 'recv retry request')
-								await sendMessagesAgain(key, ids, retryNode)
+								await sendMessagesAgain(key, ids, retryNode, node)
 							} catch (error: unknown) {
 								logger.error(
 									{ key, ids, trace: error instanceof Error ? error.stack : 'Unknown error' },
@@ -1405,92 +1519,94 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 	// Handles newsletter notifications
 	async function handleNewsletterNotification(node: BinaryNode) {
 		const from = node.attrs.from
-		const [child] = getAllBinaryNodeChildren(node)
+		const children = getAllBinaryNodeChildren(node)
 		const author = node.attrs.participant
 
-		logger.info({ from, child }, 'got newsletter notification')
+		logger.info({ from, children, author }, 'got newsletter notification')
 
-		switch (child.tag) {
-			case 'reaction':
-				const reactionUpdate = {
-					id: from,
-					server_id: child.attrs.message_id,
-					reaction: {
-						code: getBinaryNodeChildString(child, 'reaction'),
-						count: 1
-					}
-				}
-				ev.emit('newsletter.reaction', reactionUpdate)
-				break
-
-			case 'view':
-				const viewUpdate = {
-					id: from,
-					server_id: child.attrs.message_id,
-					count: parseInt(child.content?.toString() || '0', 10)
-				}
-				ev.emit('newsletter.view', viewUpdate)
-				break
-
-			case 'participant':
-				const participantUpdate = {
-					id: from,
-					author,
-					user: child.attrs.jid,
-					action: child.attrs.action,
-					new_role: child.attrs.role
-				}
-				ev.emit('newsletter-participants.update', participantUpdate)
-				break
-
-			case 'update':
-				const settingsNode = getBinaryNodeChild(child, 'settings')
-				if (settingsNode) {
-					const update: Record<string, any> = {}
-					const nameNode = getBinaryNodeChild(settingsNode, 'name')
-					if (nameNode?.content) update.name = nameNode.content.toString()
-
-					const descriptionNode = getBinaryNodeChild(settingsNode, 'description')
-					if (descriptionNode?.content) update.description = descriptionNode.content.toString()
-
-					ev.emit('newsletter-settings.update', {
+		for (const child of children) {
+			switch (child.tag) {
+				case 'reaction':
+					const reactionUpdate = {
 						id: from,
-						update
-					})
-				}
-
-				break
-
-			case 'message':
-				const plaintextNode = getBinaryNodeChild(child, 'plaintext')
-				if (plaintextNode?.content) {
-					try {
-						const contentBuf =
-							typeof plaintextNode.content === 'string'
-								? Buffer.from(plaintextNode.content, 'binary')
-								: Buffer.from(plaintextNode.content as Uint8Array)
-						const messageProto = proto.Message.decode(contentBuf)
-						const fullMessage = proto.WebMessageInfo.fromObject({
-							key: {
-								remoteJid: from,
-								id: child.attrs.message_id || child.attrs.server_id,
-								fromMe: false
-							},
-							message: messageProto,
-							messageTimestamp: +child.attrs.t
-						})
-						await upsertMessage(fullMessage, 'append')
-						logger.info('Processed plaintext newsletter message')
-					} catch (error) {
-						logger.error({ error }, 'Failed to decode plaintext newsletter message')
+						server_id: child.attrs.message_id,
+						reaction: {
+							code: getBinaryNodeChildString(child, 'reaction'),
+							count: 1
+						}
 					}
-				}
+					ev.emit('newsletter.reaction', reactionUpdate)
+					break
 
-				break
+				case 'view':
+					const viewUpdate = {
+						id: from,
+						server_id: child.attrs.message_id,
+						count: parseInt(child.content?.toString() || '0', 10)
+					}
+					ev.emit('newsletter.view', viewUpdate)
+					break
 
-			default:
-				logger.warn({ node }, 'Unknown newsletter notification')
-				break
+				case 'participant':
+					const participantUpdate = {
+						id: from,
+						author,
+						user: child.attrs.jid,
+						action: child.attrs.action,
+						new_role: child.attrs.role
+					}
+					ev.emit('newsletter-participants.update', participantUpdate)
+					break
+
+				case 'update':
+					const settingsNode = getBinaryNodeChild(child, 'settings')
+					if (settingsNode) {
+						const update: Record<string, any> = {}
+						const nameNode = getBinaryNodeChild(settingsNode, 'name')
+						if (nameNode?.content) update.name = nameNode.content.toString()
+
+						const descriptionNode = getBinaryNodeChild(settingsNode, 'description')
+						if (descriptionNode?.content) update.description = descriptionNode.content.toString()
+
+						ev.emit('newsletter-settings.update', {
+							id: from,
+							update
+						})
+					}
+
+					break
+
+				case 'message':
+					const plaintextNode = getBinaryNodeChild(child, 'plaintext')
+					if (plaintextNode?.content) {
+						try {
+							const contentBuf =
+								typeof plaintextNode.content === 'string'
+									? Buffer.from(plaintextNode.content, 'binary')
+									: Buffer.from(plaintextNode.content as Uint8Array)
+							const messageProto = proto.Message.decode(contentBuf)
+							const fullMessage = proto.WebMessageInfo.fromObject({
+								key: {
+									remoteJid: from,
+									id: child.attrs.message_id || child.attrs.server_id,
+									fromMe: false
+								},
+								message: messageProto,
+								messageTimestamp: +child.attrs.t
+							})
+							await upsertMessage(fullMessage, 'append')
+							logger.info('Processed plaintext newsletter message')
+						} catch (error) {
+							logger.error({ error }, 'Failed to decode plaintext newsletter message')
+						}
+					}
+
+					break
+
+				default:
+					logger.warn({ node }, 'Unknown newsletter notification')
+					break
+			}
 		}
 	}
 

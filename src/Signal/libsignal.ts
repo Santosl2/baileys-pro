@@ -170,6 +170,21 @@ export function makeLibSignalRepository(auth: SignalAuthState): SignalRepository
 				}
 			})
 		},
+		async createSenderKeyDistributionMessage({ group, meId }) {
+			const senderName = jidToSignalSenderKeyName(group, meId)
+			const builder = new GroupSessionBuilder(storage)
+			const senderNameStr = senderName.toString()
+
+			return (auth.keys as SignalKeyStoreWithTransaction).transaction(async () => {
+				const { [senderNameStr]: senderKey } = await auth.keys.get('sender-key', [senderNameStr])
+				if (!senderKey) {
+					await storage.storeSenderKey(senderName, new SenderKeyRecord())
+				}
+
+				const skdm = await builder.create(senderName)
+				return skdm.serialize()
+			})
+		},
 		async injectE2ESession({ jid, session }) {
 			const cipher = new libsignal.SessionBuilder(storage, jidToSignalProtocolAddress(jid))
 

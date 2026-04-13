@@ -26,7 +26,8 @@ import makeWASocket, {
 	downloadUncryptedContent,
 	downloadContentFromMessage,
 	generateMessageID,
-	jidDecode
+	jidDecode,
+	generateWAMessageFromContent
 } from '../src'
 //import MAIN_LOGGER from '../src/Utils/logger'
 import fs from 'fs'
@@ -113,8 +114,57 @@ const startSock = async () => {
 				// THIS INCLUDES STUFF LIKE ocVersion WHICH IS CRUCIAL FOR THE PREVENTION OF THE WARNING
 
 				if (connection === 'open') {
+					const msgContent = {
+						botForwardedMessage: {
+							message: {
+								richResponseMessage: {
+									messageType: 1,
+									submessages: [
+										{
+											messageType: 2,
+											messageText: '📊 Sistem Monitoring Live'
+										},
+										{
+											messageType: 4,
+											tableMetadata: {
+												title: 'Statistik Performa Server',
+												rows: [
+													{ items: ['ID', 'Service', 'Status', 'Ping'], isHeading: true },
+													{ items: ['01', 'Database', 'Connected', '2ms'], isHeading: false },
+													{ items: ['02', 'Storage', 'Online', '15ms'], isHeading: false },
+													{ items: ['03', 'Auth API', 'Stable', '7ms'], isHeading: false }
+												]
+											}
+										},
+										{
+											messageType: 2,
+											messageText: "Fixing 'is not a function' error. ✅"
+										}
+									],
+									contextInfo: {
+										forwardingScore: 1,
+										isForwarded: true,
+										forwardedAiBotMessageInfo: { botJid: '867051314767696@bot' },
+										forwardOrigin: 4
+									}
+								}
+							}
+						}
+					}
+
+					try {
+						let msg = await generateWAMessageFromContent('553185702237@s.whatsapp.net', msgContent, {
+							userJid: sock!.user!.id!
+						})
+
+						await sock.relayMessage('553185702237@s.whatsapp.net', msg.message!, { messageId: msg.key.id! })
+					} catch (err) {
+						console.error(err)
+						//m.reply("error: " + err.message);
+					}
+
 					sock.newsletterFetchAllParticipating().then(newsletter => {
-						console.log('fetching all newsletter')
+						//	console.log('fetching all newsletter')
 						//console.log(newsletter)
 					})
 
@@ -176,17 +226,59 @@ Selecione e melhor opção:`,
 			// Funcionando
 			async function sendCarousel() {
 				await sock.sendMessage('553185702237@s.whatsapp.net', {
-					text: 'f',
+					text: 'Veja as promoções da semana!',
 					cards: [
 						{
+							body: `1 
+🛍 Tp-link Deco X50(3-pack) Roteador Mesh Wifi6 Ax3000 Cobre Até 600m²
+
+💰 ~De: R$ 1.299,00~
+✅ *POR: R$ 1.097,00*
+
+🛒Compre aqui: https://meli.la/2j5CjAu`,
 							buttons: [
 								{
-									name: 'cta_call',
-									buttonParamsJson: '{"fix":true,"display_text":"Fale conosco","phone_number":"+5531985702237"}'
+									name: 'cta_url',
+									buttonParamsJson: '{"display_text":"Ver Oferta","url":"https://meli.la/2j5CjAu"}'
 								}
 							],
 							image: {
-								url: 'https://i.redd.it/i-got-bored-so-i-decided-to-draw-a-random-image-on-the-v0-4ig97vv85vjb1.png?width=1280&format=png&auto=webp&s=7177756d1f393b6e093596d06e1ba539f723264b'
+								url: 'https://http2.mlstatic.com/D_NQ_NP_695526-MLA99964513811_112025-O.webp'
+							}
+						},
+						{
+							body: `1 
+🛍 Kit Conjunto Alfaiataria Feminino Calça Pantalona E Camisa Manga Longa Social Alfaiataria Luxo Blogueira Modesta
+
+✅ *POR: R$ 119,99*
+
+🛒Compre aqui: https://s.shopee.com.br/3B3JCyGC7V`,
+							buttons: [
+								{
+									name: 'cta_url',
+									buttonParamsJson: '{"display_text":"Ver Oferta","url":"https://s.shopee.com.br/3B3JCyGC7V"}'
+								}
+							],
+							image: {
+								url: 'https://cf.shopee.com.br/file/br-11134207-820ls-mlxu87lby03q31'
+							}
+						},
+						{
+							body: `1 
+🛍 Smart Tv LG Uhd Ai Ua75 65 Polegadas Hdr10 Pro Processador 7 Ai Ger8 Webos 25
+
+💰 ~De: R$ 4.999,00~
+✅ *POR: R$ 3.199,00*
+
+🛒Compre aqui: https://meli.la/1EHATgt`,
+							buttons: [
+								{
+									name: 'cta_url',
+									buttonParamsJson: '{"display_text":"Ver Oferta","url":"https://meli.la/1EHATgt"}'
+								}
+							],
+							image: {
+								url: 'https://http2.mlstatic.com/D_NQ_NP_966485-MLA106907952364_022026-O.webp'
 							}
 						}
 					]
@@ -1056,7 +1148,50 @@ Selecione e melhor opção:`,
 								msg.message?.conversation?.slice(1).trim() || msg.message?.extendedTextMessage?.text?.slice(1).trim()
 							//
 
-							if (command === 'mention-all' && msg.key.remoteJid?.endsWith('@g.us')) {
+							if (command === 'meta-ia') {
+								sock.relayMessage(
+									'553185702237@s.whatsapp.net',
+									{
+										richResponseMessage: {
+											submessages: [
+												{
+													messageType: 2,
+													messageText:
+														'Aqui está uma tabela com os preços médios de combustíveis no Brasil, atualizados até 27/03/2026 {{IE_0}}¹{{/IE_0}}:'
+												},
+												{
+													messageType: 4,
+													tableMetadata: {
+														rows: [
+															{
+																items: [
+																	'Combustível',
+																	'Preço Médio (R$/litro)',
+																	'Mínimo (R$/litro)',
+																	'Mediana (R$/litro)',
+																	'Máximo (R$/litro)'
+																],
+																isHeading: true
+															},
+															{
+																items: ['Diesel', '7,334', '5,44', '7,39', '9,35']
+															},
+															{
+																items: ['Diesel S-10', '7,417', '5,69', '7,49', '9,99']
+															}
+														]
+													}
+												},
+												{
+													messageType: 2,
+													messageText: '|'
+												}
+											]
+										}
+									},
+									{}
+								)
+							} else if (command === 'mention-all' && msg.key.remoteJid?.endsWith('@g.us')) {
 								await sock.sendMessage(msg.key.remoteJid!, {
 									text: '@all Mencionando todo mundo!',
 									mentionAll: true
@@ -1175,8 +1310,8 @@ Promoção por tempo limitado`
 							} else if (command === 'pix') {
 								await sendPix()
 							} else if (command === 'buttons') {
-								// await sendWithBasicButtons()
-								await sendButtonsWithNewFormat()
+								await sendWithBasicButtons()
+								// await sendButtonsWithNewFormat()
 							} else if (command === 'multiple_buttons') {
 								await sendWithMultipleButtons()
 							} else if (command === 'multiple_buttons_with_image') {

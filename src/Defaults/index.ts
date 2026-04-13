@@ -129,9 +129,9 @@ export const DEFAULT_CONNECTION_CONFIG: SocketConfig = {
 
 	recentMessageSentHistory: {
 		// TODO: use sqlite and async mutex
-		get: (from, messageId) => recentMessageSentHistory.get(`${from}:${messageId}`),
+		get: (from, messageId) => recentMessageSentHistory.get(`${messageId}`),
 		set: (from, messageId, message) => {
-			const key = `${from}:${messageId}`
+			const key = `${messageId}`
 			if (recentMessageSentHistory.has(key)) {
 				recentMessageSentHistory.delete(key)
 			}

@@ -62,6 +62,8 @@ export type SignalRepository = {
 		senderKeyDistributionMessage: Uint8Array
 		ciphertext: Uint8Array
 	}>
+	/** Returns the serialized SenderKeyDistributionMessage for the given group without encrypting any message. */
+	createSenderKeyDistributionMessage(opts: { group: string; meId: string }): Promise<Uint8Array>
 	injectE2ESession(opts: E2ESessionOpts): Promise<void>
 	jidToSignalProtocolAddress(jid: string): string
 }
