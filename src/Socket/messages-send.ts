@@ -575,7 +575,23 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 						return devices.map(d => `${d.user}.0:${d.device}@${server}`)
 					})
 
-					participantListPhash = generateParticipantHashV2(newParticipantList)
+					participantListPhash = groupData?.phash || generateParticipantHashV2(newParticipantList)
+
+					if (groupData && !groupData.phash) {
+						logger.debug(
+							{ jid, participantList: newParticipantList, generatedPhash: participantListPhash },
+							'generated new participant list hash for group'
+						)
+
+						await groupMetadataCache
+							?.set(jid, {
+								...groupData,
+								phash: participantListPhash
+							})
+							.catch(err => {
+								logger.error({ jid, trace: err?.stack }, 'failed to update group metadata cache with participant hash')
+							})
+					}
 
 					devices.push(...additionalDevices)
 				}
