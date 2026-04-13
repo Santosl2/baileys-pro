@@ -562,27 +562,32 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 					}
 
 					const additionalDevices = await getUSyncDevices(participantsList, !!useUserDevicesCache, false)
-					const devicesByUser = additionalDevices.reduce<Record<string, typeof additionalDevices>>((acc, d) => {
-						;(acc[d.user] ??= []).push(d)
-						return acc
-					}, {})
 
-					const newParticipantList = participantsList.flatMap(jid => {
-						const [user, server] = jid.split('@')
-						const devices = devicesByUser[user]
-						if (!devices) return []
+					participantListPhash = groupData?.phash
 
-						return devices.map(d => `${d.user}.0:${d.device}@${server}`)
-					})
+					if (!participantListPhash) {
+						const devicesByUser = additionalDevices.reduce<Record<string, typeof additionalDevices>>((acc, d) => {
+							;(acc[d.user] ??= []).push(d)
+							return acc
+						}, {})
 
-					participantListPhash = groupData?.phash || generateParticipantHashV2(newParticipantList)
+						const newParticipantList = participantsList.flatMap(jid => {
+							const [user, server] = jid.split('@')
+							const devices = devicesByUser[user]
+							if (!devices) return []
 
-					if (groupData && !groupData.phash) {
+							return devices.map(d => `${d.user}.0:${d.device}@${server}`)
+						})
 						logger.debug(
 							{ jid, participantList: newParticipantList, generatedPhash: participantListPhash },
 							'generated new participant list hash for group'
 						)
 
+						const generatePhash = generateParticipantHashV2(newParticipantList)
+						participantListPhash = generatePhash
+					}
+
+					if (groupData && !groupData.phash && participantListPhash) {
 						await groupMetadataCache
 							?.set(jid, {
 								...groupData,
