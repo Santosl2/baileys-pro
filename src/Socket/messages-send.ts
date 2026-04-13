@@ -825,11 +825,15 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 
 			logger.debug({ msgId }, `sending message to ${participants.length} devices`)
 
-			const data = await query(stanza)
-			const phash = data.attrs.phash
-			if (phash && participantListPhash && phash !== participantListPhash) {
-				await groupMetadataCache?.del(jid)
-				logger.debug({ jid, msgId, phash, participantListPhash }, 'message sent with phash')
+			try {
+				const data = await query(stanza)
+				const phash = data.attrs.phash
+				if (phash && participantListPhash && phash !== participantListPhash) {
+					await groupMetadataCache?.del(jid)
+					logger.debug({ jid, msgId, phash, participantListPhash }, 'message sent with phash')
+				}
+			} catch (error) {
+				logger.error({ jid, msgId, trace: error?.stack }, 'failed to send message')
 			}
 		})
 
