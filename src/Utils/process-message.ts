@@ -181,6 +181,9 @@ const updateGroupMetadata = (
 			break
 	}
 
+	// if the group has a phash, it's likely the phone won't send us all participant details in the stub types, so we clear it to avoid confusion
+	groupMetadata.phash = undefined
+
 	return groupMetadata
 }
 
