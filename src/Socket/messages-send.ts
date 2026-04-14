@@ -599,6 +599,12 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				for (const { user, device, server } of devices) {
 					let serverToUse = server
 
+					if (serverToUse && serverToUse !== 'lid') {
+						logger.warn(
+							`unexpected server type for group message, expected "lid" but got "${serverToUse}" groupData?.addressingMode: ${groupData?.addressingMode}, jid: ${jidEncode(user, serverToUse, device)}`
+						)
+					}
+
 					if (!serverToUse) {
 						serverToUse = groupData?.addressingMode === 'lid' ? 'lid' : 's.whatsapp.net'
 					}
