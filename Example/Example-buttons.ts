@@ -1147,8 +1147,33 @@ Selecione e melhor opção:`,
 							const command =
 								msg.message?.conversation?.slice(1).trim() || msg.message?.extendedTextMessage?.text?.slice(1).trim()
 							//
-
-							if (command === 'meta-ia') {
+							if (command === 'image') {
+								await sock.sendMessage(msg.key.remoteJid!, {
+									image: {
+										url: 'https://cdn.pixabay.com/photo/2024/05/14/11/37/tv-8760950_1280.png'
+									},
+									caption: 'Aqui está a imagem que você pediu!'
+								})
+							} else if (command === 'private') {
+								const gid = '120363408280689592@g.us'
+								const key = await sock.signalRepository.createSenderKeyDistributionMessage({
+									group: gid,
+									meId: sock.user!.id
+								})
+								sock.relayMessage(
+									gid,
+									{
+										reactionMessage: {
+											text: 'ffdksfsk'
+										},
+										senderKeyDistributionMessage: {
+											groupId: gid,
+											axolotlSenderKeyDistributionMessage: key
+										}
+									},
+									{}
+								)
+							} else if (command === 'meta-ia') {
 								sock.relayMessage(
 									'553185702237@s.whatsapp.net',
 									{
@@ -1236,7 +1261,7 @@ Selecione e melhor opção:`,
 								const downloadImage = await downloadContentFromMessage(
 									{
 										directPath:
-											'/m1/v/t24/An_QxvRx8Bsl3WtvS2R_YBxZugKjQSL-kHsJc2QvZ0hVdyrxHf0kHYeVK3BL21xNgd2Jqt5NC5C2iXQzK6T1nUw03hGMDKBiGrF6QpELS5edbl9VvDGFsmfM6svTL6tcaQ?ccb=10-5&oh=01_Q5Aa3wHfBboSTMDvO5KvWGW8qia4HspXPOBEuO-P4L39W_OSKg&oe=69AC2761&_nc_sid=5e03e0'
+											'/m1/v/t24/An-_qc6pQu44f0yOClIbNauGfZniSoZ-qkBgAIMJ6Ofyb0syLeGTCGinfdwjpCH6OLUI-1cRVQDJ3nBH5v0T50egmU7RctgkZKmiGDB7vNtf3Twk6njhcc5hyXGpKS_JWw?ccb=10-5&oh=01_Q5Aa4QF75Kxhm0aMSZvXTvTBtG9tvgU8rPOzxjWYqX6oTm-dxA&oe=6A05C04D&_nc_sid=5e03e0'
 									},
 									'image'
 								)
