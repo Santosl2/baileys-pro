@@ -3,6 +3,7 @@ import { SenderKeyMessage } from './sender-key-message'
 import { SenderKeyName } from './sender-key-name'
 import { SenderKeyRecord } from './sender-key-record'
 import { SenderKeyState } from './sender-key-state'
+import { SenderMessageKey } from './sender-message-key'
 
 export interface SenderKeyStore {
 	loadSenderKey(senderKeyName: SenderKeyName): Promise<SenderKeyRecord>
@@ -34,7 +35,7 @@ export class GroupCipher {
 			}
 
 			const iteration = senderKeyState.getSenderChainKey().getIteration()
-			const senderKey = this.getSenderKey(senderKeyState, iteration === 0 ? 0 : iteration + 1)
+			const senderKey = await this.getSenderKey(senderKeyState, iteration === 0 ? 0 : iteration + 1)
 
 			const ciphertext = await this.getCipherText(senderKey.getIv(), senderKey.getCipherKey(), paddedPlaintext)
 
@@ -71,7 +72,7 @@ export class GroupCipher {
 			}
 
 			senderKeyMessage.verifySignature(senderKeyState.getSigningKeyPublic())
-			const senderKey = this.getSenderKey(senderKeyState, senderKeyMessage.getIteration())
+			const senderKey = await this.getSenderKey(senderKeyState, senderKeyMessage.getIteration())
 
 			const plaintext = await this.getPlainText(
 				senderKey.getIv(),
@@ -86,11 +87,11 @@ export class GroupCipher {
 		return runJob()
 	}
 
-	private getSenderKey(senderKeyState: SenderKeyState, iteration: number) {
+	private async getSenderKey(senderKeyState: SenderKeyState, iteration: number): Promise<SenderMessageKey> {
 		let senderChainKey = senderKeyState.getSenderChainKey()
 		if (senderChainKey.getIteration() > iteration) {
 			if (senderKeyState.hasSenderMessageKey(iteration)) {
-				const messageKey = senderKeyState.removeSenderMessageKey(iteration)
+				const messageKey = await senderKeyState.removeSenderMessageKey(iteration)
 				if (!messageKey) {
 					throw new Error('No sender message key found for iteration')
 				}
@@ -106,11 +107,11 @@ export class GroupCipher {
 		}
 
 		while (senderChainKey.getIteration() < iteration) {
-			senderKeyState.addSenderMessageKey(senderChainKey.getSenderMessageKey())
-			senderChainKey = senderChainKey.getNext()
+			senderKeyState.addSenderMessageKey(await senderChainKey.getSenderMessageKey())
+			senderChainKey = await senderChainKey.getNext()
 		}
 
-		senderKeyState.setSenderChainKey(senderChainKey.getNext())
+		senderKeyState.setSenderChainKey(await senderChainKey.getNext())
 		return senderChainKey.getSenderMessageKey()
 	}
 

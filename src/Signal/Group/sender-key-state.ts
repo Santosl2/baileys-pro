@@ -140,13 +140,13 @@ export class SenderKeyState {
 		}
 	}
 
-	public removeSenderMessageKey(iteration: number): SenderMessageKey | null {
+	public async removeSenderMessageKey(iteration: number): Promise<SenderMessageKey | null> {
 		const index = this.senderKeyStateStructure.senderMessageKeys.findIndex(key => key.iteration === iteration)
 
 		if (index !== -1) {
 			const messageKey = this.senderKeyStateStructure.senderMessageKeys[index]!
 			this.senderKeyStateStructure.senderMessageKeys.splice(index, 1)
-			return new SenderMessageKey(messageKey.iteration, messageKey.seed)
+			return SenderMessageKey.create(messageKey.iteration, messageKey.seed)
 		}
 
 		return null

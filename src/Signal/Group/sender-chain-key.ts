@@ -25,19 +25,21 @@ export class SenderChainKey {
 		return this.iteration
 	}
 
-	public getSenderMessageKey(): SenderMessageKey {
-		return new SenderMessageKey(this.iteration, this.getDerivative(this.MESSAGE_KEY_SEED, this.chainKey))
+	public getSenderMessageKey(): Promise<SenderMessageKey> {
+		return this.getDerivative(this.MESSAGE_KEY_SEED, this.chainKey).then(seed =>
+			SenderMessageKey.create(this.iteration, seed)
+		)
 	}
 
-	public getNext(): SenderChainKey {
-		return new SenderChainKey(this.iteration + 1, this.getDerivative(this.CHAIN_KEY_SEED, this.chainKey))
+	public async getNext(): Promise<SenderChainKey> {
+		return new SenderChainKey(this.iteration + 1, await this.getDerivative(this.CHAIN_KEY_SEED, this.chainKey))
 	}
 
 	public getSeed(): Uint8Array {
 		return this.chainKey
 	}
 
-	private getDerivative(seed: Uint8Array, key: Buffer): Uint8Array {
+	private async getDerivative(seed: Uint8Array, key: Buffer): Promise<Uint8Array> {
 		return calculateMAC(key, seed)
 	}
 }
