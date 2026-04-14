@@ -276,8 +276,8 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 
 		const end = performance.now()
 
-		if (end - start > 1000) {
-			logger.error(
+		if (end - start > 3000) {
+			logger.warn(
 				{ duration: end - start, count: toFetch.length },
 				`fetching devices for ${toFetch.length} JIDs took ${end - start}ms, consider optimizing this function if you have many devices`
 			)
@@ -366,6 +366,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 	}
 
 	const createParticipantNodes = async (jids: string[], message: proto.IMessage, extraAttrs?: BinaryNode['attrs']) => {
+		const startedTime = performance.now()
 		let patched = await patchMessageBeforeSending(message, jids)
 
 		if (!Array.isArray(patched)) {
@@ -421,6 +422,15 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		})
 
 		const nodes = (await Promise.all(encPromises)).filter(node => node !== null)
+
+		const endTime = performance.now()
+
+		if (endTime - startedTime > 5000) {
+			logger.warn(
+				{ duration: endTime - startedTime },
+				`encryption took too long for all participants, consider optimizing this function if you have many participants. ${encPromises.length} - ${endTime - startedTime} participants were being encrypted`
+			)
+		}
 
 		if (jids.length > 0 && nodes.length === 0) {
 			logger.error({ jids }, 'failed to encrypt message for all participants')
@@ -485,8 +495,8 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				additionalAttributes = { ...additionalAttributes, device_fanout: 'false' }
 			}
 
-			const { user, device } = jidDecode(participant.jid)!
-			devices.push({ user, device })
+			const { user, device, server } = jidDecode(participant.jid)!
+			devices.push({ user, device, server })
 		}
 
 		await authState.keys.transaction(async () => {
@@ -586,8 +596,14 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 
 				const senderKeyJids: string[] = []
 				// ensure a connection is established with every device
-				for (const { user, device } of devices) {
-					const jid = jidEncode(user, groupData?.addressingMode === 'lid' ? 'lid' : 's.whatsapp.net', device)
+				for (const { user, device, server } of devices) {
+					let serverToUse = server
+
+					if (!serverToUse) {
+						serverToUse = groupData?.addressingMode === 'lid' ? 'lid' : 's.whatsapp.net'
+					}
+
+					const jid = jidEncode(user, serverToUse, device)
 					if (!senderKeyMap[jid] && !isRetryResend) {
 						senderKeyJids.push(jid)
 						// store that this person has had the sender keys sent to them
