@@ -18,22 +18,23 @@ export const generateSignalPubKey = (pubKey: Uint8Array | Buffer) =>
 	pubKey.length === 33 ? pubKey : Buffer.concat([KEY_BUNDLE_TYPE, pubKey])
 
 export const Curve = {
-	generateKeyPair: (): KeyPair => {
-		const { pubKey, privKey } = libsignal.curve.generateKeyPair()
+	generateKeyPair: async (): Promise<KeyPair> => {
+		const { pubKey, privKey } = await libsignal.curve.generateKeyPair()
 		return {
 			private: Buffer.from(privKey),
 			// remove version byte
 			public: Buffer.from((pubKey as Uint8Array).slice(1))
 		}
 	},
-	sharedKey: (privateKey: Uint8Array, publicKey: Uint8Array) => {
-		const shared = libsignal.curve.calculateAgreement(generateSignalPubKey(publicKey), privateKey)
+	sharedKey: async (privateKey: Uint8Array, publicKey: Uint8Array): Promise<Buffer> => {
+		const shared = await libsignal.curve.calculateAgreement(generateSignalPubKey(publicKey), privateKey)
 		return Buffer.from(shared)
 	},
-	sign: (privateKey: Uint8Array, buf: Uint8Array) => libsignal.curve.calculateSignature(privateKey, buf),
-	verify: (pubKey: Uint8Array, message: Uint8Array, signature: Uint8Array) => {
+	sign: (privateKey: Uint8Array, buf: Uint8Array): Promise<Buffer> =>
+		libsignal.curve.calculateSignature(privateKey, buf),
+	verify: async (pubKey: Uint8Array, message: Uint8Array, signature: Uint8Array): Promise<boolean> => {
 		try {
-			libsignal.curve.verifySignature(generateSignalPubKey(pubKey), message, signature)
+			await libsignal.curve.verifySignature(generateSignalPubKey(pubKey), message, signature)
 			return true
 		} catch (error) {
 			return false
@@ -41,11 +42,11 @@ export const Curve = {
 	}
 }
 
-export const signedKeyPair = (identityKeyPair: KeyPair, keyId: number) => {
-	const preKey = Curve.generateKeyPair()
+export const signedKeyPair = async (identityKeyPair: KeyPair, keyId: number) => {
+	const preKey = await Curve.generateKeyPair()
 	const pubKey = generateSignalPubKey(preKey.public)
 
-	const signature = Curve.sign(identityKeyPair.private, pubKey)
+	const signature = await Curve.sign(identityKeyPair.private, pubKey)
 
 	return { keyPair: preKey, signature, keyId }
 }

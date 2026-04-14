@@ -173,7 +173,7 @@ export const configureSuccessfulPairing = async (
 	const account = proto.ADVSignedDeviceIdentity.decode(details!)
 	const { accountSignatureKey, accountSignature, details: deviceDetails } = account
 	const accountMsg = Buffer.concat([Buffer.from([6, 0]), deviceDetails!, signedIdentityKey.public])
-	if (!Curve.verify(accountSignatureKey!, accountMsg, accountSignature!)) {
+	if (!await Curve.verify(accountSignatureKey!, accountMsg, accountSignature!)) {
 		throw new Boom('Failed to verify account signature')
 	}
 
@@ -182,7 +182,7 @@ export const configureSuccessfulPairing = async (
 		: AdvPrefixDeviceSignatureGenerate
 
 	const deviceMsg = Buffer.concat([devicePrefix, deviceDetails!, signedIdentityKey.public, accountSignatureKey!])
-	account.deviceSignature = Curve.sign(signedIdentityKey.private, deviceMsg)
+	account.deviceSignature = await Curve.sign(signedIdentityKey.private, deviceMsg)
 
 	const identity = createSignalIdentity(jid, accountSignatureKey!)
 	const accountEnc = encodeSignedDeviceIdentity(account, false)

@@ -96,7 +96,7 @@ export const makeSocket = async (config: SocketConfig) => {
 
 	const ev = makeEventBuffer(logger)
 	/** ephemeral key pair used to encrypt/decrypt communication. Unique for each connection */
-	const ephemeralKeyPair = Curve.generateKeyPair()
+	const ephemeralKeyPair = await Curve.generateKeyPair()
 	/** WA noise protocol wrapper */
 	const noise = await makeNoiseHandler({
 		keyPair: ephemeralKeyPair,

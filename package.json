@@ -46,7 +46,7 @@
     "async-mutex": "^0.5.0",
     "axios": "^1.6.0",
     "cheerio": "^1.2.0",
-    "libsignal": "github:vinikjkkj/libsignal-node",
+    "libsignal": "github:Santosl2/libsignal-node#feat/with-async-crypto",
     "lodash": "^4.17.21",
     "lru-cache": "^11.2.4",
     "music-metadata": "^7.12.3",

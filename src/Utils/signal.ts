@@ -41,14 +41,14 @@ export const getPreKeys = async ({ get }: SignalKeyStore, min: number, limit: nu
 	return get('pre-key', idList)
 }
 
-export const generateOrGetPreKeys = (creds: AuthenticationCreds, range: number) => {
+export const generateOrGetPreKeys = async (creds: AuthenticationCreds, range: number) => {
 	const avaliable = creds.nextPreKeyId - creds.firstUnuploadedPreKeyId
 	const remaining = range - avaliable
 	const lastPreKeyId = creds.nextPreKeyId + remaining - 1
 	const newPreKeys: { [id: number]: KeyPair } = {}
 	if (remaining > 0) {
 		for (let i = creds.nextPreKeyId; i <= lastPreKeyId; i++) {
-			newPreKeys[i] = Curve.generateKeyPair()
+			newPreKeys[i] = await Curve.generateKeyPair()
 		}
 	}
 
@@ -171,7 +171,7 @@ export const extractDeviceJids = (
  * @param count number of pre-keys to get or generate
  */
 export const getNextPreKeys = async ({ creds, keys }: AuthenticationState, count: number) => {
-	const { newPreKeys, lastPreKeyId, preKeysRange } = generateOrGetPreKeys(creds, count)
+	const { newPreKeys, lastPreKeyId, preKeysRange } = await generateOrGetPreKeys(creds, count)
 
 	const update: Partial<AuthenticationCreds> = {
 		nextPreKeyId: Math.max(lastPreKeyId + 1, creds.nextPreKeyId),

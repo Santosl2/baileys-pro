@@ -21,31 +21,23 @@ class TransportState {
 	private readCounter = 0
 	private writeCounter = 0
 
-	private readonly iv = new Uint8Array(IV_LENGTH)
-
 	constructor(
 		private readonly encKey: Buffer,
 		private readonly decKey: Buffer
 	) {}
 
 	async encrypt(plaintext: Uint8Array): Promise<Uint8Array> {
-		const c = this.writeCounter++
-		this.iv[8] = (c >>> 24) & 0xff
-		this.iv[9] = (c >>> 16) & 0xff
-		this.iv[10] = (c >>> 8) & 0xff
-		this.iv[11] = c & 0xff
-
-		return await aesEncryptGCM(plaintext, this.encKey, this.iv, EMPTY_BUFFER)
+		// Allocate a new IV per call — a shared mutable buffer causes bad-mac when
+		// concurrent encrypt/decrypt operations interleave around the internal
+		// `await subtle.importKey` inside aesEncryptGCM/aesDecryptGCM, overwriting
+		// the nonce before toArrayBuffer(iv) is evaluated.
+		const iv = generateIV(this.writeCounter++)
+		return await aesEncryptGCM(plaintext, this.encKey, iv, EMPTY_BUFFER)
 	}
 
 	async decrypt(ciphertext: Uint8Array): Promise<Buffer> {
-		const c = this.readCounter++
-		this.iv[8] = (c >>> 24) & 0xff
-		this.iv[9] = (c >>> 16) & 0xff
-		this.iv[10] = (c >>> 8) & 0xff
-		this.iv[11] = c & 0xff
-
-		return await aesDecryptGCM(ciphertext, this.decKey, this.iv, EMPTY_BUFFER) as Buffer
+		const iv = generateIV(this.readCounter++)
+		return await aesDecryptGCM(ciphertext, this.decKey, iv, EMPTY_BUFFER) as Buffer
 	}
 }
 
@@ -190,10 +182,10 @@ export const makeNoiseHandler = async ({
 		finishInit,
 		processHandshake: async ({ serverHello }: proto.HandshakeMessage, noiseKey: KeyPair) => {
 			await authenticate(serverHello!.ephemeral!)
-			await mixIntoKey(Curve.sharedKey(privateKey, serverHello!.ephemeral!))
+			await mixIntoKey(await Curve.sharedKey(privateKey, serverHello!.ephemeral!))
 
 			const decStaticContent = await decrypt(serverHello!.static!)
-			await mixIntoKey(Curve.sharedKey(privateKey, decStaticContent))
+			await mixIntoKey(await Curve.sharedKey(privateKey, decStaticContent))
 
 			const certDecoded = await decrypt(serverHello!.payload!)
 
@@ -211,9 +203,9 @@ export const makeNoiseHandler = async ({
 
 			const { issuerSerial } = details
 
-			const verify = Curve.verify(details.key!, leaf.details, leaf.signature)
+			const verify = await Curve.verify(details.key!, leaf.details, leaf.signature)
 
-			const verifyIntermediate = Curve.verify(
+			const verifyIntermediate = await Curve.verify(
 				WA_CERT_DETAILS.PUBLIC_KEY,
 				certIntermediate.details,
 				certIntermediate.signature
@@ -232,7 +224,7 @@ export const makeNoiseHandler = async ({
 			}
 
 			const keyEnc = await encrypt(noiseKey.public)
-			await mixIntoKey(Curve.sharedKey(noiseKey.private, serverHello!.ephemeral!))
+			await mixIntoKey(await Curve.sharedKey(noiseKey.private, serverHello!.ephemeral!))
 
 			return keyEnc
 		},

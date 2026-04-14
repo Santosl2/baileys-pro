@@ -4,8 +4,8 @@ import { Curve, generateRegistrationId, generateSignalPubKey, signedKeyPair } fr
 
 describe('Signal Tests', () => {
 	it('should correctly encrypt/decrypt 1 message', async () => {
-		const user1 = makeUser()
-		const user2 = makeUser()
+		const user1 = await makeUser()
+		const user2 = await makeUser()
 
 		const msg = Buffer.from('hello there!')
 
@@ -19,8 +19,8 @@ describe('Signal Tests', () => {
 	})
 
 	it('should correctly override a session', async () => {
-		const user1 = makeUser()
-		const user2 = makeUser()
+		const user1 = await makeUser()
+		const user2 = await makeUser()
 
 		const msg = Buffer.from('hello there!')
 
@@ -36,8 +36,8 @@ describe('Signal Tests', () => {
 	})
 
 	it('should correctly encrypt/decrypt multiple messages', async () => {
-		const user1 = makeUser()
-		const user2 = makeUser()
+		const user1 = await makeUser()
+		const user2 = await makeUser()
 
 		const msg = Buffer.from('hello there!')
 
@@ -54,7 +54,7 @@ describe('Signal Tests', () => {
 
 	it('should encrypt/decrypt messages from group', async () => {
 		const groupId = '123456@g.us'
-		const participants = [...Array(5)].map(makeUser)
+		const participants = await Promise.all([...Array(5)].map(() => makeUser()))
 
 		const msg = Buffer.from('hello there!')
 
@@ -88,17 +88,17 @@ describe('Signal Tests', () => {
 	})
 })
 
-type User = ReturnType<typeof makeUser>
+type User = Awaited<ReturnType<typeof makeUser>>
 
-function makeUser() {
-	const store = makeTestAuthState()
+async function makeUser() {
+	const store = await makeTestAuthState()
 	const jid = `${Math.random().toString().replace('.', '')}@s.whatsapp.net`
 	const repository = makeLibSignalRepository(store)
 	return { store, jid, repository }
 }
 
 async function prepareForSendingMessage(sender: User, receiver: User, preKeyId = 2) {
-	const preKey = Curve.generateKeyPair()
+	const preKey = await Curve.generateKeyPair()
 	await sender.repository.injectE2ESession({
 		jid: receiver.jid,
 		session: {
@@ -123,15 +123,15 @@ async function prepareForSendingMessage(sender: User, receiver: User, preKeyId =
 	})
 }
 
-function makeTestAuthState(): SignalAuthState {
-	const identityKey = Curve.generateKeyPair()
+async function makeTestAuthState(): Promise<SignalAuthState> {
+	const identityKey = await Curve.generateKeyPair()
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	const store: { [_: string]: any } = {}
 	return {
 		creds: {
 			signedIdentityKey: identityKey,
 			registrationId: generateRegistrationId(),
-			signedPreKey: signedKeyPair(identityKey, 1)
+			signedPreKey: await signedKeyPair(identityKey, 1)
 		},
 		keys: {
 			get(type, ids) {

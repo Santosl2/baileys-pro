@@ -94,7 +94,7 @@ export const useMultiFileAuthState = async (
 
 	const fixFileName = (file?: string) => file?.replace(/\//g, '__')?.replace(/:/g, '-')
 
-	const creds: AuthenticationCreds = (await readData('creds.json')) || initAuthCreds()
+	const creds: AuthenticationCreds = (await readData('creds.json')) || (await initAuthCreds())
 
 	return {
 		state: {
