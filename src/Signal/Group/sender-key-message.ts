@@ -17,50 +17,43 @@ export class SenderKeyMessage extends CiphertextMessage {
 	private readonly signature: Uint8Array
 	private readonly serialized: Uint8Array
 
-	constructor(
-		keyId?: number | null,
-		iteration?: number | null,
-		ciphertext?: Uint8Array | null,
-		signatureKey?: Uint8Array | null,
-		serialized?: Uint8Array | null
-	) {
+	constructor(serialized: Uint8Array) {
 		super()
+		const version = serialized[0]
+		const message = serialized.slice(1, serialized.length - this.SIGNATURE_LENGTH)
+		const signature = serialized.slice(-1 * this.SIGNATURE_LENGTH)
+		const senderKeyMessage = proto.SenderKeyMessage.decode(message).toJSON() as SenderKeyMessageStructure
 
-		if (serialized) {
-			const version = serialized[0]
-			const message = serialized.slice(1, serialized.length - this.SIGNATURE_LENGTH)
-			const signature = serialized.slice(-1 * this.SIGNATURE_LENGTH)
-			const senderKeyMessage = proto.SenderKeyMessage.decode(message).toJSON() as SenderKeyMessageStructure
+		this.serialized = serialized
+		this.messageVersion = (version & 0xff) >> 4
+		this.keyId = senderKeyMessage.id
+		this.iteration = senderKeyMessage.iteration
+		this.ciphertext =
+			typeof senderKeyMessage.ciphertext === 'string'
+				? Buffer.from(senderKeyMessage.ciphertext, 'base64')
+				: senderKeyMessage.ciphertext
+		this.signature = signature
+	}
 
-			this.serialized = serialized
-			this.messageVersion = (version & 0xff) >> 4
-			this.keyId = senderKeyMessage.id
-			this.iteration = senderKeyMessage.iteration
-			this.ciphertext =
-				typeof senderKeyMessage.ciphertext === 'string'
-					? Buffer.from(senderKeyMessage.ciphertext, 'base64')
-					: senderKeyMessage.ciphertext
-			this.signature = signature
-		} else {
-			const version = (((this.CURRENT_VERSION << 4) | this.CURRENT_VERSION) & 0xff) % 256
-			const ciphertextBuffer = Buffer.from(ciphertext!)
-			const message = proto.SenderKeyMessage.encode(
-				proto.SenderKeyMessage.create({
-					id: keyId!,
-					iteration: iteration!,
-					ciphertext: ciphertextBuffer
-				})
-			).finish()
+	/** Async factory for creating a signed outgoing SenderKeyMessage */
+	public static async create(
+		keyId: number,
+		iteration: number,
+		ciphertext: Uint8Array,
+		signatureKey: Uint8Array
+	): Promise<SenderKeyMessage> {
+		const CURRENT_VERSION = 3
+		const version = (((CURRENT_VERSION << 4) | CURRENT_VERSION) & 0xff) % 256
+		const ciphertextBuffer = Buffer.from(ciphertext)
+		const message = proto.SenderKeyMessage.encode(
+			proto.SenderKeyMessage.create({ id: keyId, iteration, ciphertext: ciphertextBuffer })
+		).finish()
 
-			const signature = this.getSignature(signatureKey!, Buffer.concat([Buffer.from([version]), message]))
-
-			this.serialized = Buffer.concat([Buffer.from([version]), message, Buffer.from(signature)])
-			this.messageVersion = this.CURRENT_VERSION
-			this.keyId = keyId!
-			this.iteration = iteration!
-			this.ciphertext = ciphertextBuffer
-			this.signature = signature
-		}
+		const signature = Buffer.from(
+			await calculateSignature(signatureKey, Buffer.concat([Buffer.from([version]), message]))
+		)
+		const serialized = Buffer.concat([Buffer.from([version]), message, signature])
+		return new SenderKeyMessage(serialized)
 	}
 
 	public getKeyId(): number {
@@ -75,18 +68,14 @@ export class SenderKeyMessage extends CiphertextMessage {
 		return this.ciphertext
 	}
 
-	public verifySignature(signatureKey: Uint8Array): void {
+	public async verifySignature(signatureKey: Uint8Array): Promise<void> {
 		const part1 = this.serialized.slice(0, this.serialized.length - this.SIGNATURE_LENGTH)
 		const part2 = this.serialized.slice(-1 * this.SIGNATURE_LENGTH)
-		const res = verifySignature(signatureKey, part1, part2)
+		const res = await verifySignature(signatureKey, part1, part2)
 		if (!res) {
 			console.log({ signatureKey, part1, part2, serialized: this.serialized }, 'Invalid signature!')
 			throw new Error('Invalid signature!')
 		}
-	}
-
-	private getSignature(signatureKey: Uint8Array, serialized: Uint8Array): Uint8Array {
-		return Buffer.from(calculateSignature(signatureKey, serialized))
 	}
 
 	public serialize(): Uint8Array {

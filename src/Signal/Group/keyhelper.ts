@@ -1,8 +1,6 @@
 import * as nodeCrypto from 'crypto'
 import { generateKeyPair } from 'libsignal/src/curve'
 
-type KeyPairType = ReturnType<typeof generateKeyPair>
-
 export function generateSenderKey(): Buffer {
 	return nodeCrypto.randomBytes(32)
 }
@@ -16,13 +14,11 @@ export interface SigningKeyPair {
 	private: Buffer
 }
 
-export function generateSenderSigningKey(key?: KeyPairType): SigningKeyPair {
-	if (!key) {
-		key = generateKeyPair()
-	}
+export async function generateSenderSigningKey(): Promise<SigningKeyPair> {
+	const resolved = await generateKeyPair()
 
 	return {
-		public: Buffer.from(key.pubKey),
-		private: Buffer.from(key.privKey)
+		public: Buffer.from(resolved.pubKey),
+		private: Buffer.from(resolved.privKey)
 	}
 }

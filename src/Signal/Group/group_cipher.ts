@@ -39,11 +39,11 @@ export class GroupCipher {
 
 			const ciphertext = await this.getCipherText(senderKey.getIv(), senderKey.getCipherKey(), paddedPlaintext)
 
-			const senderKeyMessage = new SenderKeyMessage(
+			const senderKeyMessage = await SenderKeyMessage.create(
 				senderKeyState.getKeyId(),
 				senderKey.getIteration(),
 				ciphertext,
-				senderKeyState.getSigningKeyPrivate()
+				senderKeyState.getSigningKeyPrivate()!
 			)
 
 			await this.senderKeyStore.storeSenderKey(this.senderKeyName, record)
@@ -60,7 +60,7 @@ export class GroupCipher {
 				throw new Error('No SenderKeyRecord found for decryption')
 			}
 
-			const senderKeyMessage = new SenderKeyMessage(null, null, null, null, senderKeyMessageBytes)
+			const senderKeyMessage = new SenderKeyMessage(senderKeyMessageBytes)
 			const senderKeyState = record.getSenderKeyState(senderKeyMessage.getKeyId())
 
 			if (!senderKeyState) {
@@ -71,7 +71,7 @@ export class GroupCipher {
 				throw new Error('No session found to decrypt message')
 			}
 
-			senderKeyMessage.verifySignature(senderKeyState.getSigningKeyPublic())
+			await senderKeyMessage.verifySignature(senderKeyState.getSigningKeyPublic())
 			const senderKey = await this.getSenderKey(senderKeyState, senderKeyMessage.getIteration())
 
 			const plaintext = await this.getPlainText(
@@ -117,7 +117,7 @@ export class GroupCipher {
 
 	private async getPlainText(iv: Uint8Array, key: Uint8Array, ciphertext: Uint8Array): Promise<Uint8Array> {
 		try {
-			return decrypt(key, ciphertext, iv)
+			return await decrypt(key, ciphertext, iv)
 		} catch (e) {
 			throw new Error('InvalidMessageException')
 		}
@@ -132,7 +132,7 @@ export class GroupCipher {
 			const ivBuffer = typeof iv === 'string' ? Buffer.from(iv, 'base64') : iv
 			const keyBuffer = typeof key === 'string' ? Buffer.from(key, 'base64') : key
 			const plaintextBuffer = typeof plaintext === 'string' ? Buffer.from(plaintext) : plaintext
-			return encrypt(keyBuffer, plaintextBuffer, ivBuffer)
+			return await encrypt(keyBuffer, plaintextBuffer, ivBuffer)
 		} catch (e) {
 			throw new Error('InvalidMessageException')
 		}
