@@ -28,28 +28,28 @@ class TransportState {
 		private readonly decKey: Buffer
 	) {}
 
-	encrypt(plaintext: Uint8Array): Uint8Array {
+	async encrypt(plaintext: Uint8Array): Promise<Uint8Array> {
 		const c = this.writeCounter++
 		this.iv[8] = (c >>> 24) & 0xff
 		this.iv[9] = (c >>> 16) & 0xff
 		this.iv[10] = (c >>> 8) & 0xff
 		this.iv[11] = c & 0xff
 
-		return aesEncryptGCM(plaintext, this.encKey, this.iv, EMPTY_BUFFER)
+		return await aesEncryptGCM(plaintext, this.encKey, this.iv, EMPTY_BUFFER)
 	}
 
-	decrypt(ciphertext: Uint8Array): Buffer {
+	async decrypt(ciphertext: Uint8Array): Promise<Buffer> {
 		const c = this.readCounter++
 		this.iv[8] = (c >>> 24) & 0xff
 		this.iv[9] = (c >>> 16) & 0xff
 		this.iv[10] = (c >>> 8) & 0xff
 		this.iv[11] = c & 0xff
 
-		return aesDecryptGCM(ciphertext, this.decKey, this.iv, EMPTY_BUFFER) as Buffer
+		return await aesDecryptGCM(ciphertext, this.decKey, this.iv, EMPTY_BUFFER) as Buffer
 	}
 }
 
-export const makeNoiseHandler = ({
+export const makeNoiseHandler = async ({
 	keyPair: { private: privateKey, public: publicKey },
 	NOISE_HEADER,
 	logger,
@@ -63,7 +63,7 @@ export const makeNoiseHandler = ({
 	logger = logger.child({ class: 'ns' })
 
 	const data = Buffer.from(NOISE_MODE)
-	let hash = data.byteLength === 32 ? data : sha256(data)
+	let hash = data.byteLength === 32 ? data : await sha256(data)
 	let salt = hash
 	let encKey = hash
 	let decKey = hash
@@ -90,29 +90,29 @@ export const makeNoiseHandler = ({
 		introHeader = Buffer.from(NOISE_HEADER)
 	}
 
-	const authenticate = (data: Uint8Array) => {
+	const authenticate = async (data: Uint8Array) => {
 		if (!transport) {
-			hash = sha256(Buffer.concat([hash, data]))
+			hash = await sha256(Buffer.concat([hash, data]))
 		}
 	}
 
-	const encrypt = (plaintext: Uint8Array): Uint8Array => {
+	const encrypt = async (plaintext: Uint8Array): Promise<Uint8Array> => {
 		if (transport) {
-			return transport.encrypt(plaintext)
+			return await transport.encrypt(plaintext)
 		}
 
-		const result = aesEncryptGCM(plaintext, encKey, generateIV(counter++), hash)
-		authenticate(result)
+		const result = await aesEncryptGCM(plaintext, encKey, generateIV(counter++), hash)
+		await authenticate(result)
 		return result
 	}
 
-	const decrypt = (ciphertext: Uint8Array): Uint8Array => {
+	const decrypt = async (ciphertext: Uint8Array): Promise<Uint8Array> => {
 		if (transport) {
-			return transport.decrypt(ciphertext)
+			return await transport.decrypt(ciphertext)
 		}
 
-		const result = aesDecryptGCM(ciphertext, decKey, generateIV(counter++), hash)
-		authenticate(ciphertext)
+		const result = await aesDecryptGCM(ciphertext, decKey, generateIV(counter++), hash)
+		await authenticate(ciphertext)
 		return result
 	}
 
@@ -161,7 +161,7 @@ export const makeNoiseHandler = ({
 			inBytes = inBytes.subarray(size + 3)
 
 			if (transport) {
-				const result = transport.decrypt(frame)
+				const result = await transport.decrypt(frame)
 				frame = await decodeBinaryNode(result)
 			}
 
@@ -179,8 +179,8 @@ export const makeNoiseHandler = ({
 		}
 	}
 
-	authenticate(NOISE_HEADER)
-	authenticate(publicKey)
+	await authenticate(NOISE_HEADER)
+	await authenticate(publicKey)
 
 	return {
 		encrypt,
@@ -189,13 +189,13 @@ export const makeNoiseHandler = ({
 		mixIntoKey,
 		finishInit,
 		processHandshake: async ({ serverHello }: proto.HandshakeMessage, noiseKey: KeyPair) => {
-			authenticate(serverHello!.ephemeral!)
+			await authenticate(serverHello!.ephemeral!)
 			await mixIntoKey(Curve.sharedKey(privateKey, serverHello!.ephemeral!))
 
-			const decStaticContent = decrypt(serverHello!.static!)
+			const decStaticContent = await decrypt(serverHello!.static!)
 			await mixIntoKey(Curve.sharedKey(privateKey, decStaticContent))
 
-			const certDecoded = decrypt(serverHello!.payload!)
+			const certDecoded = await decrypt(serverHello!.payload!)
 
 			const { intermediate: certIntermediate, leaf } = proto.CertChain.decode(certDecoded)
 			// leaf
@@ -231,14 +231,14 @@ export const makeNoiseHandler = ({
 				throw new Boom('certification match failed', { statusCode: 400 })
 			}
 
-			const keyEnc = encrypt(noiseKey.public)
+			const keyEnc = await encrypt(noiseKey.public)
 			await mixIntoKey(Curve.sharedKey(noiseKey.private, serverHello!.ephemeral!))
 
 			return keyEnc
 		},
-		encodeFrame: (data: Buffer | Uint8Array) => {
+		encodeFrame: async (data: Buffer | Uint8Array) => {
 			if (transport) {
-				data = transport.encrypt(data)
+				data = await transport.encrypt(data)
 			}
 
 			const dataLen = data.byteLength

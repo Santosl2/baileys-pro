@@ -53,7 +53,7 @@ const startSock = async () => {
 	const { version, isLatest } = await fetchLatestWaWebVersion({})
 	console.log(`using WA v${version.join('.')}, isLatest: ${isLatest}`)
 
-	const sock = makeWASocket({
+	const sock = await makeWASocket({
 		version,
 
 		// logger: P({level: 'silent'}),
@@ -1365,8 +1365,8 @@ Promoção por tempo limitado`
 			if (events['contacts.update']) {
 				for (const contact of events['contacts.update']) {
 					if (typeof contact.imgUrl !== 'undefined') {
-						const newUrl = contact.imgUrl === null ? null : await sock!.profilePictureUrl(contact.id!).catch(() => null)
-						console.log(`contact ${contact.id} has a new profile pic: ${newUrl}`)
+						//const newUrl = contact.imgUrl === null ? null : await sock!.profilePictureUrl(contact.id!).catch(() => null)
+						//console.log(`contact ${contact.id} has a new profile pic: ${newUrl}`)
 					}
 				}
 			}

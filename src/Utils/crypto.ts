@@ -1,10 +1,17 @@
-import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes } from 'crypto'
 import * as libsignal from 'libsignal'
+import { createHash, webcrypto } from 'node:crypto'
 import { KEY_BUNDLE_TYPE } from '../Defaults'
 import { KeyPair } from '../Types'
 
 // insure browser & node compatibility
-const { subtle } = globalThis.crypto
+const { subtle } = webcrypto
+
+/** Copy data into a plain ArrayBuffer required by the WebCrypto API */
+const toArrayBuffer = (data: Uint8Array | Buffer): ArrayBuffer => {
+	const copy = new ArrayBuffer(data.byteLength)
+	new Uint8Array(copy).set(data)
+	return copy
+}
 
 /** prefix version byte to the pub keys, required for some curve crypto functions */
 export const generateSignalPubKey = (pubKey: Uint8Array | Buffer) =>
@@ -43,82 +50,110 @@ export const signedKeyPair = (identityKeyPair: KeyPair, keyId: number) => {
 	return { keyPair: preKey, signature, keyId }
 }
 
-const GCM_TAG_LENGTH = 128 >> 3
-
 /**
  * encrypt AES 256 GCM;
- * where the tag tag is suffixed to the ciphertext
+ * where the tag is suffixed to the ciphertext
  * */
-export function aesEncryptGCM(plaintext: Uint8Array, key: Uint8Array, iv: Uint8Array, additionalData: Uint8Array) {
-	const cipher = createCipheriv('aes-256-gcm', key, iv)
-	cipher.setAAD(additionalData)
-	return Buffer.concat([cipher.update(plaintext), cipher.final(), cipher.getAuthTag()])
+export async function aesEncryptGCM(
+	plaintext: Uint8Array,
+	key: Uint8Array,
+	iv: Uint8Array,
+	additionalData: Uint8Array
+): Promise<Buffer> {
+	const cryptoKey = await subtle.importKey('raw', toArrayBuffer(key), { name: 'AES-GCM' }, false, ['encrypt'])
+	const encrypted = await subtle.encrypt(
+		{ name: 'AES-GCM', iv: toArrayBuffer(iv), additionalData: toArrayBuffer(additionalData), tagLength: 128 },
+		cryptoKey,
+		toArrayBuffer(plaintext)
+	)
+	return Buffer.from(encrypted)
 }
 
 /**
  * decrypt AES 256 GCM;
  * where the auth tag is suffixed to the ciphertext
  * */
-export function aesDecryptGCM(ciphertext: Uint8Array, key: Uint8Array, iv: Uint8Array, additionalData: Uint8Array) {
-	const decipher = createDecipheriv('aes-256-gcm', key, iv)
-	// decrypt additional adata
-	const enc = ciphertext.slice(0, ciphertext.length - GCM_TAG_LENGTH)
-	const tag = ciphertext.slice(ciphertext.length - GCM_TAG_LENGTH)
-	// set additional data
-	decipher.setAAD(additionalData)
-	decipher.setAuthTag(tag)
-
-	return Buffer.concat([decipher.update(enc), decipher.final()])
+export async function aesDecryptGCM(
+	ciphertext: Uint8Array,
+	key: Uint8Array,
+	iv: Uint8Array,
+	additionalData: Uint8Array
+): Promise<Buffer> {
+	const cryptoKey = await subtle.importKey('raw', toArrayBuffer(key), { name: 'AES-GCM' }, false, ['decrypt'])
+	const decrypted = await subtle.decrypt(
+		{ name: 'AES-GCM', iv: toArrayBuffer(iv), additionalData: toArrayBuffer(additionalData), tagLength: 128 },
+		cryptoKey,
+		toArrayBuffer(ciphertext)
+	)
+	return Buffer.from(decrypted)
 }
 
-export function aesEncryptCTR(plaintext: Uint8Array, key: Uint8Array, iv: Uint8Array) {
-	const cipher = createCipheriv('aes-256-ctr', key, iv)
-	return Buffer.concat([cipher.update(plaintext), cipher.final()])
+export async function aesEncryptCTR(plaintext: Uint8Array, key: Uint8Array, iv: Uint8Array): Promise<Buffer> {
+	const cryptoKey = await subtle.importKey('raw', toArrayBuffer(key), { name: 'AES-CTR' }, false, ['encrypt'])
+	const encrypted = await subtle.encrypt(
+		{ name: 'AES-CTR', counter: toArrayBuffer(iv), length: 128 },
+		cryptoKey,
+		toArrayBuffer(plaintext)
+	)
+	return Buffer.from(encrypted)
 }
 
-export function aesDecryptCTR(ciphertext: Uint8Array, key: Uint8Array, iv: Uint8Array) {
-	const decipher = createDecipheriv('aes-256-ctr', key, iv)
-	return Buffer.concat([decipher.update(ciphertext), decipher.final()])
+export async function aesDecryptCTR(ciphertext: Uint8Array, key: Uint8Array, iv: Uint8Array): Promise<Buffer> {
+	const cryptoKey = await subtle.importKey('raw', toArrayBuffer(key), { name: 'AES-CTR' }, false, ['decrypt'])
+	const decrypted = await subtle.decrypt(
+		{ name: 'AES-CTR', counter: toArrayBuffer(iv), length: 128 },
+		cryptoKey,
+		toArrayBuffer(ciphertext)
+	)
+	return Buffer.from(decrypted)
 }
 
 /** decrypt AES 256 CBC; where the IV is prefixed to the buffer */
-export function aesDecrypt(buffer: Buffer, key: Buffer) {
-	return aesDecryptWithIV(buffer.slice(16, buffer.length), key, buffer.slice(0, 16))
+export async function aesDecrypt(buffer: Buffer, key: Buffer): Promise<Buffer> {
+	return await aesDecryptWithIV(buffer.slice(16, buffer.length), key, buffer.slice(0, 16))
 }
 
 /** decrypt AES 256 CBC */
-export function aesDecryptWithIV(buffer: Buffer, key: Buffer, IV: Buffer) {
-	const aes = createDecipheriv('aes-256-cbc', key, IV)
-	return Buffer.concat([aes.update(buffer), aes.final()])
+export async function aesDecryptWithIV(buffer: Buffer, key: Buffer, IV: Buffer): Promise<Buffer> {
+	const cryptoKey = await subtle.importKey('raw', toArrayBuffer(key), { name: 'AES-CBC' }, false, ['decrypt'])
+	const decrypted = await subtle.decrypt({ name: 'AES-CBC', iv: toArrayBuffer(IV) }, cryptoKey, toArrayBuffer(buffer))
+	return Buffer.from(decrypted)
 }
 
 // encrypt AES 256 CBC; where a random IV is prefixed to the buffer
-export function aesEncrypt(buffer: Buffer | Uint8Array, key: Buffer) {
-	const IV = randomBytes(16)
-	const aes = createCipheriv('aes-256-cbc', key, IV)
-	return Buffer.concat([IV, aes.update(buffer), aes.final()]) // prefix IV to the buffer
+export async function aesEncrypt(buffer: Buffer | Uint8Array, key: Buffer): Promise<Buffer> {
+	const IV = globalThis.crypto.getRandomValues(new Uint8Array(16))
+	const cryptoKey = await subtle.importKey('raw', toArrayBuffer(key), { name: 'AES-CBC' }, false, ['encrypt'])
+	const encrypted = await subtle.encrypt({ name: 'AES-CBC', iv: IV.buffer }, cryptoKey, toArrayBuffer(buffer))
+	return Buffer.concat([Buffer.from(IV), Buffer.from(encrypted)]) // prefix IV to the buffer
 }
 
 // encrypt AES 256 CBC with a given IV
-export function aesEncrypWithIV(buffer: Buffer, key: Buffer, IV: Buffer) {
-	const aes = createCipheriv('aes-256-cbc', key, IV)
-	return Buffer.concat([aes.update(buffer), aes.final()]) // prefix IV to the buffer
+export async function aesEncrypWithIV(buffer: Buffer, key: Buffer, IV: Buffer): Promise<Buffer> {
+	const cryptoKey = await subtle.importKey('raw', toArrayBuffer(key), { name: 'AES-CBC' }, false, ['encrypt'])
+	const encrypted = await subtle.encrypt({ name: 'AES-CBC', iv: toArrayBuffer(IV) }, cryptoKey, toArrayBuffer(buffer))
+	return Buffer.from(encrypted)
 }
 
 // sign HMAC using SHA 256
-export function hmacSign(
+export async function hmacSign(
 	buffer: Buffer | Uint8Array,
 	key: Buffer | Uint8Array,
 	variant: 'sha256' | 'sha512' = 'sha256'
-) {
-	return createHmac(variant, key).update(buffer).digest()
+): Promise<Buffer> {
+	const hashAlgo = variant === 'sha256' ? 'SHA-256' : 'SHA-512'
+	const cryptoKey = await subtle.importKey('raw', toArrayBuffer(key), { name: 'HMAC', hash: hashAlgo }, false, ['sign'])
+	const signature = await subtle.sign('HMAC', cryptoKey, toArrayBuffer(buffer))
+	return Buffer.from(signature)
 }
 
-export function sha256(buffer: Buffer) {
-	return createHash('sha256').update(buffer).digest()
+export async function sha256(buffer: Buffer): Promise<Buffer> {
+	const hash = await subtle.digest('SHA-256', toArrayBuffer(buffer))
+	return Buffer.from(hash)
 }
 
-export function md5(buffer: Buffer) {
+// MD5 is not supported by the WebCrypto API
+export function md5(buffer: Buffer): Buffer {
 	return createHash('md5').update(buffer).digest()
 }
 
@@ -128,22 +163,16 @@ export async function hkdf(
 	expandedLength: number,
 	info: { salt?: Buffer; info?: string }
 ): Promise<Buffer> {
-	// Ensure we have a Uint8Array for the key material
-	const inputKeyMaterial = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer)
-
-	// Set default values if not provided
-	const salt = info.salt ? new Uint8Array(info.salt) : new Uint8Array(0)
+	const salt = info.salt ? toArrayBuffer(info.salt) : new ArrayBuffer(0)
 	const infoBytes = info.info ? new TextEncoder().encode(info.info) : new Uint8Array(0)
 
-	// Import the input key material
-	const importedKey = await subtle.importKey('raw', inputKeyMaterial, { name: 'HKDF' }, false, ['deriveBits'])
+	const importedKey = await subtle.importKey('raw', toArrayBuffer(buffer), { name: 'HKDF' }, false, ['deriveBits'])
 
-	// Derive bits using HKDF
 	const derivedBits = await subtle.deriveBits(
 		{
 			name: 'HKDF',
 			hash: 'SHA-256',
-			salt: salt,
+			salt,
 			info: infoBytes
 		},
 		importedKey,
@@ -154,15 +183,11 @@ export async function hkdf(
 }
 
 export async function derivePairingCodeKey(pairingCode: string, salt: Buffer): Promise<Buffer> {
-	// Convert inputs to formats Web Crypto API can work with
-	const encoder = new TextEncoder()
-	const pairingCodeBuffer = encoder.encode(pairingCode)
-	const saltBuffer = salt instanceof Uint8Array ? salt : new Uint8Array(salt)
+	const pairingCodeBuffer = new TextEncoder().encode(pairingCode)
+	const saltBuffer = toArrayBuffer(salt)
 
-	// Import the pairing code as key material
-	const keyMaterial = await subtle.importKey('raw', pairingCodeBuffer, { name: 'PBKDF2' }, false, ['deriveBits'])
+	const keyMaterial = await subtle.importKey('raw', pairingCodeBuffer.buffer, { name: 'PBKDF2' }, false, ['deriveBits'])
 
-	// Derive bits using PBKDF2 with the same parameters
 	// 2 << 16 = 131,072 iterations
 	const derivedBits = await subtle.deriveBits(
 		{

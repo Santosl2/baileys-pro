@@ -1083,7 +1083,7 @@ type VoteAggregation = {
  * @param meId your jid
  * @returns A list of options & their voters
  */
-export function getAggregateVotesInPollMessage(
+export async function getAggregateVotesInPollMessage(
 	{ message, pollUpdates }: Pick<WAMessage, 'pollUpdates' | 'message'>,
 	meId?: string
 ) {
@@ -1092,17 +1092,14 @@ export function getAggregateVotesInPollMessage(
 		message?.pollCreationMessageV2?.options ||
 		message?.pollCreationMessageV3?.options ||
 		[]
-	const voteHashMap = opts.reduce(
-		(acc, opt) => {
-			const hash = sha256(Buffer.from(opt.optionName || '')).toString()
-			acc[hash] = {
-				name: opt.optionName || '',
-				voters: []
-			}
-			return acc
-		},
-		{} as { [_: string]: VoteAggregation }
-	)
+	const voteHashMap: { [_: string]: VoteAggregation } = {}
+	for(const opt of opts) {
+		const hash = (await sha256(Buffer.from(opt.optionName || ''))).toString()
+		voteHashMap[hash] = {
+			name: opt.optionName || '',
+			voters: []
+		}
+	}
 
 	for (const update of pollUpdates || []) {
 		const { vote } = update

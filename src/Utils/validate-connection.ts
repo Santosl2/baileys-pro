@@ -135,7 +135,7 @@ export const generateRegistrationNode = (
 	return proto.ClientPayload.fromObject(registerPayload)
 }
 
-export const configureSuccessfulPairing = (
+export const configureSuccessfulPairing = async (
 	stanza: BinaryNode,
 	{
 		advSecretKey,
@@ -164,7 +164,7 @@ export const configureSuccessfulPairing = (
 	const isHostedAccount = accountType !== undefined && accountType === proto.ADVEncryptionType.HOSTED
 
 	const hmacPrefix = isHostedAccount ? AdvHostedPrefixDeviceIdentityAccountSignature : Buffer.alloc(0)
-	const advSign = hmacSign(Buffer.concat([hmacPrefix, details!]), Buffer.from(advSecretKey, 'base64'))
+	const advSign = await hmacSign(Buffer.concat([hmacPrefix, details!]), Buffer.from(advSecretKey, 'base64'))
 
 	if (Buffer.compare(hmac!, advSign) !== 0) {
 		throw new Boom('Invalid account signature')

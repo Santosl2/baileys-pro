@@ -75,7 +75,7 @@ import {
 import { extractGroupMetadata } from './groups'
 import { makeMessagesSocket } from './messages-send'
 
-export const makeMessagesRecvSocket = (config: SocketConfig) => {
+export const makeMessagesRecvSocket = async (config: SocketConfig) => {
 	const {
 		logger,
 		retryRequestDelayMs,
@@ -86,7 +86,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		userDevicesCache,
 		recentMessageSentHistory
 	} = config
-	const sock = makeMessagesSocket(config)
+	const sock = await makeMessagesSocket(config)
 	const {
 		ev,
 		authState,
@@ -410,14 +410,16 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 				await userDevicesCache?.set(user, updatedDevices)
 			}
 
-			const lidHash = generateParticipantHashV2(updatedDevices.map(d => `${d.user}.0:${d.device}@lid`))
+			const lidHash = await generateParticipantHashV2(updatedDevices.map(d => `${d.user}.0:${d.device}@lid`))
 
 			if (lidHash === deviceHash) {
 				logger.debug({ from, deviceHash, lidHash }, 'device hash matches lid hash, skipping cache update')
 				return
 			}
 
-			const phoneHash = generateParticipantHashV2(updatedDevices.map(d => `${d.user}.0:${d.device}@s.whatsapp.net`))
+			const phoneHash = await generateParticipantHashV2(
+				updatedDevices.map(d => `${d.user}.0:${d.device}@s.whatsapp.net`)
+			)
 
 			if (phoneHash === deviceHash) {
 				logger.debug({ from, deviceHash, phoneHash }, 'device hash mismatch, skipping cache update')
@@ -673,7 +675,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 					random
 				])
 				const encryptIv = randomBytes(12)
-				const encrypted = aesEncryptGCM(encryptPayload, linkCodePairingExpanded, encryptIv, Buffer.alloc(0))
+				const encrypted = await aesEncryptGCM(encryptPayload, linkCodePairingExpanded, encryptIv, Buffer.alloc(0))
 				const encryptedPayload = Buffer.concat([linkCodeSalt, encryptIv, encrypted])
 				const identitySharedKey = Curve.sharedKey(authState.creds.signedIdentityKey.private, primaryIdentityPublicKey)
 				const identityPayload = Buffer.concat([companionSharedKey, identitySharedKey, random])
@@ -728,7 +730,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		const secretKey = await derivePairingCodeKey(authState.creds.pairingCode!, salt)
 		const iv = buffer.slice(32, 48)
 		const payload = buffer.slice(48, 80)
-		return aesDecryptCTR(payload, secretKey, iv)
+		return await aesDecryptCTR(payload, secretKey, iv)
 	}
 
 	function toRequiredBuffer(data: Uint8Array | Buffer | undefined) {

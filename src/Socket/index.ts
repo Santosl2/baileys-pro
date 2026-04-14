@@ -3,13 +3,13 @@ import { UserFacingSocketConfig } from '../Types'
 import { makeBusinessSocket } from './business'
 
 // export the last socket layer
-const makeWASocket = (config: UserFacingSocketConfig) => {
+const makeWASocket = async (config: UserFacingSocketConfig) => {
 	const newConfig = {
 		...DEFAULT_CONNECTION_CONFIG,
 		...config
 	}
 
-	return makeBusinessSocket(newConfig)
+	return await makeBusinessSocket(newConfig)
 }
 
 export default makeWASocket

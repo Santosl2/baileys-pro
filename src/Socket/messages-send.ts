@@ -55,7 +55,7 @@ import { USyncQuery, USyncUser } from '../WAUSync'
 import { makeGroupsSocket } from './groups'
 import { makeNewsletterSocket, NewsletterSocket } from './newsletter'
 
-export const makeMessagesSocket = (config: SocketConfig) => {
+export const makeMessagesSocket = async (config: SocketConfig) => {
 	const {
 		logger,
 		linkPreviewImageThumbnailWidth,
@@ -66,7 +66,8 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		recentMessageSentHistory,
 		maxMsgRetryCount
 	} = config
-	const sock: NewsletterSocket = makeNewsletterSocket(makeGroupsSocket(config))
+	const groupsSock = await makeGroupsSocket(config)
+	const sock: NewsletterSocket = makeNewsletterSocket(groupsSock)
 	const {
 		ev,
 		authState,
@@ -417,6 +418,15 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				return node
 			} catch (error) {
 				logger.error({ jid, trace: error?.stack }, 'failed to encrypt message for participant')
+
+				if (error.message.includes('No session')) {
+					logger.info({ jid }, 'fetching new session for participant and retrying encryption')
+					await assertSessions([jid], true).catch(err => {
+						logger.error({ jid, err, trace: err?.stack }, 'failed to fetch session for participant')
+						return null
+					})
+				}
+
 				return null
 			}
 		})

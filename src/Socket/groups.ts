@@ -20,8 +20,8 @@ import {
 } from '../WABinary'
 import { makeChatsSocket } from './chats'
 
-export const makeGroupsSocket = (config: SocketConfig) => {
-	const sock = makeChatsSocket(config)
+export const makeGroupsSocket = async (config: SocketConfig) => {
+	const sock = await makeChatsSocket(config)
 	const { authState, ev, query, upsertMessage } = sock
 
 	const groupQuery = async (jid: string, type: 'get' | 'set', content: BinaryNode[]) =>
@@ -366,4 +366,4 @@ export const extractGroupMetadata = (result: BinaryNode) => {
 	return metadata
 }
 
-export type GroupsSocket = ReturnType<typeof makeGroupsSocket>
+export type GroupsSocket = Awaited<ReturnType<typeof makeGroupsSocket>>

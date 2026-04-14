@@ -52,7 +52,7 @@ import { WebSocketClient } from './Client'
  * - query phone connection
  */
 
-export const makeSocket = (config: SocketConfig) => {
+export const makeSocket = async (config: SocketConfig) => {
 	const {
 		waWebSocketUrl,
 		connectTimeoutMs,
@@ -98,7 +98,7 @@ export const makeSocket = (config: SocketConfig) => {
 	/** ephemeral key pair used to encrypt/decrypt communication. Unique for each connection */
 	const ephemeralKeyPair = Curve.generateKeyPair()
 	/** WA noise protocol wrapper */
-	const noise = makeNoiseHandler({
+	const noise = await makeNoiseHandler({
 		keyPair: ephemeralKeyPair,
 		NOISE_HEADER: NOISE_WA_HEADER,
 		logger,
@@ -126,7 +126,7 @@ export const makeSocket = (config: SocketConfig) => {
 			throw new Boom('Connection Closed', { statusCode: DisconnectReason.connectionClosed })
 		}
 
-		const bytes = noise.encodeFrame(data)
+		const bytes = await noise.encodeFrame(data)
 		await promiseTimeout<void>(connectTimeoutMs, async (resolve, reject) => {
 			try {
 				await sendPromise.call(ws, bytes)
@@ -138,7 +138,7 @@ export const makeSocket = (config: SocketConfig) => {
 	}
 
 	/** send a binary node */
-	const sendNode = (frame: BinaryNode) => {
+	const sendNode = async (frame: BinaryNode) => {
 		if (logger.level === 'trace') {
 			logger.trace({ xml: binaryNodeToString(frame), msg: 'xml send' })
 		}
@@ -248,7 +248,10 @@ export const makeSocket = (config: SocketConfig) => {
 
 		logger.trace({ handshake }, 'handshake recv from WA')
 
-		const keyEnc = await noise.processHandshake(handshake, creds.noiseKey)
+		const keyEnc = await noise.processHandshake(handshake, creds.noiseKey).catch(err => {
+			logger.error({ err, handshake }, 'handshake processing failed')
+			throw new Boom('Handshake processing failed', { statusCode: DisconnectReason.badSession, data: err })
+		})
 
 		let node: proto.IClientPayload
 		if (!creds.me) {
@@ -259,7 +262,7 @@ export const makeSocket = (config: SocketConfig) => {
 			logger.info({ node }, 'logging in...')
 		}
 
-		const payloadEnc = noise.encrypt(proto.ClientPayload.encode(node).finish())
+		const payloadEnc = await noise.encrypt(proto.ClientPayload.encode(node).finish())
 		await sendRawMessage(
 			proto.HandshakeMessage.encode({
 				clientFinish: {
@@ -594,7 +597,7 @@ export const makeSocket = (config: SocketConfig) => {
 		const salt = randomBytes(32)
 		const randomIv = randomBytes(16)
 		const key = await derivePairingCodeKey(authState.creds.pairingCode!, salt)
-		const ciphered = aesEncryptCTR(authState.creds.pairingEphemeralKeyPair.public, key, randomIv)
+		const ciphered = await aesEncryptCTR(authState.creds.pairingEphemeralKeyPair.public, key, randomIv)
 		return Buffer.concat([salt, randomIv, ciphered])
 	}
 
@@ -681,7 +684,7 @@ export const makeSocket = (config: SocketConfig) => {
 		logger.debug('pair success recv')
 		try {
 			updateServerTimeOffset(stanza)
-			const { reply, creds: updatedCreds } = configureSuccessfulPairing(stanza, creds)
+			const { reply, creds: updatedCreds } = await configureSuccessfulPairing(stanza, creds)
 
 			logger.info(
 				{ me: updatedCreds.me, platform: updatedCreds.platform },
