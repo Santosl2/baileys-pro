@@ -598,14 +598,10 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 					}
 
 					if (groupData && !groupData.phash && participantListPhash) {
-						await groupMetadataCache
-							?.set(jid, {
-								...groupData,
-								phash: participantListPhash
-							})
-							.catch(err => {
-								logger.error({ jid, trace: err?.stack }, 'failed to update group metadata cache with participant hash')
-							})
+						await groupMetadataCache?.set(jid, {
+							...groupData,
+							phash: participantListPhash
+						})
 					}
 
 					devices.push(...additionalDevices)
