@@ -362,7 +362,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		}
 
 		const deviceJid = devices[0].attrs.jid
-		const { user, device } = jidDecode(deviceJid)!
+		const { user, device, server } = jidDecode(deviceJid)!
 		const tag = child.tag as 'add' | 'remove' | 'update'
 
 		if (!deviceJid) {
@@ -391,7 +391,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 			switch (tag) {
 				case 'add':
 					logger.info({ deviceHash }, 'device added')
-					updatedDevices = [...existingCache.filter(d => d.device !== device), { user, device }]
+					updatedDevices = [...existingCache.filter(d => d.device !== device), { user, device, server }]
 					break
 				case 'remove':
 					logger.info({ deviceHash }, 'device removed')

@@ -278,7 +278,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		const end = performance.now()
 
 		if (end - start > 3000) {
-			logger.error(
+			logger.warn(
 				{ duration: end - start, count: toFetch.length },
 				`fetching devices for ${toFetch.length} JIDs took ${end - start}ms, consider optimizing this function if you have many devices`
 			)
@@ -497,8 +497,8 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				additionalAttributes = { ...additionalAttributes, device_fanout: 'false' }
 			}
 
-			const { user, device } = jidDecode(participant.jid)!
-			devices.push({ user, device })
+			const { user, device, server } = jidDecode(participant.jid)!
+			devices.push({ user, device, server })
 		}
 
 		await authState.keys.transaction(async () => {
@@ -634,8 +634,14 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 
 				const senderKeyJids: string[] = []
 				// ensure a connection is established with every device
-				for (const { user, device } of devices) {
-					const jid = jidEncode(user, groupData?.addressingMode === 'lid' ? 'lid' : 's.whatsapp.net', device)
+				for (const { user, device, server } of devices) {
+					let serverToUse = server
+
+					if (!serverToUse) {
+						serverToUse = groupData?.addressingMode === 'lid' ? 'lid' : 's.whatsapp.net'
+					}
+
+					const jid = jidEncode(user, serverToUse, device)
 					if (!senderKeyMap[jid] && !isRetryResend) {
 						senderKeyJids.push(jid)
 						// store that this person has had the sender keys sent to them
