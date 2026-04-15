@@ -281,7 +281,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 
 		const end = performance.now()
 
-		if (end - start > 3000) {
+		if (end - start > 1200) {
 			logger.warn(
 				{ duration: end - start, count: toFetch.length },
 				`fetching devices for ${toFetch.length} JIDs took ${end - start}ms, consider optimizing this function if you have many devices`
@@ -441,7 +441,9 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		})
 
 		if (encPromises.length > 15) {
-			logger.warn('attempting to encrypt message for a large number of participants, this may take a while')
+			logger.warn(
+				`attempting to encrypt message for a large number of participants, this may take a while ${encPromises.length} participants`
+			)
 		}
 
 		const nodes = (await Promise.all(encPromises)).filter(node => node !== null)
@@ -617,18 +619,21 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 										logger.trace({ jid, participants: groupData.participants.length }, 'using cached group metadata')
 									} else if (!isStatus) {
 										groupData = await groupMetadata(jid)
-										await groupMetadataCache?.set(jid, groupData)
 									}
 
 									return groupData
 								})(),
 								(async () => {
-									if (!participant && !isStatus) {
-										const result = await authState.keys.get('sender-key-memory', [jid])
-										return result[jid] || {}
-									}
+									try {
+										if (!participant && !isStatus) {
+											const result = await authState.keys.get('sender-key-memory', [jid])
+											return result[jid] || {}
+										}
 
-									return {}
+										return {}
+									} catch {
+										return {}
+									}
 								})()
 							])
 						)
@@ -755,9 +760,17 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 							content: ciphertext
 						})
 
-						await trackRelayStep('group_store_sender_key_memory', async () =>
-							authState.keys.set({ 'sender-key-memory': { [jid]: senderKeyMap } })
-						)
+						await trackRelayStep('group_store_sender_key_memory', async () => {
+							const promises = [authState.keys.set({ 'sender-key-memory': { [jid]: senderKeyMap } })]
+
+							if (groupData?.id) {
+								promises.push(groupMetadataCache?.set(jid, groupData))
+							} else {
+								logger.warn({ jid }, 'group metadata not found, cannot cache group data')
+							}
+
+							await Promise.allSettled(promises)
+						})
 					} else if (!isRetryResend) {
 						const { user: meUser } = jidDecode(meId)!
 
