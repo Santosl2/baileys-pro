@@ -1163,15 +1163,59 @@ Selecione e melhor opção:`,
 								sock.relayMessage(
 									gid,
 									{
-										reactionMessage: {
-											text: 'ffdksfsk'
+										interactiveMessage: {
+											body: {
+												text: 'Mensagem privada para o grupo'
+											},
+											nativeFlowMessage: {
+												buttons: [
+													{
+														name: WANativeFlowButtonEnum.REPLY,
+														buttonParamsJson: JSON.stringify({
+															fix: true,
+															display_text: 'Fale conosco',
+															id: 'abc'
+														})
+													},
+													{
+														name: WANativeFlowButtonEnum.REPLY,
+														buttonParamsJson: JSON.stringify({
+															fix: true,
+															display_text: 'Fale conoscoc',
+															id: 'abcd'
+														})
+													}
+												]
+											}
 										},
 										senderKeyDistributionMessage: {
 											groupId: gid,
 											axolotlSenderKeyDistributionMessage: key
 										}
 									},
-									{}
+									{
+										additionalNodes: [{
+											tag: 'biz',
+											attrs: {},
+											content: [
+												{
+													tag: 'interactive',
+													attrs: {
+														type: 'native_flow'
+													},
+													content: [
+														{
+															tag: 'native_flow',
+															attrs: {
+																v: '2',
+																name: WAInteractiveMessagesNativeFlowName.MIXED
+															}
+														}
+													]
+												}
+											]
+										}]
+									}
 								)
 							} else if (command === 'meta-ia') {
 								sock.relayMessage(
