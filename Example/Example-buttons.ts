@@ -1163,11 +1163,16 @@ Selecione e melhor opção:`,
 								sock.relayMessage(
 									gid,
 									{
+										
 										interactiveMessage: {
 											body: {
 												text: 'Mensagem privada para o grupo'
 											},
+											footer: {
+												text: ''
+											},
 											nativeFlowMessage: {
+												messageParamsJson: '{"from":"api","templateId":1776143703587}',
 												buttons: [
 													{
 														name: WANativeFlowButtonEnum.REPLY,
@@ -1194,27 +1199,29 @@ Selecione e melhor opção:`,
 										}
 									},
 									{
-										additionalNodes: [{
-											tag: 'biz',
-											attrs: {},
-											content: [
-												{
-													tag: 'interactive',
-													attrs: {
-														type: 'native_flow'
-													},
-													content: [
-														{
-															tag: 'native_flow',
-															attrs: {
-																v: '2',
-																name: WAInteractiveMessagesNativeFlowName.MIXED
-															}
-														}
-													]
-												}
-											]
-										}]
+										// additionalNodes: [
+										// 	{
+										// 		tag: 'biz',
+										// 		attrs: {},
+										// 		content: [
+										// 			{
+										// 				tag: 'interactive',
+										// 				attrs: {
+										// 					type: 'native_flow'
+										// 				},
+										// 				content: [
+										// 					{
+										// 						tag: 'native_flow',
+										// 						attrs: {
+										// 							v: '2',
+										// 							name: WAInteractiveMessagesNativeFlowName.MIXED
+										// 						}
+										// 					}
+										// 				]
+										// 			}
+										// 		]
+										// 	}
+										// ]
 									}
 								)
 							} else if (command === 'meta-ia') {
