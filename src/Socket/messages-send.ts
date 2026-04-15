@@ -15,6 +15,7 @@ import {
 	WANativeFlowButtonEnum
 } from '../Types'
 import {
+	addNewRelicAttributes,
 	aggregateMessageKeysNotFromMe,
 	assertMediaContent,
 	bindWaitForEvent,
@@ -30,8 +31,11 @@ import {
 	getUrlFromDirectPath,
 	getWAUploadToServer,
 	normalizeMessageContent,
+	noticeNewRelicError,
 	parseAndInjectE2ESessions,
-	unixTimestampSeconds
+	recordNewRelicCustomEvent,
+	unixTimestampSeconds,
+	withNewRelicSegment
 } from '../Utils'
 import { getUrlInfo } from '../Utils/link-preview'
 import { MessageRetryManager } from '../Utils/message-retry-manager'
@@ -485,10 +489,27 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		const isLid = server === 'lid'
 		const isNewsletter = server === 'newsletter'
 		const isGroupOrStatus = isGroup || isStatus
+		const relayStartedAt = Date.now()
 
 		msgId = msgId || generateMessageIDV2(sock.user?.id)
 		useUserDevicesCache = useUserDevicesCache !== false
 		useCachedGroupMetadata = useCachedGroupMetadata !== false && !isStatus
+
+		const relayBaseAttrs: Record<string, string | number | boolean> = {
+			msg_id: msgId,
+			jid,
+			jid_server: server,
+			is_group: isGroup,
+			is_status: isStatus,
+			is_newsletter: isNewsletter,
+			is_retry_resend: isRetryResend,
+			use_user_devices_cache: !!useUserDevicesCache,
+			use_cached_group_metadata: !!useCachedGroupMetadata
+		}
+
+		if (participant?.jid) {
+			relayBaseAttrs.participant_jid = participant.jid
+		}
 
 		const participants: BinaryNode[] = []
 		const destinationJid = !isStatus ? jidEncode(user, isLid ? 'lid' : isGroup ? 'g.us' : 's.whatsapp.net') : statusJid
@@ -505,6 +526,33 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 
 		const extraAttrs = {}
 
+		const trackRelayStep = async <T>(step: string, fn: () => Promise<T>) => {
+			const stepStartedAt = Date.now()
+			let stepSuccess = false
+			let stepError: unknown
+
+			try {
+				const result = await withNewRelicSegment(`Custom/Baileys/relayMessage/${step}`, fn)
+				stepSuccess = true
+				return result
+			} catch (error) {
+				stepError = error
+				noticeNewRelicError(error, {
+					...relayBaseAttrs,
+					step
+				})
+				throw error
+			} finally {
+				recordNewRelicCustomEvent('BaileysRelayMessageStep', {
+					...relayBaseAttrs,
+					step,
+					success: stepSuccess,
+					duration_ms: Date.now() - stepStartedAt,
+					error_name: stepError instanceof Error ? stepError.name : undefined
+				})
+			}
+		}
+
 		if (participant) {
 			// when the retry request is not for a group
 			// only send to the specific device that asked for a retry
@@ -517,333 +565,380 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 			devices.push({ user, device, server })
 		}
 
-		await authState.keys.transaction(async () => {
-			const encodedMessage = encodeWAMessage(message)
+		addNewRelicAttributes(relayBaseAttrs)
 
-			const mediaType = getMediaType(message)
-			if (mediaType) {
-				extraAttrs['mediatype'] = mediaType
-			}
+		try {
+			await trackRelayStep('keys_transaction', async () =>
+				authState.keys.transaction(async () => {
+					const encodedMessage = encodeWAMessage(message)
 
-			if (isNewsletter) {
-				// Patch message if needed, then encode as plaintext
-				const patched = patchMessageBeforeSending ? await patchMessageBeforeSending(message, []) : message
-				const bytes = encodeNewsletterMessage(patched as proto.IMessage)
-				binaryNodeContent.push({
-					tag: 'plaintext',
-					attrs: {},
-					content: bytes
-				})
-				const stanza: BinaryNode = {
-					tag: 'message',
-					attrs: {
-						to: jid,
-						id: msgId,
-						type: getMessageType(message),
-						...(additionalAttributes || {})
-					},
-					content: binaryNodeContent
-				}
-				logger.debug({ msgId }, `sending newsletter message to ${jid}`)
-				await sendNode(stanza)
-				return
-			}
-
-			if (normalizeMessageContent(message)?.pinInChatMessage) {
-				extraAttrs['decrypt-fail'] = 'hide'
-			}
-
-			if (isGroupOrStatus && !isRetryResend) {
-				const [groupData, senderKeyMap] = await Promise.all([
-					(async () => {
-						let groupData = useCachedGroupMetadata && groupMetadataCache ? await groupMetadataCache.get(jid) : undefined
-						if (groupData && Array.isArray(groupData?.participants)) {
-							logger.trace({ jid, participants: groupData.participants.length }, 'using cached group metadata')
-						} else if (!isStatus) {
-							groupData = await groupMetadata(jid)
-							await groupMetadataCache?.set(jid, groupData)
-						}
-
-						return groupData
-					})(),
-					(async () => {
-						if (!participant && !isStatus) {
-							const result = await authState.keys.get('sender-key-memory', [jid])
-							return result[jid] || {}
-						}
-
-						return {}
-					})()
-				])
-
-				if (!participant) {
-					const participantsList = groupData && !isStatus ? groupData.participants.map(p => p.id) : []
-					if (isStatus && statusJidList) {
-						participantsList.push(...statusJidList)
+					const mediaType = getMediaType(message)
+					if (mediaType) {
+						extraAttrs['mediatype'] = mediaType
 					}
 
-					if (!isStatus) {
-						additionalAttributes = {
-							...additionalAttributes,
-							addressing_mode: groupData?.addressingMode || 'pn'
-						}
-					}
-
-					const additionalDevices = await getUSyncDevices(participantsList, !!useUserDevicesCache, false)
-					devices.push(...additionalDevices)
-				}
-
-				if (groupData?.ephemeralDuration && groupData.ephemeralDuration > 0) {
-					additionalAttributes = {
-						...additionalAttributes,
-						expiration: groupData.ephemeralDuration.toString()
-					}
-				}
-
-				const { ciphertext, senderKeyDistributionMessage } = await signalRepository.encryptGroupMessage({
-					group: destinationJid,
-					data: encodedMessage,
-					meId
-				})
-
-				const senderKeyJids: string[] = []
-				// ensure a connection is established with every device
-				for (const { user, device, server } of devices) {
-					let serverToUse = server
-
-					if (serverToUse && serverToUse !== 'lid') {
-						logger.warn(
-							`unexpected server type for group message, expected "lid" but got "${serverToUse}" groupData?.addressingMode: ${groupData?.addressingMode}, jid: ${jidEncode(user, serverToUse, device)}`
-						)
-					}
-
-					if (!serverToUse) {
-						serverToUse = groupData?.addressingMode === 'lid' ? 'lid' : 's.whatsapp.net'
-					}
-
-					const jid = jidEncode(user, serverToUse, device)
-					if (!senderKeyMap[jid] && !isRetryResend) {
-						senderKeyJids.push(jid)
-						// store that this person has had the sender keys sent to them
-						senderKeyMap[jid] = true
-					}
-				}
-
-				// if there are some participants with whom the session has not been established
-				// if there are, we re-send the senderkey
-				// Send only if participant count is not set
-				if (senderKeyJids.length) {
-					logger.debug({ senderKeyJids }, 'sending new sender key')
-
-					const senderKeyMsg: proto.IMessage = {
-						senderKeyDistributionMessage: {
-							axolotlSenderKeyDistributionMessage: senderKeyDistributionMessage,
-							groupId: destinationJid
-						}
-					}
-
-					await assertSessions(senderKeyJids, false)
-
-					const result = await createParticipantNodes(senderKeyJids, senderKeyMsg, extraAttrs)
-					shouldIncludeDeviceIdentity = shouldIncludeDeviceIdentity || result.shouldIncludeDeviceIdentity
-
-					participants.push(...result.nodes)
-				}
-
-				binaryNodeContent.push({
-					tag: 'enc',
-					attrs: { v: '2', type: 'skmsg' },
-					content: ciphertext
-				})
-
-				await authState.keys.set({ 'sender-key-memory': { [jid]: senderKeyMap } })
-			} else if (!isRetryResend) {
-				const { user: meUser } = jidDecode(meId)!
-
-				if (!participant) {
-					devices.push({ user })
-					if (user !== meUser) {
-						devices.push({ user: meUser })
-					}
-
-					if (additionalAttributes?.['category'] !== 'peer') {
-						const additionalDevices = await getUSyncDevices([meId, jid], !!useUserDevicesCache, true)
-						devices.push(...additionalDevices)
-					}
-				}
-
-				const allJids: string[] = []
-				const meJids: string[] = []
-				const otherJids: string[] = []
-				for (const { user, device } of devices) {
-					const isMe = user === meUser
-					const jid = jidEncode(
-						isMe && isLid ? authState.creds?.me?.lid!.split(':')[0] || user : user,
-						isLid ? 'lid' : 's.whatsapp.net',
-						device
-					)
-					if (isMe) {
-						meJids.push(jid)
-					} else {
-						otherJids.push(jid)
-					}
-
-					allJids.push(jid)
-				}
-
-				await assertSessions(allJids, false)
-
-				const [
-					{ nodes: meNodes, shouldIncludeDeviceIdentity: s1 },
-					{ nodes: otherNodes, shouldIncludeDeviceIdentity: s2 }
-				] = await Promise.all([
-					createParticipantNodes(meJids, meMsg, extraAttrs),
-					createParticipantNodes(otherJids, message, extraAttrs)
-				])
-				participants.push(...meNodes)
-				participants.push(...otherNodes)
-
-				shouldIncludeDeviceIdentity = shouldIncludeDeviceIdentity || s1 || s2
-			}
-
-			if (participants.length) {
-				if (additionalAttributes?.['category'] === 'peer') {
-					const peerNode = participants[0]?.content?.[0] as BinaryNode
-					if (peerNode) {
-						binaryNodeContent.push(peerNode) // push only enc
-					}
-				} else {
-					binaryNodeContent.push({
-						tag: 'participants',
-						attrs: {},
-						content: participants
-					})
-				}
-			}
-
-			if (isRetryResend) {
-				const isParticipantLid = isLidUser(participant!.jid)
-				const isMe = areJidsSameUser(participant!.jid, isParticipantLid ? meLid : meId)
-
-				const encodedMessageToSend = isMe
-					? encodeWAMessage({
-							deviceSentMessage: {
-								destinationJid,
-								message
-							}
+					if (isNewsletter) {
+						// Patch message if needed, then encode as plaintext
+						const patched = patchMessageBeforeSending ? await patchMessageBeforeSending(message, []) : message
+						const bytes = encodeNewsletterMessage(patched as proto.IMessage)
+						binaryNodeContent.push({
+							tag: 'plaintext',
+							attrs: {},
+							content: bytes
 						})
-					: encodedMessage
-
-				const { type, ciphertext: encryptedContent } = await signalRepository.encryptMessage({
-					data: encodedMessageToSend,
-					jid: participant!.jid
-				})
-
-				binaryNodeContent.push({
-					tag: 'enc',
-					attrs: {
-						v: '2',
-						type,
-						count: participant!.count.toString()
-					},
-					content: encryptedContent
-				})
-			}
-
-			const stanza: BinaryNode = {
-				tag: 'message',
-				attrs: {
-					id: msgId,
-					type: getMessageType(message),
-					...(additionalAttributes || {})
-				},
-				content: binaryNodeContent
-			}
-			// if the participant to send to is explicitly specified (generally retry recp)
-			// ensure the message is only sent to that person
-			// if a retry receipt is sent to everyone -- it'll fail decryption for everyone else who received the msg
-			if (participant) {
-				if (isJidGroup(destinationJid)) {
-					stanza.attrs.to = destinationJid
-					stanza.attrs.participant = participant.jid
-				} else if (areJidsSameUser(participant.jid, meId)) {
-					stanza.attrs.to = participant.jid
-					stanza.attrs.recipient = destinationJid
-				} else {
-					stanza.attrs.to = participant.jid
-				}
-			} else {
-				stanza.attrs.to = destinationJid
-			}
-
-			if (shouldIncludeDeviceIdentity) {
-				;(stanza.content as BinaryNode[]).push({
-					tag: 'device-identity',
-					attrs: {},
-					content: encodeSignedDeviceIdentity(authState.creds.account!, true)
-				})
-
-				logger.debug({ jid }, 'adding device identity')
-			}
-
-			const contactTcTokenData =
-				!isGroup && !isRetryResend && !isStatus ? await authState.keys.get('tc-token', [destinationJid]) : {}
-
-			const tcTokenBuffer = contactTcTokenData[destinationJid]?.token
-
-			if (tcTokenBuffer) {
-				;(stanza.content as BinaryNode[]).push({
-					tag: 'tctoken',
-					attrs: {},
-					content: tcTokenBuffer
-				})
-			}
-
-			if (additionalNodes && additionalNodes.length > 0) {
-				;(stanza.content as BinaryNode[]).push(...additionalNodes)
-			} else {
-				const buttonType = getButtonType(message)
-				if (buttonType) {
-					;(stanza.content as BinaryNode[]).push(getButtonArgs(message))
-
-					logger.debug({ jid }, 'adding business node')
-				}
-			}
-
-			// Add reporting token if required
-			if (!isNewsletter) {
-				if (
-					message &&
-					!isRetryResend &&
-					config.sendReportingTag &&
-					shouldIncludeReportingToken(message) &&
-					message.messageContextInfo?.messageSecret &&
-					msgId
-				) {
-					try {
-						const reportingKey: WAMessageKey = {
-							id: msgId,
-							fromMe: true,
-							remoteJid: destinationJid,
-							participant: participant?.jid
+						const stanza: BinaryNode = {
+							tag: 'message',
+							attrs: {
+								to: jid,
+								id: msgId,
+								type: getMessageType(message),
+								...(additionalAttributes || {})
+							},
+							content: binaryNodeContent
 						}
-						const reportingNode = await getMessageReportingToken(encodedMessage, message, reportingKey)
-						if (reportingNode) {
-							;(stanza.content as BinaryNode[]).push(reportingNode)
-							logger.trace({ jid }, 'added reporting token to message')
-						}
-					} catch (error: any) {
-						logger.warn({ jid, trace: error?.stack }, 'failed to attach reporting token')
+						logger.debug({ msgId }, `sending newsletter message to ${jid}`)
+						await trackRelayStep('newsletter_send_node', async () => sendNode(stanza))
+						return
 					}
-				}
-			}
 
-			logger.debug({ msgId }, `sending message to ${participants.length} devices`)
+					if (normalizeMessageContent(message)?.pinInChatMessage) {
+						extraAttrs['decrypt-fail'] = 'hide'
+					}
 
-			await sendNode(stanza)
-		})
+					if (isGroupOrStatus && !isRetryResend) {
+						const [groupData, senderKeyMap] = await trackRelayStep('group_context', async () =>
+							Promise.all([
+								(async () => {
+									let groupData =
+										useCachedGroupMetadata && groupMetadataCache ? await groupMetadataCache.get(jid) : undefined
+									if (groupData && Array.isArray(groupData?.participants)) {
+										logger.trace({ jid, participants: groupData.participants.length }, 'using cached group metadata')
+									} else if (!isStatus) {
+										groupData = await groupMetadata(jid)
+										await groupMetadataCache?.set(jid, groupData)
+									}
 
-		return msgId
+									return groupData
+								})(),
+								(async () => {
+									if (!participant && !isStatus) {
+										const result = await authState.keys.get('sender-key-memory', [jid])
+										return result[jid] || {}
+									}
+
+									return {}
+								})()
+							])
+						)
+
+						if (!participant) {
+							const participantsList = groupData && !isStatus ? groupData.participants.map(p => p.id) : []
+							if (isStatus && statusJidList) {
+								participantsList.push(...statusJidList)
+							}
+
+							if (!isStatus) {
+								additionalAttributes = {
+									...additionalAttributes,
+									addressing_mode: groupData?.addressingMode || 'pn'
+								}
+							}
+
+							const additionalDevices = await trackRelayStep('group_fetch_devices', async () =>
+								getUSyncDevices(participantsList, !!useUserDevicesCache, false)
+							)
+							devices.push(...additionalDevices)
+						}
+
+						if (groupData?.ephemeralDuration && groupData.ephemeralDuration > 0) {
+							additionalAttributes = {
+								...additionalAttributes,
+								expiration: groupData.ephemeralDuration.toString()
+							}
+						}
+
+						const { ciphertext, senderKeyDistributionMessage } = await trackRelayStep('group_encrypt', async () =>
+							signalRepository.encryptGroupMessage({
+								group: destinationJid,
+								data: encodedMessage,
+								meId
+							})
+						)
+
+						const senderKeyJids: string[] = []
+						// ensure a connection is established with every device
+						for (const { user, device, server } of devices) {
+							let serverToUse = server
+
+							if (serverToUse && serverToUse !== 'lid') {
+								logger.warn(
+									`unexpected server type for group message, expected "lid" but got "${serverToUse}" groupData?.addressingMode: ${groupData?.addressingMode}, jid: ${jidEncode(user, serverToUse, device)}`
+								)
+							}
+
+							if (!serverToUse) {
+								serverToUse = groupData?.addressingMode === 'lid' ? 'lid' : 's.whatsapp.net'
+							}
+
+							const jid = jidEncode(user, serverToUse, device)
+							if (!senderKeyMap[jid] && !isRetryResend) {
+								senderKeyJids.push(jid)
+								// store that this person has had the sender keys sent to them
+								senderKeyMap[jid] = true
+							}
+						}
+
+						// if there are some participants with whom the session has not been established
+						// if there are, we re-send the senderkey
+						// Send only if participant count is not set
+						if (senderKeyJids.length) {
+							logger.debug({ senderKeyJids }, 'sending new sender key')
+
+							const senderKeyMsg: proto.IMessage = {
+								senderKeyDistributionMessage: {
+									axolotlSenderKeyDistributionMessage: senderKeyDistributionMessage,
+									groupId: destinationJid
+								}
+							}
+
+							await trackRelayStep('group_assert_sessions', async () => assertSessions(senderKeyJids, false))
+
+							const result = await trackRelayStep('group_create_participant_nodes', async () =>
+								createParticipantNodes(senderKeyJids, senderKeyMsg, extraAttrs)
+							)
+							shouldIncludeDeviceIdentity = shouldIncludeDeviceIdentity || result.shouldIncludeDeviceIdentity
+
+							participants.push(...result.nodes)
+						}
+
+						binaryNodeContent.push({
+							tag: 'enc',
+							attrs: { v: '2', type: 'skmsg' },
+							content: ciphertext
+						})
+
+						await trackRelayStep('group_store_sender_key_memory', async () =>
+							authState.keys.set({ 'sender-key-memory': { [jid]: senderKeyMap } })
+						)
+					} else if (!isRetryResend) {
+						const { user: meUser } = jidDecode(meId)!
+
+						if (!participant) {
+							devices.push({ user })
+							if (user !== meUser) {
+								devices.push({ user: meUser })
+							}
+
+							if (additionalAttributes?.['category'] !== 'peer') {
+								const additionalDevices = await trackRelayStep('direct_fetch_devices', async () =>
+									getUSyncDevices([meId, jid], !!useUserDevicesCache, true)
+								)
+								devices.push(...additionalDevices)
+							}
+						}
+
+						const allJids: string[] = []
+						const meJids: string[] = []
+						const otherJids: string[] = []
+						for (const { user, device } of devices) {
+							const isMe = user === meUser
+							const jid = jidEncode(
+								isMe && isLid ? authState.creds?.me?.lid!.split(':')[0] || user : user,
+								isLid ? 'lid' : 's.whatsapp.net',
+								device
+							)
+							if (isMe) {
+								meJids.push(jid)
+							} else {
+								otherJids.push(jid)
+							}
+
+							allJids.push(jid)
+						}
+
+						await trackRelayStep('direct_assert_sessions', async () => assertSessions(allJids, false))
+
+						const [
+							{ nodes: meNodes, shouldIncludeDeviceIdentity: s1 },
+							{ nodes: otherNodes, shouldIncludeDeviceIdentity: s2 }
+						] = await trackRelayStep('direct_create_participant_nodes', async () =>
+							Promise.all([
+								createParticipantNodes(meJids, meMsg, extraAttrs),
+								createParticipantNodes(otherJids, message, extraAttrs)
+							])
+						)
+						participants.push(...meNodes)
+						participants.push(...otherNodes)
+
+						shouldIncludeDeviceIdentity = shouldIncludeDeviceIdentity || s1 || s2
+					}
+
+					if (participants.length) {
+						if (additionalAttributes?.['category'] === 'peer') {
+							const peerNode = participants[0]?.content?.[0] as BinaryNode
+							if (peerNode) {
+								binaryNodeContent.push(peerNode) // push only enc
+							}
+						} else {
+							binaryNodeContent.push({
+								tag: 'participants',
+								attrs: {},
+								content: participants
+							})
+						}
+					}
+
+					if (isRetryResend) {
+						const isParticipantLid = isLidUser(participant!.jid)
+						const isMe = areJidsSameUser(participant!.jid, isParticipantLid ? meLid : meId)
+
+						const encodedMessageToSend = isMe
+							? encodeWAMessage({
+									deviceSentMessage: {
+										destinationJid,
+										message
+									}
+								})
+							: encodedMessage
+
+						const { type, ciphertext: encryptedContent } = await trackRelayStep('retry_encrypt', async () =>
+							signalRepository.encryptMessage({
+								data: encodedMessageToSend,
+								jid: participant!.jid
+							})
+						)
+
+						binaryNodeContent.push({
+							tag: 'enc',
+							attrs: {
+								v: '2',
+								type,
+								count: participant!.count.toString()
+							},
+							content: encryptedContent
+						})
+					}
+
+					const stanza: BinaryNode = {
+						tag: 'message',
+						attrs: {
+							id: msgId,
+							type: getMessageType(message),
+							...(additionalAttributes || {})
+						},
+						content: binaryNodeContent
+					}
+					// if the participant to send to is explicitly specified (generally retry recp)
+					// ensure the message is only sent to that person
+					// if a retry receipt is sent to everyone -- it'll fail decryption for everyone else who received the msg
+					if (participant) {
+						if (isJidGroup(destinationJid)) {
+							stanza.attrs.to = destinationJid
+							stanza.attrs.participant = participant.jid
+						} else if (areJidsSameUser(participant.jid, meId)) {
+							stanza.attrs.to = participant.jid
+							stanza.attrs.recipient = destinationJid
+						} else {
+							stanza.attrs.to = participant.jid
+						}
+					} else {
+						stanza.attrs.to = destinationJid
+					}
+
+					if (shouldIncludeDeviceIdentity) {
+						;(stanza.content as BinaryNode[]).push({
+							tag: 'device-identity',
+							attrs: {},
+							content: encodeSignedDeviceIdentity(authState.creds.account!, true)
+						})
+
+						logger.debug({ jid }, 'adding device identity')
+					}
+
+					const contactTcTokenData =
+						!isGroup && !isRetryResend && !isStatus
+							? await trackRelayStep('direct_get_tc_token', async () =>
+									authState.keys.get('tc-token', [destinationJid])
+								)
+							: {}
+
+					const tcTokenBuffer = contactTcTokenData[destinationJid]?.token
+
+					if (tcTokenBuffer) {
+						;(stanza.content as BinaryNode[]).push({
+							tag: 'tctoken',
+							attrs: {},
+							content: tcTokenBuffer
+						})
+					}
+
+					if (additionalNodes && additionalNodes.length > 0) {
+						;(stanza.content as BinaryNode[]).push(...additionalNodes)
+					} else {
+						const buttonType = getButtonType(message)
+						if (buttonType) {
+							;(stanza.content as BinaryNode[]).push(getButtonArgs(message))
+
+							logger.debug({ jid }, 'adding business node')
+						}
+					}
+
+					// Add reporting token if required
+					if (!isNewsletter) {
+						if (
+							message &&
+							!isRetryResend &&
+							config.sendReportingTag &&
+							shouldIncludeReportingToken(message) &&
+							message.messageContextInfo?.messageSecret &&
+							msgId
+						) {
+							try {
+								const reportingKey: WAMessageKey = {
+									id: msgId,
+									fromMe: true,
+									remoteJid: destinationJid,
+									participant: participant?.jid
+								}
+								const reportingNode = await trackRelayStep('build_reporting_token', async () =>
+									getMessageReportingToken(encodedMessage, message, reportingKey)
+								)
+								if (reportingNode) {
+									;(stanza.content as BinaryNode[]).push(reportingNode)
+									logger.trace({ jid }, 'added reporting token to message')
+								}
+							} catch (error: unknown) {
+								logger.warn(
+									{ jid, trace: error instanceof Error ? error.stack : undefined },
+									'failed to attach reporting token'
+								)
+							}
+						}
+					}
+
+					logger.debug({ msgId }, `sending message to ${participants.length} devices`)
+
+					await trackRelayStep('send_node', async () => sendNode(stanza))
+				})
+			)
+
+			recordNewRelicCustomEvent('BaileysRelayMessage', {
+				...relayBaseAttrs,
+				success: true,
+				duration_ms: Date.now() - relayStartedAt
+			})
+
+			return msgId
+		} catch (error) {
+			noticeNewRelicError(error, relayBaseAttrs)
+			recordNewRelicCustomEvent('BaileysRelayMessage', {
+				...relayBaseAttrs,
+				success: false,
+				duration_ms: Date.now() - relayStartedAt,
+				error_name: error instanceof Error ? error.name : 'unknown'
+			})
+			throw error
+		}
 	}
 
 	const getMessageType = (message: proto.IMessage) => {
