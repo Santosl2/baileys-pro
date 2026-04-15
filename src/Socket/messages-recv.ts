@@ -677,10 +677,7 @@ export const makeMessagesRecvSocket = async (config: SocketConfig) => {
 				const encryptIv = randomBytes(12)
 				const encrypted = await aesEncryptGCM(encryptPayload, linkCodePairingExpanded, encryptIv, Buffer.alloc(0))
 				const encryptedPayload = Buffer.concat([linkCodeSalt, encryptIv, encrypted])
-				const identitySharedKey = await Curve.sharedKey(
-					authState.creds.signedIdentityKey.private,
-					primaryIdentityPublicKey
-				)
+				const identitySharedKey = await Curve.sharedKey(authState.creds.signedIdentityKey.private, primaryIdentityPublicKey)
 				const identityPayload = Buffer.concat([companionSharedKey, identitySharedKey, random])
 				authState.creds.advSecretKey = (await hkdf(identityPayload, 32, { info: 'adv_secret' })).toString('base64')
 				await query({
@@ -834,11 +831,10 @@ export const makeMessagesRecvSocket = async (config: SocketConfig) => {
 		const injected = await injectSessionFromReceiptKeys(receiptNode, participant)
 		if (injected) {
 			logger.debug({ participant, retryCount }, 'injected session from prekey bundle in retry receipt')
-		}
-
-		if (!getBinaryNodeChild(receiptNode, 'keys')) {
+		} else if (!getBinaryNodeChild(receiptNode, 'keys')) {
 			// keys node was present but incomplete
 			logger.warn({ participant, retryCount }, 'incomplete keys node in retry receipt, falling back to server fetch')
+			await assertSessions([participant], true)
 		} else {
 			// No prekey bundle — only fetch from server when session recreation is needed
 			const sessionCheck = await signalRepository.validateSession(participant)
