@@ -148,27 +148,24 @@ export function makeLibSignalRepository(auth: SignalAuthState): SignalRepository
 
 			const senderNameStr = senderName.toString()
 
-			// Use transaction to ensure atomicity
-			return (auth.keys as SignalKeyStoreWithTransaction).transaction(async () => {
-				try {
-					const { [senderNameStr]: senderKey } = await auth.keys.get('sender-key', [senderNameStr])
-					if (!senderKey) {
-						await storage.storeSenderKey(senderName, new SenderKeyRecord())
-					}
-
-					const senderKeyDistributionMessage = await builder.create(senderName)
-					const session = new GroupCipher(storage, senderName)
-					const ciphertext = await session.encrypt(data)
-
-					return {
-						ciphertext,
-						senderKeyDistributionMessage: senderKeyDistributionMessage.serialize()
-					}
-				} catch (error) {
-					logger.info(`Group message encryption failed ${error}`)
-					throw error
+			try {
+				const { [senderNameStr]: senderKey } = await auth.keys.get('sender-key', [senderNameStr])
+				if (!senderKey) {
+					await storage.storeSenderKey(senderName, new SenderKeyRecord())
 				}
-			})
+
+				const senderKeyDistributionMessage = await builder.create(senderName)
+				const session = new GroupCipher(storage, senderName)
+				const ciphertext = await session.encrypt(data)
+
+				return {
+					ciphertext,
+					senderKeyDistributionMessage: senderKeyDistributionMessage.serialize()
+				}
+			} catch (error) {
+				logger.info(`Group message encryption failed ${error}`)
+				throw error
+			}
 		},
 		async createSenderKeyDistributionMessage({ group, meId }) {
 			const senderName = jidToSignalSenderKeyName(group, meId)
