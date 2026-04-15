@@ -519,6 +519,8 @@ export const makeMessagesSocket = async (config: SocketConfig) => {
 		}
 
 		await authState.keys.transaction(async () => {
+			const encodedMessage = encodeWAMessage(message)
+
 			const mediaType = getMediaType(message)
 			if (mediaType) {
 				extraAttrs['mediatype'] = mediaType
@@ -599,17 +601,9 @@ export const makeMessagesSocket = async (config: SocketConfig) => {
 					}
 				}
 
-				const patched = await patchMessageBeforeSending(message)
-
-				if (Array.isArray(patched)) {
-					throw new Boom('Per-jid patching is not supported in groups')
-				}
-
-				const bytes = encodeWAMessage(patched)
-
 				const { ciphertext, senderKeyDistributionMessage } = await signalRepository.encryptGroupMessage({
 					group: destinationJid,
-					data: bytes,
+					data: encodedMessage,
 					meId
 				})
 
@@ -729,8 +723,6 @@ export const makeMessagesSocket = async (config: SocketConfig) => {
 			}
 
 			if (isRetryResend) {
-				const encodedMessage = encodeWAMessage(message)
-
 				const isParticipantLid = isLidUser(participant!.jid)
 				const isMe = areJidsSameUser(participant!.jid, isParticipantLid ? meLid : meId)
 
