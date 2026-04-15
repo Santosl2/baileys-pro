@@ -829,9 +829,9 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		const injected = await injectSessionFromReceiptKeys(receiptNode, participant)
 		if (injected) {
 			logger.debug({ participant, retryCount }, 'injected session from prekey bundle in retry receipt')
-		} else if (getBinaryNodeChild(receiptNode, 'keys')) {
-			// keys node was present but incomplete
-			logger.warn({ participant, retryCount }, 'incomplete keys node in retry receipt, falling back to server fetch')
+		} else if (!getBinaryNodeChild(receiptNode, 'keys')) {
+			// keys node was absent
+			logger.warn({ participant, retryCount }, 'keys node absent in retry receipt, falling back to server fetch')
 			await assertSessions([participant], true)
 		} else {
 			// No prekey bundle — only fetch from server when session recreation is needed
