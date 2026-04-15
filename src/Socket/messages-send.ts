@@ -618,10 +618,14 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 					}
 
 					if (groupData && !groupData.phash && participantListPhash) {
-						await groupMetadataCache?.set(jid, {
-							...groupData,
-							phash: participantListPhash
-						})
+						groupMetadataCache
+							?.set(jid, {
+								...groupData,
+								phash: participantListPhash
+							})
+							.catch(err => {
+								logger.warn({ jid, trace: err?.stack }, 'failed to update group metadata cache with phash')
+							})
 					}
 
 					devices.push(...additionalDevices)
@@ -690,7 +694,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 					content: ciphertext
 				})
 
-				await authState.keys.set({ 'sender-key-memory': { [jid]: senderKeyMap } })
+				authState.keys.set({ 'sender-key-memory': { [jid]: senderKeyMap } })
 			} else if (!isRetryResend) {
 				const { user: meUser } = jidDecode(meId)!
 
