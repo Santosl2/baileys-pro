@@ -32,6 +32,34 @@ import makeWASocket from 'baileys'
 const { default: makeWASocket } = require('baileys')
 ```
 
+## New Relic (monitoramento de gargalos no relayMessage)
+
+Foi adicionada instrumentacao no fluxo de relayMessage com eventos de duracao por etapa.
+
+### 1. Configure variaveis de ambiente
+
+```bash
+export NEW_RELIC_LICENSE_KEY="SUA_LICENSE_KEY"
+export NEW_RELIC_APP_NAME="baileys-pro"
+```
+
+### 2. Inicie sua aplicacao com o agente preload
+
+```bash
+NODE_OPTIONS="-r newrelic" node ./seu-arquivo.js
+```
+
+Se voce roda com ts-node:
+
+```bash
+NODE_OPTIONS="-r newrelic" node -r ts-node/register ./Example/example.ts
+```
+
+### 3. Eventos disponiveis no New Relic
+
+- BaileysRelayMessage: tempo total do relayMessage e status de sucesso/erro.
+- BaileysRelayMessageStep: tempo por etapa interna (ex.: keys_transaction, group_encrypt, send_node).
+
 ## Added Features and Improvements
 
 Here are some of the features and improvements I have added:
