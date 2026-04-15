@@ -436,7 +436,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 			}
 		})
 
-		if (encPromises.length > 500) {
+		if (encPromises.length > 15) {
 			logger.warn('attempting to encrypt message for a large number of participants, this may take a while')
 		}
 
