@@ -728,9 +728,9 @@ export const makeMessagesSocket = async (config: SocketConfig) => {
 				}
 			}
 
-			const encodedMessage = encodeWAMessage(message)
-
 			if (isRetryResend) {
+				const encodedMessage = encodeWAMessage(message)
+
 				const isParticipantLid = isLidUser(participant!.jid)
 				const isMe = areJidsSameUser(participant!.jid, isParticipantLid ? meLid : meId)
 

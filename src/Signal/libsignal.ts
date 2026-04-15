@@ -130,17 +130,14 @@ export function makeLibSignalRepository(auth: SignalAuthState): SignalRepository
 			const addr = jidToSignalProtocolAddress(jid)
 			const cipher = new libsignal.SessionCipher(storage, addr)
 
-			// Use transaction to ensure atomicityAdd commentMore actions
-			return (auth.keys as SignalKeyStoreWithTransaction).transaction(async () => {
-				try {
-					const { type: sigType, body } = await cipher.encrypt(data)
-					const type = sigType === 3 ? 'pkmsg' : 'msg'
-					return { type, ciphertext: Buffer.from(body, 'binary') }
-				} catch (error) {
-					logger.info(`Encryption failed ${error}`)
-					throw error
-				}
-			})
+			try {
+				const { type: sigType, body } = await cipher.encrypt(data)
+				const type = sigType === 3 ? 'pkmsg' : 'msg'
+				return { type, ciphertext: Buffer.from(body, 'binary') }
+			} catch (error) {
+				logger.info(`Encryption failed ${error}`)
+				throw error
+			}
 		},
 		async encryptGroupMessage({ group, meId, data }) {
 			const senderName = jidToSignalSenderKeyName(group, meId)
