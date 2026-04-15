@@ -373,62 +373,71 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 			patched = jids ? jids.map(jid => ({ recipientJid: jid, ...patched })) : [patched]
 		}
 
-		// Cache encoded bytes for identical message objects (common in groups)
-		// but this is good enough for now
-		let encodedMessage: Buffer | undefined = undefined
-		const getEncodedBytes = (msg: proto.IMessage): Buffer => {
-			if (!encodedMessage) {
-				encodedMessage = encodeWAMessage(msg)
-			}
+		// eslint-disable-next-line @typescript-eslint/no-unused-vars
+		const { recipientJid: _, ...messageWithoutRecipientJid } = patched[0] ?? {}
 
-			return encodedMessage
-		}
+		const encodedMessage = encodeWAMessage(messageWithoutRecipientJid)
 
 		let shouldIncludeDeviceIdentity = false
 
-		const encPromises = patched.map(async patchedMessageWithJid => {
-			const { recipientJid: jid, ...patchedMessage } = patchedMessageWithJid
-			if (!jid) {
-				return {} as BinaryNode
+		const generateNode = async (jid: string) => {
+			const { type, ciphertext } = await signalRepository.encryptMessage({ jid, data: encodedMessage })
+			if (type === 'pkmsg') {
+				shouldIncludeDeviceIdentity = true
 			}
 
-			const bytes = getEncodedBytes(patchedMessage)
-			try {
-				const { type, ciphertext } = await signalRepository.encryptMessage({ jid, data: bytes })
-				if (type === 'pkmsg') {
-					shouldIncludeDeviceIdentity = true
-				}
+			const node: BinaryNode = {
+				tag: 'to',
+				attrs: { jid },
+				content: [
+					{
+						tag: 'enc',
+						attrs: {
+							v: '2',
+							type,
+							...(extraAttrs || {})
+						},
+						content: ciphertext
+					}
+				]
+			}
+			return node
+		}
 
-				const node: BinaryNode = {
-					tag: 'to',
-					attrs: { jid },
-					content: [
-						{
-							tag: 'enc',
-							attrs: {
-								v: '2',
-								type,
-								...(extraAttrs || {})
-							},
-							content: ciphertext
-						}
-					]
-				}
-				return node
+		const assertSessionWithNodeRetry = async (jid: string) => {
+			try {
+				await assertSessions([jid], true)
+				return await generateNode(jid)
+			} catch (err) {
+				logger.error({ jid, err, trace: err?.stack }, 'failed to fetch session for participant')
+				return null
+			}
+		}
+
+		const encPromises = patched.map(async patchedMessageWithJid => {
+			const { recipientJid: jid } = patchedMessageWithJid
+
+			if (!jid) {
+				return null
+			}
+
+			try {
+				return await generateNode(jid)
 			} catch (error) {
 				logger.error({ jid, trace: error?.stack }, 'failed to encrypt message for participant')
 
 				if (error?.message?.includes('No session') || error?.stack?.includes('No session')) {
 					logger.warn({ jid }, 'fetching new session for participant and retrying encryption')
-					await assertSessions([jid], true).catch(err => {
-						logger.error({ jid, err, trace: err?.stack }, 'failed to fetch session for participant')
-						return null
-					})
+					return await assertSessionWithNodeRetry(jid)
 				}
 
 				return null
 			}
 		})
+
+		if (encPromises.length > 500) {
+			logger.warn('attempting to encrypt message for a large number of participants, this may take a while')
+		}
 
 		const nodes = (await Promise.all(encPromises)).filter(node => node !== null)
 
