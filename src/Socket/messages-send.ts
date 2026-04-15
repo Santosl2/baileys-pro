@@ -694,7 +694,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 					content: ciphertext
 				})
 
-				authState.keys.set({ 'sender-key-memory': { [jid]: senderKeyMap } })
+				await authState.keys.set({ 'sender-key-memory': { [jid]: senderKeyMap } })
 			} else if (!isRetryResend) {
 				const { user: meUser } = jidDecode(meId)!
 
