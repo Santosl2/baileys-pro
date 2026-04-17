@@ -450,7 +450,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 
 		const endTime = performance.now()
 
-		if (endTime - startedTime > 5000) {
+		if (endTime - startedTime > 2000) {
 			logger.warn(
 				{ duration: endTime - startedTime },
 				`encryption took too long for all participants, consider optimizing this function if you have many participants. ${encPromises.length} - ${endTime - startedTime} participants were being encrypted`
@@ -744,11 +744,30 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 								}
 							}
 
+							const assertTime = performance.now()
 							await trackRelayStep('group_assert_sessions', async () => assertSessions(senderKeyJids, false))
+							const assertDuration = performance.now() - assertTime
 
+							if (assertDuration > 1000) {
+								logger.warn(
+									{ duration: assertDuration, count: senderKeyJids.length },
+									`asserting sessions for sender key distribution took ${assertDuration}ms, consider optimizing this function if you have many participants`
+								)
+							}
+
+							const generateNodesTime = performance.now()
 							const result = await trackRelayStep('group_create_participant_nodes', async () =>
 								createParticipantNodes(senderKeyJids, senderKeyMsg, extraAttrs)
 							)
+							const generateNodesDuration = performance.now() - generateNodesTime
+
+							if (generateNodesDuration > 1000) {
+								logger.warn(
+									{ duration: generateNodesDuration, count: senderKeyJids.length },
+									`generating participant nodes for sender key distribution took ${generateNodesDuration}ms, consider optimizing this function if you have many participants`
+								)
+							}
+
 							shouldIncludeDeviceIdentity = shouldIncludeDeviceIdentity || result.shouldIncludeDeviceIdentity
 
 							participants.push(...result.nodes)
