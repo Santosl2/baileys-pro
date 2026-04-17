@@ -661,7 +661,7 @@ export const makeChatsSocket = (config: SocketConfig) => {
 		const isAvailableType = type === 'available'
 		if (isAvailableType || type === 'unavailable') {
 			if (!me.name) {
-				logger.warn('no name present, ignoring presence update request...')
+				logger.info('no name present, ignoring presence update request...')
 				return
 			}
 
