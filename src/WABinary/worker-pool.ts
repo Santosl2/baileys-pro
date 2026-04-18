@@ -120,6 +120,7 @@ const ensureWorkerPool = () => {
 		for (const item of nextWorkers) {
 			item.terminate().catch(() => undefined)
 		}
+
 		return null
 	}
 
@@ -130,7 +131,7 @@ const ensureWorkerPool = () => {
 
 const getNextWorker = () => {
 	const currentWorkers = ensureWorkerPool()
-	if (!currentWorkers || !currentWorkers.length) {
+	if (!currentWorkers?.length) {
 		return null
 	}
 
