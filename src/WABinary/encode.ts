@@ -1,14 +1,21 @@
 import * as constants from './constants'
 import { FullJid, jidDecode } from './jid-utils'
 import type { BinaryNode, BinaryNodeCodingOptions } from './types'
+import { runBinaryCodecWorkerTask } from './worker-pool'
 
-export const encodeBinaryNode = (
+export const encodeBinaryNodeSync = (
 	node: BinaryNode,
 	opts: Pick<BinaryNodeCodingOptions, 'TAGS' | 'TOKEN_MAP'> = constants,
 	buffer: number[] = [0]
 ): Buffer => {
 	const encoded = encodeBinaryNodeInner(node, opts, buffer)
 	return Buffer.from(encoded)
+}
+
+export const encodeBinaryNode = encodeBinaryNodeSync
+
+export const encodeBinaryNodeAsync = async (node: BinaryNode): Promise<Buffer> => {
+	return runBinaryCodecWorkerTask({ type: 'encode', node }, () => encodeBinaryNodeSync(node))
 }
 
 const encodeBinaryNodeInner = (

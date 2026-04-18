@@ -37,7 +37,7 @@ import {
 	assertNodeErrorFree,
 	BinaryNode,
 	binaryNodeToString,
-	encodeBinaryNode,
+	encodeBinaryNodeAsync,
 	getBinaryNodeChild,
 	getBinaryNodeChildren,
 	jidEncode,
@@ -138,12 +138,12 @@ export const makeSocket = (config: SocketConfig) => {
 	}
 
 	/** send a binary node */
-	const sendNode = (frame: BinaryNode) => {
+	const sendNode = async (frame: BinaryNode) => {
 		if (logger.level === 'trace') {
 			logger.trace({ xml: binaryNodeToString(frame), msg: 'xml send' })
 		}
 
-		const buff = encodeBinaryNode(frame)
+		const buff = await encodeBinaryNodeAsync(frame)
 		return sendRawMessage(buff)
 	}
 

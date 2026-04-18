@@ -3,10 +3,11 @@ import { inflate } from 'zlib'
 import * as constants from './constants'
 import { jidEncode } from './jid-utils'
 import type { BinaryNode, BinaryNodeCodingOptions } from './types'
+import { runBinaryCodecWorkerTask } from './worker-pool'
 
 const inflatePromise = promisify(inflate)
 
-export const decompressingIfRequired = async (buffer: Buffer) => {
+export const decompressingIfRequiredLocal = async (buffer: Buffer) => {
 	if (2 & buffer.readUInt8()) {
 		buffer = await inflatePromise(buffer.slice(1))
 	} else {
@@ -17,7 +18,14 @@ export const decompressingIfRequired = async (buffer: Buffer) => {
 	return buffer
 }
 
-export const decodeDecompressedBinaryNode = (
+export const decompressingIfRequired = async (buffer: Buffer): Promise<Buffer> => {
+	return runBinaryCodecWorkerTask(
+		{ type: 'decompress', buffer },
+		() => decompressingIfRequiredLocal(buffer)
+	)
+}
+
+export const decodeDecompressedBinaryNodeLocal = (
 	buffer: Buffer,
 	opts: Pick<BinaryNodeCodingOptions, 'DOUBLE_BYTE_TOKENS' | 'SINGLE_BYTE_TOKENS' | 'TAGS'>,
 	indexRef: { index: number } = { index: 0 }
@@ -192,7 +200,7 @@ export const decodeDecompressedBinaryNode = (
 		const items: BinaryNode[] = []
 		const size = readListSize(tag)
 		for (let i = 0; i < size; i++) {
-			items.push(decodeDecompressedBinaryNode(buffer, opts, indexRef))
+			items.push(decodeDecompressedBinaryNodeLocal(buffer, opts, indexRef))
 		}
 
 		return items
@@ -265,7 +273,27 @@ export const decodeDecompressedBinaryNode = (
 	}
 }
 
+export const decodeDecompressedBinaryNode = async (
+	buffer: Buffer,
+	opts: Pick<BinaryNodeCodingOptions, 'DOUBLE_BYTE_TOKENS' | 'SINGLE_BYTE_TOKENS' | 'TAGS'> = constants,
+	indexRef: { index: number } = { index: 0 }
+): Promise<BinaryNode> => {
+	const canUseWorker = opts === constants && indexRef.index === 0
+	if (!canUseWorker) {
+		return decodeDecompressedBinaryNodeLocal(buffer, opts, indexRef)
+	}
+
+	return runBinaryCodecWorkerTask(
+		{ type: 'decode-decompressed', buffer },
+		() => decodeDecompressedBinaryNodeLocal(buffer, opts, indexRef)
+	)
+}
+
+export const decodeBinaryNodeLocal = async (buff: Buffer): Promise<BinaryNode> => {
+	const decompBuff = await decompressingIfRequiredLocal(buff)
+	return decodeDecompressedBinaryNodeLocal(decompBuff, constants)
+}
+
 export const decodeBinaryNode = async (buff: Buffer): Promise<BinaryNode> => {
-	const decompBuff = await decompressingIfRequired(buff)
-	return decodeDecompressedBinaryNode(decompBuff, constants)
+	return runBinaryCodecWorkerTask({ type: 'decode', buffer: buff }, () => decodeBinaryNodeLocal(buff))
 }
