@@ -9,24 +9,24 @@ export type BinaryCodecTask =
 	| {
 			id: number
 			type: 'decode'
-			buffer: Buffer
+			buffer: ArrayBuffer
 	  }
 	| {
 			id: number
 			type: 'decompress'
-			buffer: Buffer
+			buffer: ArrayBuffer
 	  }
 	| {
 			id: number
 			type: 'decode-decompressed'
-			buffer: Buffer
+			buffer: ArrayBuffer
 	  }
 
 export type BinaryCodecSuccess =
 	| {
 			id: number
 			type: 'encode'
-			result: Buffer
+			result: ArrayBuffer
 	  }
 	| {
 			id: number
@@ -36,7 +36,7 @@ export type BinaryCodecSuccess =
 	| {
 			id: number
 			type: 'decompress'
-			result: Buffer
+			result: ArrayBuffer
 	  }
 	| {
 			id: number

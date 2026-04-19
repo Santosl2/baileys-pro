@@ -45,6 +45,24 @@ const getConfiguredWorkerPoolSize = () => {
 	return parsed
 }
 
+const toArrayBuffer = (value: ArrayBufferLike): ArrayBuffer => {
+	if (value instanceof ArrayBuffer) {
+		return value
+	}
+
+	const copy = new Uint8Array(value.byteLength)
+	copy.set(new Uint8Array(value))
+	return copy.buffer
+}
+
+const bufferToTransferable = (buf: Buffer): ArrayBuffer => {
+	if (buf.byteOffset === 0 && buf.buffer.byteLength === buf.byteLength) {
+		return toArrayBuffer(buf.buffer)
+	}
+
+	return toArrayBuffer(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength))
+}
+
 const makeWorkerError = (error: BinaryCodecFailure['error']) => {
 	const err = new Error(error.message)
 	err.stack = error.stack || err.stack
@@ -70,6 +88,11 @@ const onWorkerMessage = (message: BinaryCodecResponse) => {
 
 	if ('error' in message) {
 		task.reject(makeWorkerError(message.error))
+		return
+	}
+
+	if (message.type === 'encode' || message.type === 'decompress') {
+		task.resolve(Buffer.from(message.result))
 		return
 	}
 
@@ -157,9 +180,23 @@ const runTaskInWorker = <T>(taskInput: BinaryCodecTaskInput): Promise<T> => {
 	}
 
 	const id = ++taskCounter
-	const task: BinaryCodecTask = {
-		...taskInput,
-		id
+
+	let task: BinaryCodecTask
+	const transferList: ArrayBuffer[] = []
+
+	if (taskInput.type === 'encode') {
+		task = {
+			...taskInput,
+			id
+		}
+	} else {
+		const ab = bufferToTransferable(taskInput.buffer)
+		task = {
+			id,
+			type: taskInput.type,
+			buffer: ab
+		}
+		transferList.push(ab)
 	}
 
 	return new Promise<T>((resolve, reject) => {
@@ -167,7 +204,7 @@ const runTaskInWorker = <T>(taskInput: BinaryCodecTaskInput): Promise<T> => {
 
 		try {
 			dbg(`task id=${id} type=${task.type} → worker threadId=${currentWorker.threadId}`)
-			currentWorker.postMessage(task)
+			currentWorker.postMessage(task, transferList)
 		} catch (error) {
 			pending.delete(id)
 			reject(error)

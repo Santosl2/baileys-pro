@@ -16,6 +16,24 @@ const dbg = (...args: unknown[]) => {
 	}
 }
 
+const toArrayBuffer = (value: ArrayBufferLike): ArrayBuffer => {
+	if (value instanceof ArrayBuffer) {
+		return value
+	}
+
+	const copy = new Uint8Array(value.byteLength)
+	copy.set(new Uint8Array(value))
+	return copy.buffer
+}
+
+const bufferToTransferable = (buf: Buffer): ArrayBuffer => {
+	if (buf.byteOffset === 0 && buf.buffer.byteLength === buf.byteLength) {
+		return toArrayBuffer(buf.buffer)
+	}
+
+	return toArrayBuffer(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength))
+}
+
 dbg('worker iniciado')
 
 const toErrorObject = (error: unknown) => {
@@ -36,43 +54,29 @@ port.on('message', async (task: BinaryCodecTask) => {
 	try {
 		if (task.type === 'encode') {
 			const result = encodeBinaryNodeSync(task.node)
-			const response: BinaryCodecResponse = {
-				id: task.id,
-				type: 'encode',
-				result
-			}
-			port.postMessage(response)
+			const responseResult = bufferToTransferable(result)
+			const response: BinaryCodecResponse = { id: task.id, type: 'encode', result: responseResult }
+			port.postMessage(response, [responseResult])
 			return
 		}
 
 		if (task.type === 'decompress') {
-			const result = await decompressingIfRequiredLocal(task.buffer)
-			const response: BinaryCodecResponse = {
-				id: task.id,
-				type: 'decompress',
-				result
-			}
-			port.postMessage(response)
+			const result = await decompressingIfRequiredLocal(Buffer.from(task.buffer))
+			const responseResult = bufferToTransferable(result)
+			const response: BinaryCodecResponse = { id: task.id, type: 'decompress', result: responseResult }
+			port.postMessage(response, [responseResult])
 			return
 		}
 
 		if (task.type === 'decode-decompressed') {
-			const result = decodeDecompressedBinaryNodeLocal(task.buffer, constants)
-			const response: BinaryCodecResponse = {
-				id: task.id,
-				type: 'decode-decompressed',
-				result
-			}
+			const result = decodeDecompressedBinaryNodeLocal(Buffer.from(task.buffer), constants)
+			const response: BinaryCodecResponse = { id: task.id, type: 'decode-decompressed', result }
 			port.postMessage(response)
 			return
 		}
 
-		const result = await decodeBinaryNodeLocal(task.buffer)
-		const response: BinaryCodecResponse = {
-			id: task.id,
-			type: 'decode',
-			result
-		}
+		const result = await decodeBinaryNodeLocal(Buffer.from(task.buffer))
+		const response: BinaryCodecResponse = { id: task.id, type: 'decode', result }
 		port.postMessage(response)
 	} catch (error) {
 		const response: BinaryCodecResponse = {

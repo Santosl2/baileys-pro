@@ -19,10 +19,7 @@ export const decompressingIfRequiredLocal = async (buffer: Buffer) => {
 }
 
 export const decompressingIfRequired = async (buffer: Buffer): Promise<Buffer> => {
-	return runBinaryCodecWorkerTask(
-		{ type: 'decompress', buffer },
-		() => decompressingIfRequiredLocal(buffer)
-	)
+	return runBinaryCodecWorkerTask({ type: 'decompress', buffer }, () => decompressingIfRequiredLocal(buffer))
 }
 
 export const decodeDecompressedBinaryNodeLocal = (
@@ -283,9 +280,8 @@ export const decodeDecompressedBinaryNode = async (
 		return decodeDecompressedBinaryNodeLocal(buffer, opts, indexRef)
 	}
 
-	return runBinaryCodecWorkerTask(
-		{ type: 'decode-decompressed', buffer },
-		() => decodeDecompressedBinaryNodeLocal(buffer, opts, indexRef)
+	return runBinaryCodecWorkerTask({ type: 'decode-decompressed', buffer }, () =>
+		decodeDecompressedBinaryNodeLocal(buffer, opts, indexRef)
 	)
 }
 
