@@ -1,4 +1,4 @@
-import { parentPort } from 'worker_threads'
+import { parentPort, threadId } from 'worker_threads'
 import * as constants from './constants'
 import { decodeBinaryNodeLocal, decodeDecompressedBinaryNodeLocal, decompressingIfRequiredLocal } from './decode'
 import { encodeBinaryNodeSync } from './encode'
@@ -9,6 +9,14 @@ if (!parentPort) {
 }
 
 const port = parentPort
+const DEBUG = process.env.BINARY_CODEC_WORKER_DEBUG === '1'
+const dbg = (...args: unknown[]) => {
+	if (DEBUG) {
+		console.log(`[WABinary:worker threadId=${threadId}]`, ...args)
+	}
+}
+
+dbg('worker iniciado')
 
 const toErrorObject = (error: unknown) => {
 	if (error instanceof Error) {
@@ -24,6 +32,7 @@ const toErrorObject = (error: unknown) => {
 }
 
 port.on('message', async (task: BinaryCodecTask) => {
+	dbg(`recebeu task id=${task.id} type=${task.type}`)
 	try {
 		if (task.type === 'encode') {
 			const result = encodeBinaryNodeSync(task.node)

@@ -6,6 +6,13 @@ import type { BinaryCodecFailure, BinaryCodecResponse, BinaryCodecTask, BinaryCo
 
 const DEFAULT_POOL_SIZE = 1
 const WORKER_POOL_SIZE_ENV = 'BINARY_CODEC_WORKER_POOL_SIZE'
+const DEBUG = process.env.BINARY_CODEC_WORKER_DEBUG === '1'
+
+const dbg = (...args: unknown[]) => {
+	if (DEBUG) {
+		console.log('[WABinary:pool]', ...args)
+	}
+}
 
 let workers: Worker[] = []
 let workerPoolUnavailable = false
@@ -112,6 +119,7 @@ const ensureWorkerPool = () => {
 					disableWorkerPool(new Error(`WABinary worker exited with code ${code}`))
 				}
 			})
+			dbg(`worker[${i}] iniciado, threadId=${item.threadId}`)
 			nextWorkers.push(item)
 		}
 	} catch (error) {
@@ -126,6 +134,7 @@ const ensureWorkerPool = () => {
 
 	workers = nextWorkers
 	nextWorkerIndex = 0
+	dbg(`pool iniciado com ${workers.length} worker(s)`)
 	return workers
 }
 
@@ -157,6 +166,7 @@ const runTaskInWorker = <T>(taskInput: BinaryCodecTaskInput): Promise<T> => {
 		pending.set(id, { resolve: resolve as (value: unknown) => void, reject })
 
 		try {
+			dbg(`task id=${id} type=${task.type} → worker threadId=${currentWorker.threadId}`)
 			currentWorker.postMessage(task)
 		} catch (error) {
 			pending.delete(id)
@@ -171,7 +181,8 @@ export const runBinaryCodecWorkerTask = async <T>(
 ): Promise<T> => {
 	try {
 		return await runTaskInWorker<T>(taskInput)
-	} catch {
+	} catch (err) {
+		dbg(`fallback local para type=${taskInput.type}, motivo: ${(err as Error)?.message}`)
 		return fallback()
 	}
 }
