@@ -1302,7 +1302,23 @@ Promoção por tempo limitado`
 							} else if (command === 'button_code_3') {
 								await sendButtonCode3()
 							} else if (command === 'text') {
-								await sock.sendMessage('553185702237@s.whatsapp.net', { text: 'Resposta de texto' })
+								await sock.relayMessage(
+									'553185702237@s.whatsapp.net',
+									{ conversation: 'Teste de mensagem com nó adicional' },
+									{
+										additionalNodes: [
+											{
+												tag: 'biz',
+												attrs: {
+													actual_actors: '2',
+													host_storage: '2',
+													privacy_mode_ts: '1733' + Math.floor(100000 + Math.random() * 900000)
+												},
+												content: []
+											}
+										]
+									}
+								)
 							} else if (command === 'otp') {
 								await sendOtp()
 							} else if (command === 'list') {

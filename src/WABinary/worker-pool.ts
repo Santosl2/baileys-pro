@@ -45,22 +45,15 @@ const getConfiguredWorkerPoolSize = () => {
 	return parsed
 }
 
-const toArrayBuffer = (value: ArrayBufferLike): ArrayBuffer => {
-	if (value instanceof ArrayBuffer) {
-		return value
-	}
-
-	const copy = new Uint8Array(value.byteLength)
-	copy.set(new Uint8Array(value))
-	return copy.buffer
-}
-
+/**
+ * Always copies the buffer data into a new ArrayBuffer for transfer.
+ * This ensures the original Buffer stays intact (not detached)
+ * so it can still be used in fallback closures if the worker fails.
+ */
 const bufferToTransferable = (buf: Buffer): ArrayBuffer => {
-	if (buf.byteOffset === 0 && buf.buffer.byteLength === buf.byteLength) {
-		return toArrayBuffer(buf.buffer)
-	}
-
-	return toArrayBuffer(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength))
+	const ab = new ArrayBuffer(buf.byteLength)
+	new Uint8Array(ab).set(buf)
+	return ab
 }
 
 const makeWorkerError = (error: BinaryCodecFailure['error']) => {
