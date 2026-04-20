@@ -142,6 +142,29 @@ export const decodeDecompressedBinaryNodeLocal = (
 		}
 	}
 
+	const readFbJid = () => {
+		const user = readString(readByte()!)
+		const device = readInt(2)
+		const server = readString(readByte()!)
+		return `${user}:${device}@${server}`
+	}
+
+	const readInteropJid = () => {
+		const user = readString(readByte()!)
+		const device = readInt(2)
+		const integrator = readInt(2)
+
+		let server = 'interop'
+		const beforeServer = indexRef.index
+		try {
+			server = readString(readByte()!)
+		} catch (err) {
+			indexRef.index = beforeServer
+		}
+
+		return `${integrator}-${user}:${device}@${server}`
+	}
+
 	const readJidPair = () => {
 		const i = readString(readByte())
 		const j = readString(readByte())
@@ -183,6 +206,10 @@ export const decodeDecompressedBinaryNodeLocal = (
 				return readStringFromChars(readInt(4))
 			case TAGS.JID_PAIR:
 				return readJidPair()
+			case TAGS.FB_JID:
+				return readFbJid()
+			case TAGS.INTEROP_JID:
+				return readInteropJid()
 			case TAGS.AD_JID:
 				return readAdJid()
 			case TAGS.HEX_8:

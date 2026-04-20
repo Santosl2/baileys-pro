@@ -92,6 +92,28 @@ const onWorkerMessage = (message: BinaryCodecResponse) => {
 		return
 	}
 
+	function convertUint8ArrayToBufferInPlace(obj) {
+		if (Array.isArray(obj)) {
+			for (let i = 0; i < obj.length; i++) {
+				if (obj[i] instanceof Uint8Array) {
+					obj[i] = Buffer.from(obj[i])
+				} else if (obj[i] !== null && typeof obj[i] === 'object') {
+					convertUint8ArrayToBufferInPlace(obj[i])
+				}
+			}
+		} else if (obj !== null && typeof obj === 'object') {
+			for (const key of Object.keys(obj)) {
+				if (obj[key] instanceof Uint8Array) {
+					obj[key] = Buffer.from(obj[key])
+				} else if (obj[key] !== null && typeof obj[key] === 'object') {
+					convertUint8ArrayToBufferInPlace(obj[key])
+				}
+			}
+		}
+	}
+
+	convertUint8ArrayToBufferInPlace(message.result)
+
 	task.resolve(message.result)
 }
 
