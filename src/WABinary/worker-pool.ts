@@ -50,10 +50,13 @@ const getConfiguredWorkerPoolSize = () => {
  * This ensures the original Buffer stays intact (not detached)
  * so it can still be used in fallback closures if the worker fails.
  */
-const bufferToTransferable = (buf: Buffer): ArrayBuffer => {
-	const ab = new ArrayBuffer(buf.byteLength)
-	new Uint8Array(ab).set(buf)
-	return ab
+const bufferToTransferable = (buffer: Buffer): any => {
+	if (buffer.byteOffset === 0 && buffer.byteLength === buffer.buffer.byteLength) {
+		// no extra bytes, return the ArrayBuffer
+		return buffer.buffer
+	}
+
+	return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength)
 }
 
 const makeWorkerError = (error: BinaryCodecFailure['error']) => {

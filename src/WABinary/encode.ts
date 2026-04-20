@@ -9,6 +9,7 @@ export const encodeBinaryNodeSync = (
 	buffer: number[] = [0]
 ): Buffer => {
 	const encoded = encodeBinaryNodeInner(node, opts, buffer)
+	console.log('encoded:', encoded)
 	return Buffer.from(encoded)
 }
 

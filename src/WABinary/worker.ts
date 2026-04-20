@@ -26,12 +26,12 @@ const toArrayBuffer = (value: ArrayBufferLike): ArrayBuffer => {
 	return copy.buffer
 }
 
-const bufferToTransferable = (buf: Buffer): ArrayBuffer => {
+const bufferToTransferable = (buf: Buffer): any => {
 	if (buf.byteOffset === 0 && buf.buffer.byteLength === buf.byteLength) {
-		return toArrayBuffer(buf.buffer)
+		return buf.buffer
 	}
 
-	return toArrayBuffer(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength))
+	return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength)
 }
 
 dbg('worker iniciado')
@@ -54,6 +54,7 @@ port.on('message', async (task: BinaryCodecTask) => {
 	try {
 		if (task.type === 'encode') {
 			const result = encodeBinaryNodeSync(task.node)
+
 			const responseResult = bufferToTransferable(result)
 			const response: BinaryCodecResponse = { id: task.id, type: 'encode', result: responseResult }
 			port.postMessage(response, [responseResult])
