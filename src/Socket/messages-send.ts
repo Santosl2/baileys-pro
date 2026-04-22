@@ -1,5 +1,6 @@
 import NodeCache from '@cacheable/node-cache'
 import { Boom } from '@hapi/boom'
+import pLimit from 'p-limit'
 import { proto } from '../../WAProto'
 import { DEFAULT_CACHE_TTLS, WA_DEFAULT_EPHEMERAL } from '../Defaults'
 import {
@@ -418,26 +419,31 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 			}
 		}
 
-		const encPromises = patched.map(async patchedMessageWithJid => {
-			const { recipientJid: jid } = patchedMessageWithJid
+		// Proccess 50 encryptions at a time to avoid overloading the system when there are many participants - this can be optimized further by grouping participants with same devices and encrypting once per group of devices instead of once per participant
+		const limit = patched.length > 150 ? pLimit(50) : (fn: () => Promise<any>) => fn()
 
-			if (!jid) {
-				return null
-			}
+		const encPromises = patched.map(async patchedMessageWithJid =>
+			limit(async () => {
+				const { recipientJid: jid } = patchedMessageWithJid
 
-			try {
-				return await generateNode(jid)
-			} catch (error) {
-				logger.error({ jid, trace: error?.stack }, 'failed to encrypt message for participant')
-
-				if (error?.message?.includes('No session') || error?.stack?.includes('No session')) {
-					logger.warn({ jid }, 'fetching new session for participant and retrying encryption')
-					return await assertSessionWithNodeRetry(jid)
+				if (!jid) {
+					return null
 				}
 
-				return null
-			}
-		})
+				try {
+					return await generateNode(jid)
+				} catch (error) {
+					logger.error({ jid, trace: error?.stack }, 'failed to encrypt message for participant')
+
+					if (error?.message?.includes('No session') || error?.stack?.includes('No session')) {
+						logger.warn({ jid }, 'fetching new session for participant and retrying encryption')
+						return await assertSessionWithNodeRetry(jid)
+					}
+
+					return null
+				}
+			})
+		)
 
 		if (encPromises.length > 15) {
 			logger.warn(
