@@ -371,7 +371,6 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 	}
 
 	const createParticipantNodes = async (jids: string[], message: proto.IMessage, extraAttrs?: BinaryNode['attrs']) => {
-		const startedTime = performance.now()
 		let patched = await patchMessageBeforeSending(message, jids)
 
 		if (!Array.isArray(patched)) {
@@ -419,8 +418,8 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 			}
 		}
 
-		// Proccess 50 encryptions at a time to avoid overloading the system when there are many participants - this can be optimized further by grouping participants with same devices and encrypting once per group of devices instead of once per participant
-		const limit = patched.length > 150 ? pLimit(50) : (fn: () => Promise<any>) => fn()
+		// Process 50 encryptions at a time to avoid overloading the system when there are many participants - this can be optimized further by grouping participants with same devices and encrypting once per group of devices instead of once per participant
+		const limit = patched.length > 150 ? pLimit(50) : (fn: () => Promise<BinaryNode | null>) => fn()
 
 		const encPromises = patched.map(async patchedMessageWithJid =>
 			limit(async () => {
@@ -452,15 +451,6 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		}
 
 		const nodes = (await Promise.all(encPromises)).filter(node => node !== null)
-
-		const endTime = performance.now()
-
-		if (endTime - startedTime > 2000) {
-			logger.warn(
-				{ duration: endTime - startedTime },
-				`encryption took too long for all participants, consider optimizing this function if you have many participants. ${encPromises.length} - ${endTime - startedTime} participants were being encrypted`
-			)
-		}
 
 		if (jids.length > 0 && nodes.length === 0) {
 			logger.error({ jids }, 'failed to encrypt message for all participants')
