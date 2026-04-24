@@ -493,6 +493,8 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		useUserDevicesCache = useUserDevicesCache !== false
 		useCachedGroupMetadata = useCachedGroupMetadata !== false && !isStatus
 
+		const promises: Promise<any>[] = []
+
 		const relayBaseAttrs: Record<string, string | number | boolean> = {
 			msg_id: msgId,
 			jid,
@@ -737,17 +739,13 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 							content: ciphertext
 						})
 
-						await trackRelayStep('group_store_sender_key_memory', async () => {
-							const promises = [authState.keys.set({ 'sender-key-memory': { [jid]: senderKeyMap } })]
+						promises.push(authState.keys.set({ 'sender-key-memory': { [jid]: senderKeyMap } }) as any)
 
-							if (groupData?.id) {
-								promises.push(groupMetadataCache?.set(jid, groupData))
-							} else {
-								logger.warn({ jid }, 'group metadata not found, cannot cache group data')
-							}
-
-							await Promise.allSettled(promises)
-						})
+						if (groupMetadataCache && groupData?.id) {
+							promises.push(groupMetadataCache.set(jid, groupData))
+						} else {
+							logger.warn({ jid }, 'group metadata not found, cannot cache group data')
+						}
 					} else if (!isRetryResend) {
 						const { user: meUser } = jidDecode(meId)!
 
@@ -947,6 +945,11 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 					logger.debug({ msgId }, `sending message to ${participants.length} devices`)
 
 					await trackRelayStep('send_node', async () => sendNode(stanza))
+					if (promises.length) {
+						await trackRelayStep('group_store_sender_key_memory', async () => {
+							return Promise.allSettled(promises)
+						})
+					}
 				})
 			)
 
