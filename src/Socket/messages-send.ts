@@ -615,6 +615,9 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 										logger.trace({ jid, participants: groupData.participants.length }, 'using cached group metadata')
 									} else if (!isStatus) {
 										groupData = await groupMetadata(jid)
+										if (groupMetadataCache && groupData?.id) {
+											promises.push(groupMetadataCache?.set(jid, groupData))
+										}
 									}
 
 									return groupData
@@ -740,12 +743,6 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 						})
 
 						promises.push(authState.keys.set({ 'sender-key-memory': { [jid]: senderKeyMap } }) as any)
-
-						if (groupMetadataCache && groupData?.id) {
-							promises.push(groupMetadataCache.set(jid, groupData))
-						} else {
-							logger.warn({ jid }, 'group metadata not found, cannot cache group data')
-						}
 					} else if (!isRetryResend) {
 						const { user: meUser } = jidDecode(meId)!
 
