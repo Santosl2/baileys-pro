@@ -292,6 +292,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 	}
 
 	const assertSessions = async (jids: string[], force: boolean) => {
+		const startTime = performance.now()
 		let didFetchNewSession = false
 		let jidsRequiringFetch: string[] = []
 		if (force) {
@@ -305,6 +306,12 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 					jidsRequiringFetch.push(jid)
 				}
 			}
+		}
+
+		if (jidsRequiringFetch.length > 50) {
+			logger.warn(
+				`attempting to assert sessions for a large number of JIDs, this may take a while ${jidsRequiringFetch.length} JIDs`
+			)
 		}
 
 		if (jidsRequiringFetch.length) {
@@ -331,6 +338,15 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 			await parseAndInjectE2ESessions(result, signalRepository)
 
 			didFetchNewSession = true
+		}
+
+		const endTime = performance.now()
+
+		if (endTime - startTime > 2000) {
+			logger.warn(
+				{ duration: endTime - startTime, count: jidsRequiringFetch.length },
+				`asserting sessions for ${jidsRequiringFetch.length} JIDs took ${endTime - startTime}ms, consider optimizing this function if you have many JIDs`
+			)
 		}
 
 		return didFetchNewSession
@@ -439,12 +455,6 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				return null
 			}
 		})
-
-		if (encPromises.length > 15) {
-			logger.warn(
-				`attempting to encrypt message for a large number of participants, this may take a while ${encPromises.length} participants`
-			)
-		}
 
 		const nodes = (await Promise.all(encPromises)).filter(node => node !== null)
 
@@ -760,18 +770,9 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 								)
 							}
 
-							const generateNodesTime = performance.now()
 							const result = await trackRelayStep('group_create_participant_nodes', async () =>
 								createParticipantNodes(senderKeyJids, senderKeyMsg, extraAttrs)
 							)
-							const generateNodesDuration = performance.now() - generateNodesTime
-
-							if (generateNodesDuration > 1000) {
-								logger.warn(
-									{ duration: generateNodesDuration, count: senderKeyJids.length },
-									`generating participant nodes for sender key distribution took ${generateNodesDuration}ms, consider optimizing this function if you have many participants`
-								)
-							}
 
 							shouldIncludeDeviceIdentity = shouldIncludeDeviceIdentity || result.shouldIncludeDeviceIdentity
 
