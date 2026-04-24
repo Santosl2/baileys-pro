@@ -104,6 +104,7 @@ const onWorkerMessage = (message: BinaryCodecResponse) => {
 }
 
 const terminateAllWorkers = () => {
+	console.log(`[Baileys][worker-pool] Finishing all workers in the pool ${workers.length} worker(s)`)
 	for (const item of workers) {
 		item.terminate().catch(() => undefined)
 	}
@@ -135,6 +136,7 @@ const ensureWorkerPool = () => {
 	const nextWorkers: Worker[] = []
 
 	try {
+		console.log(`[Baileys][worker-pool] Loading ${poolSize} worker(s)`)
 		for (let i = 0; i < poolSize; i++) {
 			const item = new Worker(getWorkerPath())
 			item.on('message', onWorkerMessage)
