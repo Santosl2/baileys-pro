@@ -1,8 +1,8 @@
 import { existsSync } from 'fs'
 import { join } from 'path'
 import { Worker } from 'worker_threads'
-import type { BinaryNode } from './types'
 import type { BinaryCodecFailure, BinaryCodecResponse, BinaryCodecTask, BinaryCodecTaskInput } from './worker-types'
+import { bufferToTransferable } from './worker-utils'
 
 const DEFAULT_POOL_SIZE = 1
 const WORKER_POOL_SIZE_ENV = 'BINARY_CODEC_WORKER_POOL_SIZE'
@@ -43,15 +43,6 @@ const getConfiguredWorkerPoolSize = () => {
 	}
 
 	return parsed
-}
-
-const bufferToTransferable = (buffer: Buffer): any => {
-	if (buffer.byteOffset === 0 && buffer.byteLength === buffer.buffer.byteLength) {
-		// no extra bytes, return the ArrayBuffer
-		return buffer.buffer
-	}
-
-	return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength)
 }
 
 const makeWorkerError = (error: BinaryCodecFailure['error']) => {
@@ -233,14 +224,7 @@ export const runBinaryCodecWorkerTask = async <T>(
 		return await runTaskInWorker<T>(taskInput)
 	} catch (err) {
 		dbg(`fallback local para type=${taskInput.type}, motivo: ${(err as Error)?.message}`)
+		console.error(err)
 		return fallback()
 	}
-}
-
-export const encodeBinaryNodeInWorker = (node: BinaryNode) => {
-	return runTaskInWorker<Buffer>({ type: 'encode', node })
-}
-
-export const decodeBinaryNodeInWorker = (buffer: Buffer) => {
-	return runTaskInWorker<BinaryNode>({ type: 'decode', buffer })
 }
