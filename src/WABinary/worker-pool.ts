@@ -45,11 +45,6 @@ const getConfiguredWorkerPoolSize = () => {
 	return parsed
 }
 
-/**
- * Always copies the buffer data into a new ArrayBuffer for transfer.
- * This ensures the original Buffer stays intact (not detached)
- * so it can still be used in fallback closures if the worker fails.
- */
 const bufferToTransferable = (buffer: Buffer): any => {
 	if (buffer.byteOffset === 0 && buffer.byteLength === buffer.buffer.byteLength) {
 		// no extra bytes, return the ArrayBuffer
@@ -96,7 +91,7 @@ const onWorkerMessage = (message: BinaryCodecResponse) => {
 		if (Array.isArray(obj)) {
 			for (let i = 0; i < obj.length; i++) {
 				if (obj[i] instanceof Uint8Array) {
-					obj[i] = Buffer.from(obj[i])
+					obj[i] = Buffer.from(obj[i].buffer, obj[i].byteOffset, obj[i].byteLength)
 				} else if (obj[i] !== null && typeof obj[i] === 'object') {
 					convertUint8ArrayToBufferInPlace(obj[i])
 				}
@@ -104,7 +99,7 @@ const onWorkerMessage = (message: BinaryCodecResponse) => {
 		} else if (obj !== null && typeof obj === 'object') {
 			for (const key of Object.keys(obj)) {
 				if (obj[key] instanceof Uint8Array) {
-					obj[key] = Buffer.from(obj[key])
+					obj[key] = Buffer.from(obj[key].buffer, obj[key].byteOffset, obj[key].byteLength)
 				} else if (obj[key] !== null && typeof obj[key] === 'object') {
 					convertUint8ArrayToBufferInPlace(obj[key])
 				}
