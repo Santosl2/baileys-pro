@@ -249,17 +249,8 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 
 		const query = new USyncQuery().withContext('message').withDeviceProtocol()
 
-		const CHUNK_SIZE = 500
-		for (let i = 0; i < toFetch.length; i += CHUNK_SIZE) {
-			const chunk = toFetch.slice(i, i + CHUNK_SIZE)
-
-			for (const jid of chunk) {
-				query.withUser(new USyncUser().withId(jid))
-			}
-
-			if (i + CHUNK_SIZE < toFetch.length) {
-				await new Promise<void>(r => setImmediate(r))
-			}
+		for (const jid of toFetch) {
+			query.withUser(new USyncUser().withId(jid))
 		}
 
 		const result = await sock.executeUSyncQuery(query)
