@@ -203,38 +203,37 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		}
 
 		const toFetch: string[] = []
-		jids = Array.from(new Set(jids))
+		const uniqueJids = Array.from(new Set(jids))
 
-		const jidsWithOnlyUser = jids.map(jid => jidDecode(jid)?.user).filter(Boolean) as string[]
+		const decoded = uniqueJids.map(jid => ({
+			jid,
+			user: jidDecode(jid)?.user
+		}))
 
 		if (userDevicesCache.mget) {
-			// if the cache supports mget, we can fetch all devices in one go
-			const cachedDevices = await userDevicesCache.mget<JidWithDevice[]>([...jids, ...jidsWithOnlyUser])
-			for (const jid of jids) {
-				const user = jidDecode(jid)?.user
-				if (cachedDevices[jid] || cachedDevices[user!]) {
-					deviceResults.push(...(cachedDevices[jid] || cachedDevices[user!]))
+			const keys = decoded.flatMap(({ jid, user }) => (user ? [jid, user] : [jid]))
+			const cachedDevices = useCache ? await userDevicesCache.mget<JidWithDevice[]>(keys) : {}
+			for (const { jid, user } of decoded) {
+				const hit = cachedDevices[jid] ?? (user ? cachedDevices[user] : undefined)
+				if (hit) {
+					deviceResults.push(...hit)
 					logger.trace({ user }, 'using cache for devices')
 				} else {
 					toFetch.push(jid)
 				}
 			}
 		} else {
-			for (let jid of jids) {
-				const user = jidDecode(jid)?.user
-				jid = jidNormalizedUser(jid)
-				if (useCache) {
-					const devices = userDevicesCache.get<JidWithDevice[]>(user!)
+			for (const { jid, user } of decoded) {
+				if (useCache && user) {
+					const devices = userDevicesCache.get<JidWithDevice[]>(user)
 					if (devices) {
 						deviceResults.push(...devices)
-
 						logger.trace({ user }, 'using cache for devices')
-					} else {
-						toFetch.push(jid)
+						continue
 					}
-				} else {
-					toFetch.push(jid)
 				}
+
+				toFetch.push(jid)
 			}
 		}
 
@@ -250,12 +249,20 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 
 		const query = new USyncQuery().withContext('message').withDeviceProtocol()
 
-		for (const jid of toFetch) {
-			query.withUser(new USyncUser().withId(jid))
+		const CHUNK_SIZE = 500
+		for (let i = 0; i < toFetch.length; i += CHUNK_SIZE) {
+			const chunk = toFetch.slice(i, i + CHUNK_SIZE)
+
+			for (const jid of chunk) {
+				query.withUser(new USyncUser().withId(jid))
+			}
+
+			if (i + CHUNK_SIZE < toFetch.length) {
+				await new Promise<void>(r => setImmediate(r))
+			}
 		}
 
 		const result = await sock.executeUSyncQuery(query)
-		const start = performance.now()
 
 		if (result) {
 			const extracted = extractDeviceJids(result?.list, authState.creds.me!.id, ignoreZeroDevices, logger)
@@ -276,15 +283,6 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 					if (deviceMap[key]) userDevicesCache.set(key, deviceMap[key])
 				}
 			}
-		}
-
-		const end = performance.now()
-
-		if (end - start > 1200) {
-			logger.warn(
-				{ duration: end - start, count: toFetch.length },
-				`fetching devices for ${toFetch.length} JIDs took ${end - start}ms, consider optimizing this function if you have many devices`
-			)
 		}
 
 		return deviceResults
@@ -661,9 +659,17 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 								}
 							}
 
+							const startFetchDevicesTime = performance.now()
 							const additionalDevices = await trackRelayStep('group_fetch_devices', async () =>
 								getUSyncDevices(participantsList, !!useUserDevicesCache, false)
 							)
+
+							if (performance.now() - startFetchDevicesTime > 2000) {
+								logger.warn(
+									`Fetching devices for group ${destinationJid} took longer than expected: ${performance.now() - startFetchDevicesTime}ms - ${additionalDevices.length} devices fetched for ${participantsList.length} participants, consider optimizing this function if you have many participants or devices`
+								)
+							}
+
 							devices.push(...additionalDevices)
 						}
 

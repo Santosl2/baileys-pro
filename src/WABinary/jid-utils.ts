@@ -23,22 +23,28 @@ export const jidEncode = (user: string | number | null, server: JidServer, devic
 }
 
 export const jidDecode = (jid: string | undefined): FullJid | undefined => {
-	const sepIdx = typeof jid === 'string' ? jid.indexOf('@') : -1
-	if (sepIdx < 0) {
-		return undefined
-	}
+	if (typeof jid !== 'string') return undefined
 
-	const server = jid!.slice(sepIdx + 1)
-	const userCombined = jid!.slice(0, sepIdx)
+	const atIdx = jid.indexOf('@')
+	if (atIdx < 0) return undefined
 
-	const [userAgent, device] = userCombined.split(':')
-	const user = userAgent.split('_')[0]
+	const server = jid.slice(atIdx + 1)
+
+	const user = jid.slice(0, atIdx)
+	// Procura ':' apenas dentro da parte antes do '@'
+	const colonIdx = user.indexOf(':')
+	const hasDevice = colonIdx >= 0 && colonIdx < atIdx
+
+	// Procura '_' apenas antes de ':' (ou '@' se não houver device)
+	const boundIdx = hasDevice ? colonIdx : atIdx
+	const underscoreIdx = user.indexOf('_')
+	const userEnd = underscoreIdx >= 0 && underscoreIdx < boundIdx ? underscoreIdx : boundIdx
 
 	return {
 		server: server as JidServer,
-		user,
+		user: jid.slice(0, userEnd),
 		domainType: server === 'lid' ? 1 : 0,
-		device: device ? +device : undefined
+		device: hasDevice ? +jid.slice(colonIdx + 1, atIdx) : undefined
 	}
 }
 
