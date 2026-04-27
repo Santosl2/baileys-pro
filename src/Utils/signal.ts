@@ -119,11 +119,16 @@ export const parseAndInjectE2ESessions = async (node: BinaryNode, repository: Si
 	}
 }
 
-export const extractDeviceJids = (result: USyncQueryResultList[], myJid: string, excludeZeroDevices: boolean) => {
+export const extractDeviceJids = (
+	result: USyncQueryResultList[],
+	myJid: string,
+	excludeZeroDevices: boolean,
+	deviceResults: JidWithDevice[] = []
+) => {
 	const { user: myUser, device: myDevice } = jidDecode(myJid)!
 
-	const extracted: JidWithDevice[] = []
-	const deviceMap: { [_: string]: JidWithDevice[] } = {}
+	// Map em vez de plain object: sem prototype chain, lookup O(1) real
+	const deviceMap = new Map<string, JidWithDevice[]>()
 
 	for (const userResult of result) {
 		const { devices, id } = userResult as { devices: ParsedDeviceInfo; id: string }
@@ -133,25 +138,28 @@ export const extractDeviceJids = (result: USyncQueryResultList[], myJid: string,
 		if (Array.isArray(deviceList)) {
 			for (const { id: device, keyIndex } of deviceList) {
 				if (
-					(!excludeZeroDevices || device !== 0) && // if zero devices are not-excluded, or device is non zero
-					(myUser !== user || myDevice !== device) && // either different user or if me user, not this device
-					(device === 0 || !!keyIndex) // ensure that "key-index" is specified for "non-zero" devices, produces a bad req otherwise
+					(!excludeZeroDevices || device !== 0) &&
+					(myUser !== user || myDevice !== device) &&
+					(device === 0 || !!keyIndex)
 				) {
-					const item = { user, device, server }
-					extracted.push(item)
+					const item: JidWithDevice = { user, device, server }
 
+					let userDevices = deviceMap.get(user)
 					// eslint-disable-next-line max-depth
-					if (!deviceMap[user]) {
-						deviceMap[user] = []
+					if (!userDevices) {
+						userDevices = []
+						deviceMap.set(user, userDevices)
 					}
 
-					deviceMap[user].push(item)
+					userDevices.push(item)
+					deviceResults.push(item) // mesmo objeto, sem cópia
 				}
 			}
 		}
 	}
 
-	return { extracted, deviceMap }
+	// extracted removido — nunca era usado pelo caller
+	return { deviceMap }
 }
 
 /**

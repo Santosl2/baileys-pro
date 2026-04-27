@@ -256,17 +256,17 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 
 		const result = await sock.executeUSyncQuery(query)
 
+		// Caller — itera o Map diretamente, sem Object.entries()
 		if (result) {
-			const { deviceMap } = extractDeviceJids(result?.list, authState.creds.me!.id, ignoreZeroDevices)
+			const { deviceMap } = extractDeviceJids(result.list, authState.creds.me!.id, ignoreZeroDevices, deviceResults)
 
-			// if the cache supports mset, we can set all devices in one go
-			// fire and forget since it's not critical to set these in the cache before sending messages, and it can be done in parallel
 			if (userDevicesCache.mset) {
-				userDevicesCache.mset(Object.entries(deviceMap).map(([key, value]) => ({ key, value })))
+				userDevicesCache.mset(Array.from(deviceMap, ([key, value]) => ({ key, value })))
 			} else {
-				for (const key in deviceMap) {
-					if (deviceMap[key]) userDevicesCache.set(key, deviceMap[key])
-				}
+				// Map.forEach é mais eficiente que for..in em plain object
+				deviceMap.forEach((value, key) => {
+					userDevicesCache.set(key, value)
+				})
 			}
 		}
 
