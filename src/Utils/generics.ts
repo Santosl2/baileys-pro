@@ -40,18 +40,23 @@ export const getPlatformId = (browser: string) => {
 	return platformType ? platformType.toString() : '1' //chrome
 }
 
+const BUFFER_PREFIX = 'b64:'
+
 export const BufferJSON = {
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	replacer: (k, value: any) => {
+	replacer: (_k: string, value: any) => {
 		if (Buffer.isBuffer(value) || value instanceof Uint8Array || value?.type === 'Buffer') {
-			return { type: 'Buffer', data: Buffer.from(value?.data || value).toString('base64') }
+			return BUFFER_PREFIX + Buffer.from(value?.data || value).toString('base64')
 		}
 
 		return value
 	},
+	reviver: (_k: string, value: any) => {
+		// novo formato: string prefixada
+		if (typeof value === 'string' && value.startsWith(BUFFER_PREFIX)) {
+			return Buffer.from(value.slice(BUFFER_PREFIX.length), 'base64')
+		}
 
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	reviver: (_, value: any) => {
+		// formato legado do Baileys: { type: 'Buffer', data } ou { buffer: true }
 		if (typeof value === 'object' && !!value && (value.buffer === true || value.type === 'Buffer')) {
 			const val = value.data || value.value
 			return typeof val === 'string' ? Buffer.from(val, 'base64') : Buffer.from(val || [])
