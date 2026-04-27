@@ -106,7 +106,7 @@ export function makeCacheableSignalKeyStore(
 						return undefined as any
 					})
 					.filter(Boolean)
-				await cache.mset?.(insertItems)
+				await cacheMset(insertItems)
 			}
 
 			return data

@@ -23,7 +23,6 @@ import {
 import { DeviceListData, ParsedDeviceInfo, USyncQueryResultList } from '../WAUSync'
 import { Curve, generateSignalPubKey } from './crypto'
 import { encodeBigEndian } from './generics'
-import { ILogger } from './logger'
 
 export const createSignalIdentity = (wid: string, accountSignatureKey: Uint8Array): SignalIdentity => {
 	return {
@@ -120,21 +119,17 @@ export const parseAndInjectE2ESessions = async (node: BinaryNode, repository: Si
 	}
 }
 
-export const extractDeviceJids = (
-	result: USyncQueryResultList[],
-	myJid: string,
-	excludeZeroDevices: boolean,
-	logger?: ILogger
-) => {
-	const start = performance.now()
+export const extractDeviceJids = (result: USyncQueryResultList[], myJid: string, excludeZeroDevices: boolean) => {
 	const { user: myUser, device: myDevice } = jidDecode(myJid)!
 
 	const extracted: JidWithDevice[] = []
+	const deviceMap: { [_: string]: JidWithDevice[] } = {}
 
 	for (const userResult of result) {
 		const { devices, id } = userResult as { devices: ParsedDeviceInfo; id: string }
 		const { user, server } = jidDecode(id)!
 		const deviceList = devices?.deviceList as DeviceListData[]
+
 		if (Array.isArray(deviceList)) {
 			for (const { id: device, keyIndex } of deviceList) {
 				if (
@@ -142,28 +137,21 @@ export const extractDeviceJids = (
 					(myUser !== user || myDevice !== device) && // either different user or if me user, not this device
 					(device === 0 || !!keyIndex) // ensure that "key-index" is specified for "non-zero" devices, produces a bad req otherwise
 				) {
-					extracted.push({ user, device, server })
+					const item = { user, device, server }
+					extracted.push(item)
+
+					// eslint-disable-next-line max-depth
+					if (!deviceMap[user]) {
+						deviceMap[user] = []
+					}
+
+					deviceMap[user].push(item)
 				}
 			}
 		}
 	}
 
-	const end = performance.now()
-
-	if (end - start > 1000) {
-		if (logger) {
-			logger.error(
-				{ duration: end - start, count: result.length },
-				`Extracting device JIDs took ${end - start}ms, consider optimizing this function if you have many devices`
-			)
-		} else {
-			console.warn(
-				`Extracting device JIDs took ${end - start}ms, consider optimizing this function if you have many devices`
-			)
-		}
-	}
-
-	return extracted
+	return { extracted, deviceMap }
 }
 
 /**
