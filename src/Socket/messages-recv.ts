@@ -234,28 +234,28 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 
 		const { account, signedPreKey, signedIdentityKey: identityKey } = authState.creds
 
-		const fromId = isJidGroup(fromJid) ? node.attrs.participant : fromJid
+		const fromJidCorrect = isJidGroup(fromJid) ? node.attrs.participant : fromJid
 
-		let shouldRecreateSession = (await signalRepository.validateSession(fromId || fromJid)).exists !== true
+		let shouldRecreateSession = false
 		let recreateReason = ''
 
 		if (enableAutoSessionRecreation && messageRetryManager && retryCount > 1) {
 			try {
 				// Check if we have a session with this JID
-				const sessionId = signalRepository.jidToSignalProtocolAddress(fromJid)
-				const hasSession = await signalRepository.validateSession(fromJid)
-				const result = messageRetryManager.shouldRecreateSession(fromJid, hasSession.exists)
+				const sessionId = signalRepository.jidToSignalProtocolAddress(fromJidCorrect)
+				const hasSession = await signalRepository.validateSession(fromJidCorrect)
+				const result = messageRetryManager.shouldRecreateSession(fromJidCorrect, hasSession.exists)
 				shouldRecreateSession = result.recreate
 				recreateReason = result.reason
 
 				if (shouldRecreateSession) {
-					logger.debug({ fromJid, retryCount, reason: recreateReason }, 'recreating session for retry')
+					logger.debug({ fromJidCorrect, retryCount, reason: recreateReason }, 'recreating session for retry')
 					// Delete existing session to force recreation
 					await authState.keys.set({ session: { [sessionId]: null } })
 					forceIncludeKeys = true
 				}
 			} catch (error) {
-				logger.warn({ error, fromJid }, 'failed to check session recreation')
+				logger.warn({ error, fromJidCorrect }, 'failed to check session recreation')
 			}
 		}
 
@@ -856,12 +856,13 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 
 		logger.debug({ participant, sendToAll }, 'forced new session for retry recp')
 
-		// For group retries targeting a specific participant (not send-to-all),
-		// the message gets re-encrypted pairwise — the SKDM is NOT included automatically.
-		// Generate a fresh one and embed it so the receiver can update their sender key state.
-		// Mirrors whatsmeow's handleRetryReceipt: builder.Create(senderName) before re-encrypting.
+		// For group retries, always embed a fresh SKDM so the receiver can update their
+		// sender key state. This is required for both targeted (pairwise) and broadcast
+		// (send-to-all) retries — the SKDM is NOT included automatically by the encryption
+		// pipeline. Mirrors whatsmeow's handleRetryReceipt: builder.Create(senderName) is
+		// called unconditionally before re-encrypting.
 		let freshSkdm: Uint8Array | undefined
-		if (isJidGroup(remoteJid) && !sendToAll) {
+		if (isJidGroup(remoteJid)) {
 			try {
 				freshSkdm = await signalRepository.createSenderKeyDistributionMessage({
 					group: remoteJid,
