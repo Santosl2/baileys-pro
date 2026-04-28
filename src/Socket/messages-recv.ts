@@ -37,7 +37,6 @@ import {
 	encodeBigEndian,
 	encodeSignedDeviceIdentity,
 	generateParticipantHashV2,
-	generateSignalPubKey,
 	getCallStatusFromNode,
 	getHistoryMsg,
 	getNextPreKeys,
@@ -62,7 +61,6 @@ import {
 	getBinaryNodeChildBuffer,
 	getBinaryNodeChildren,
 	getBinaryNodeChildString,
-	getBinaryNodeChildUInt,
 	isJidGroup,
 	isJidNewsletter,
 	isJidStatusBroadcast,
@@ -782,34 +780,34 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		}
 
 		logger.warn({ jid }, 'keys node present in retry receipt, attempting session injection from prekey bundle')
-		return
-		const signedKeyNode = getBinaryNodeChild(keysNode, 'skey')!
-		const preKeyNode = getBinaryNodeChild(keysNode, 'key')!
-		const identity = getBinaryNodeChildBuffer(keysNode, 'identity')!
-		const registrationId = getBinaryNodeChildUInt(receiptNode, 'registration', 4)
+		return false
+		// const signedKeyNode = getBinaryNodeChild(keysNode, 'skey')!
+		// const preKeyNode = getBinaryNodeChild(keysNode, 'key')!
+		// const identity = getBinaryNodeChildBuffer(keysNode, 'identity')!
+		// const registrationId = getBinaryNodeChildUInt(receiptNode, 'registration', 4)
 
-		if (!signedKeyNode || !preKeyNode || !identity || !registrationId) {
-			return false
-		}
+		// if (!signedKeyNode || !preKeyNode || !identity || !registrationId) {
+		// 	return false
+		// }
 
-		await signalRepository.injectE2ESession({
-			jid,
-			session: {
-				registrationId,
-				identityKey: generateSignalPubKey(identity),
-				signedPreKey: {
-					keyId: getBinaryNodeChildUInt(signedKeyNode, 'id', 3)!,
-					publicKey: generateSignalPubKey(getBinaryNodeChildBuffer(signedKeyNode, 'value')!),
-					signature: getBinaryNodeChildBuffer(signedKeyNode, 'signature')!
-				},
-				preKey: {
-					keyId: getBinaryNodeChildUInt(preKeyNode, 'id', 3)!,
-					publicKey: generateSignalPubKey(getBinaryNodeChildBuffer(preKeyNode, 'value')!)
-				}
-			}
-		})
+		// await signalRepository.injectE2ESession({
+		// 	jid,
+		// 	session: {
+		// 		registrationId,
+		// 		identityKey: generateSignalPubKey(identity),
+		// 		signedPreKey: {
+		// 			keyId: getBinaryNodeChildUInt(signedKeyNode, 'id', 3)!,
+		// 			publicKey: generateSignalPubKey(getBinaryNodeChildBuffer(signedKeyNode, 'value')!),
+		// 			signature: getBinaryNodeChildBuffer(signedKeyNode, 'signature')!
+		// 		},
+		// 		preKey: {
+		// 			keyId: getBinaryNodeChildUInt(preKeyNode, 'id', 3)!,
+		// 			publicKey: generateSignalPubKey(getBinaryNodeChildBuffer(preKeyNode, 'value')!)
+		// 		}
+		// 	}
+		// })
 
-		return true
+		// return true
 	}
 
 	const sendMessagesAgain = async (
