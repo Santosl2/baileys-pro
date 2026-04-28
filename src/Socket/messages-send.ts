@@ -287,10 +287,9 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		} else {
 			const addrs = jids.map(jid => signalRepository.jidToSignalProtocolAddress(jid))
 			const sessions = await authState.keys.get('session', addrs)
-			for (const jid of jids) {
-				const signalId = signalRepository.jidToSignalProtocolAddress(jid)
-				if (!sessions[signalId]) {
-					jidsRequiringFetch.push(jid)
+			for (let i = 0; i < jids.length; i++) {
+				if (!sessions[addrs[i]]) {
+					jidsRequiringFetch.push(jids[i])
 				}
 			}
 		}
