@@ -3,6 +3,6 @@ POST http://localhost:3101/send-message
 Content-Type: application/json
 
 {
-  "jid": "120363417393533025@g.us",
+  "jid": "120363409042946774@g.us",
   "message": "fdsfs!"
 }

@@ -23,7 +23,11 @@ import makeWASocket, {
 //import MAIN_LOGGER from '../src/Utils/logger'
 import fs from 'fs'
 import P from 'pino'
+import http from 'http'
+import { appendFile } from 'fs/promises'
+import { Mutex } from 'async-mutex'
 
+let bot: ReturnType<typeof makeWASocket> | undefined
 const logger = P({ timestamp: () => `,"time":"${new Date().toJSON()}"` }, P.destination('./wa-logs.txt'))
 logger.level = 'info'
 
@@ -37,6 +41,7 @@ const msgRetryCounterCache = new NodeCache()
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
 const question = (text: string) => new Promise<string>(resolve => rl.question(text, resolve))
 
+const mutex = new Mutex()
 // start a connection
 const startSock = async () => {
 	const { state, saveCreds } = await useMultiFileAuthState('baileys_auth_info')
@@ -47,8 +52,8 @@ const startSock = async () => {
 	const sock = makeWASocket({
 		version,
 		// logger: P({ level: 'silent' }),
-		// logger,
-		logger: P({ level: 'info' }),
+		logger,
+		// logger: P({ level: 'info' }),
 		auth: {
 			creds: state.creds,
 			/** caching makes the store faster to send/recv messages */
@@ -89,13 +94,10 @@ const startSock = async () => {
 				}
 
 				if (connection === 'open') {
+					bot = sock // for easy access in console
 				}
 			}
 
-			sock.ws.on('CB:message', data => {
-				// Usado para debugar novas features
-				// console.log('CB:message', JSON.stringify(data, null, 2))
-			})
 
 			// credentials updated -- save them
 			if (events['creds.update']) {
@@ -117,6 +119,7 @@ const startSock = async () => {
 			// received a new message
 			if (events['messages.upsert']) {
 				const upsert = events['messages.upsert']
+				console.log('recv messages.upsert', JSON.stringify(upsert, undefined, 2))
 
 				if (upsert.type === 'notify') {
 					for (const msg of upsert.messages) {
@@ -125,18 +128,23 @@ const startSock = async () => {
 							//
 
 							if (command === 'resend') {
-								const j = '120363417393533025@g.us'
+								const j = '120363401876317584@g.us'
 								await sock.presenceSubscribe(j)
 								await sock.sendPresenceUpdate('composing', j)
 								await delay(1000)
 								await sock.sendPresenceUpdate('paused', j)
 								await sock.sendMessage(j, {
 									image: {
-										url: 'https://files.tecnoblog.net/wp-content/uploads/2020/03/google-imagens.jpg'
+										url: 'https://m.media-amazon.com/images/I/415W9dedoGL.jpg'
 									},
-									caption: `https://s.shopee.com.br/50MIbLk5HS
+									caption: `*SUPER PROMOÇÃO* 😮‍💨
 
-https://s.shopee.com.br/50NKr1ZF80`
+🎁 Supercoffee Lingua de Gato - Economic Size (380g) - Caffeine Army
+
+~De: N/A~
+✅ *POR:* R$ 197,80
+
+Compre aqui: https://amzn.to/4miOyNJ`
 								})
 							}
 						}
@@ -204,3 +212,56 @@ https://s.shopee.com.br/50NKr1ZF80`
 }
 
 startSock()
+const server = http.createServer(async (req, res) => {
+	if (req.method === 'POST' && req.url === '/logout') {
+		let body = ''
+		req.on('data', chunk => {
+			body += chunk.toString()
+		})
+
+		req.on('end', async () => {
+			try {
+				
+
+				await bot!.logout('idk')
+				res.writeHead(200, { 'Content-Type': 'application/json' })
+				res.end(JSON.stringify({ success: true }))
+			} catch (error) {
+				res.writeHead(500, { 'Content-Type': 'application/json' })
+				res.end(JSON.stringify({ error: 'Failed to send message', details: error.message }))
+			}
+		})
+	}else
+	if (req.method === 'POST' && req.url === '/send-message') {
+		let body = ''
+		req.on('data', chunk => {
+			body += chunk.toString()
+		})
+
+		req.on('end', async () => {
+			try {
+				const { jid, message } = JSON.parse(body)
+
+				if (!jid || !message) {
+					res.writeHead(400, { 'Content-Type': 'application/json' })
+					res.end(JSON.stringify({ error: 'Missing jid or message in request body' }))
+					return
+				}
+
+				await bot!.sendMessage(jid, { text: message })
+				res.writeHead(200, { 'Content-Type': 'application/json' })
+				res.end(JSON.stringify({ success: true }))
+			} catch (error) {
+				res.writeHead(500, { 'Content-Type': 'application/json' })
+				res.end(JSON.stringify({ error: 'Failed to send message', details: error.message }))
+			}
+		})
+	} else {
+		res.writeHead(404, { 'Content-Type': 'application/json' })
+		res.end(JSON.stringify({ error: 'Not Found' }))
+	}
+})
+
+server.listen(3100, () => {
+	console.log('HTTP server running on http://localhost:3100')
+})
