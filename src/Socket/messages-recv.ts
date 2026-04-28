@@ -781,6 +781,8 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 			return false
 		}
 
+		logger.warn({ jid }, 'keys node present in retry receipt, attempting session injection from prekey bundle')
+		return
 		const signedKeyNode = getBinaryNodeChild(keysNode, 'skey')!
 		const preKeyNode = getBinaryNodeChild(keysNode, 'key')!
 		const identity = getBinaryNodeChildBuffer(keysNode, 'identity')!
@@ -826,28 +828,30 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		const sendToAll = !jidDecode(participant)?.device
 		const retryCount = +retryNode.attrs.count
 
-		const injected = await injectSessionFromReceiptKeys(receiptNode, participant)
-		if (injected) {
-			logger.debug({ participant, retryCount }, 'injected session from prekey bundle in retry receipt')
-		} else if (!getBinaryNodeChild(receiptNode, 'keys')) {
-			// keys node was absent
-			logger.warn({ participant, retryCount }, 'keys node absent in retry receipt, falling back to server fetch')
-			await assertSessions([participant], true)
-		} else {
-			// No prekey bundle — only fetch from server when session recreation is needed
-			const sessionCheck = await signalRepository.validateSession(participant)
-			const shouldRecreate = messageRetryManager
-				? messageRetryManager.shouldRecreateSession(participant, sessionCheck.exists).recreate
-				: !sessionCheck.exists
+		injectSessionFromReceiptKeys(receiptNode, participant)
 
-			if (shouldRecreate) {
-				logger.debug(
-					{ participant, retryCount },
-					'fetching prekeys from server for retry resend (no bundle in receipt)'
-				)
-				await assertSessions([participant], true)
+		let shouldRecreateSession = false
+		let recreateReason = ''
+
+		if (enableAutoSessionRecreation && messageRetryManager && retryCount > 1) {
+			try {
+				const sessionId = signalRepository.jidToSignalProtocolAddress(participant)
+
+				const hasSession = await signalRepository.validateSession(participant)
+				const result = messageRetryManager.shouldRecreateSession(participant, hasSession.exists)
+				shouldRecreateSession = result.recreate
+				recreateReason = result.reason
+
+				if (shouldRecreateSession) {
+					logger.debug({ participant, retryCount, reason: recreateReason }, 'recreating session for outgoing retry')
+					await authState.keys.set({ session: { [sessionId]: null } })
+				}
+			} catch (error) {
+				logger.warn({ error, participant }, 'failed to check session recreation for outgoing retry')
 			}
 		}
+
+		await assertSessions([participant], true)
 
 		if (isJidGroup(remoteJid)) {
 			// on group retries, we need to clear the sender key memory for the participant to ensure the new session gets picked up, as the retry receipt doesn't include a new SKDM
