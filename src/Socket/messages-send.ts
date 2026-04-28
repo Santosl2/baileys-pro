@@ -212,7 +212,12 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		}))
 
 		if (userDevicesCache.mget) {
-			const keys = decoded.flatMap(({ jid, user }) => (user ? [jid, user] : [jid]))
+			const keys: string[] = []
+			for (const { jid, user } of decoded) {
+				keys.push(jid)
+				if (user) keys.push(user)
+			}
+
 			const cachedDevices = useCache ? await userDevicesCache.mget<JidWithDevice[]>(keys) : {}
 			for (const { jid, user } of decoded) {
 				const hit = cachedDevices[jid] ?? (user ? cachedDevices[user] : undefined)
