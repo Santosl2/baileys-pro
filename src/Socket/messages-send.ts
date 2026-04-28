@@ -1,3 +1,4 @@
+/* eslint-disable max-depth */
 import NodeCache from '@cacheable/node-cache'
 import { Boom } from '@hapi/boom'
 import { proto } from '../../WAProto'
@@ -660,18 +661,29 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 							participantListPhash = groupData?.phash
 
 							if (!participantListPhash) {
-								const devicesByUser = additionalDevices.reduce<Record<string, typeof additionalDevices>>((acc, d) => {
-									;(acc[d.user] ??= []).push(d)
-									return acc
-								}, {})
+								const devicesByUser = new Map<string, typeof additionalDevices>()
 
-								const newParticipantList = participantsList.flatMap(jid => {
-									const [user, server] = jid.split('@')
-									const devices = devicesByUser[user]
-									if (!devices) return []
+								for (const d of additionalDevices) {
+									const arr = devicesByUser.get(d.user)
+									if (arr) arr.push(d)
+									else devicesByUser.set(d.user, [d])
+								}
 
-									return devices.map(d => `${d.user}.0:${d.device}@${server}`)
-								})
+								const newParticipantList: string[] = []
+
+								for (const jid of participantsList) {
+									const decoded = jidDecode(jid)
+									if (!decoded) continue
+
+									const { user, server } = decoded
+									const devices = devicesByUser.get(user)
+									if (!devices) continue
+
+									for (const d of devices) {
+										newParticipantList.push(`${d.user}.0:${d.device}@${server}`)
+									}
+								}
+
 								logger.debug(
 									{ jid, participantList: newParticipantList, generatedPhash: participantListPhash },
 									'generated new participant list hash for group'
