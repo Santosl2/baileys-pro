@@ -1491,11 +1491,11 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		identifier: string,
 		exec: (node: BinaryNode) => Promise<void>
 	) => {
-		if (type !== 'call') {
+		if (type !== 'call' && node.attrs.type !== 'retry') {
 			let from = node.attrs.from
+			const attrs = node.attrs
 
 			if (type === 'receipt' && from) {
-				const attrs = node.attrs
 				const isLid = from.includes('lid')
 				const isNodeFromMe = areJidsSameUser(
 					attrs.participant || from,
