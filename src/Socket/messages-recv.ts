@@ -863,17 +863,6 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		// (send-to-all) retries — the SKDM is NOT included automatically by the encryption
 		// pipeline. Mirrors whatsmeow's handleRetryReceipt: builder.Create(senderName) is
 		// called unconditionally before re-encrypting.
-		let freshSkdm: Uint8Array | undefined
-		if (isJidGroup(remoteJid)) {
-			try {
-				freshSkdm = await signalRepository.createSenderKeyDistributionMessage({
-					group: remoteJid,
-					meId: authState.creds.me!.id
-				})
-			} catch (err) {
-				logger.warn({ err, remoteJid, participant }, 'failed to generate SKDM for group retry, proceeding without it')
-			}
-		}
 
 		for (const [i, msg] of msgs.entries()) {
 			if (msg && willSendMessageAgain(ids[i], participant)) {
@@ -889,17 +878,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 					}
 				}
 
-				const msgToRelay: proto.IMessage = freshSkdm
-					? {
-							...msg,
-							senderKeyDistributionMessage: {
-								groupId: remoteJid,
-								axolotlSenderKeyDistributionMessage: freshSkdm
-							}
-						}
-					: msg
-
-				await relayMessage(key.remoteJid!, msgToRelay, msgRelayOpts)
+				await relayMessage(key.remoteJid!, msg, msgRelayOpts)
 			} else {
 				logger.debug({ jid: key.remoteJid, id: ids[i] }, 'recv retry request, but message not available')
 			}
