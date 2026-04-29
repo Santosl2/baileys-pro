@@ -26,7 +26,7 @@ const shouldTryGroupAuthorFallback = (err: unknown) => {
 }
 
 const getGroupAuthorJids = (author: string, key: WAMessageKey) => {
-	const arr = [author, key.participantLid, key.participantPn]
+	const arr = [author, key.participantLid, key.participantPn].filter(Boolean)
 
 	for (const jid of arr) {
 		const { server, device, user } = jidDecode(jid)!
