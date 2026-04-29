@@ -1,8 +1,8 @@
 import * as constants from './constants'
-import { FullJid, jidDecode } from './jid-utils'
+import { type FullJid, jidDecode } from './jid-utils'
 import type { BinaryNode, BinaryNodeCodingOptions } from './types'
 
-type EncoderOpts = Pick<BinaryNodeCodingOptions, 'TAGS' | 'TOKEN_MAP' | 'TOKEN_MAP_REFACTOR'>
+type EncoderOpts = Pick<BinaryNodeCodingOptions, 'TAGS' | 'TOKEN_MAP_REFACTOR'>
 
 class ByteEncoder {
 	readonly TAGS: EncoderOpts['TAGS']
@@ -102,11 +102,11 @@ class ByteEncoder {
 
 		const strLengthHalf = Math.floor(str.length / 2)
 		for (let i = 0; i < strLengthHalf; i++) {
-			this.pushByte((packFunction(str[2 * i]) << 4) | packFunction(str[2 * i + 1]))
+			this.pushByte((packFunction(str[2 * i] as string) << 4) | packFunction(str[2 * i + 1] as string))
 		}
 
 		if (str.length % 2 !== 0) {
-			this.pushByte((packFunction(str[str.length - 1]) << 4) | packFunction('\x00'))
+			this.pushByte((packFunction(str[str.length - 1] as string) << 4) | packFunction('\x00' as string))
 		}
 	}
 
@@ -114,6 +114,11 @@ class ByteEncoder {
 		const { TAGS, TOKEN_MAP_REFACTOR } = this
 		if (str === undefined || str === null) {
 			this.pushByte(TAGS.LIST_EMPTY)
+			return
+		}
+
+		if (str === '') {
+			this.writeStringRaw(str)
 			return
 		}
 
@@ -193,9 +198,9 @@ const isNibble = (str: string, packedMax: number): boolean => {
 		return false
 	}
 
-	for (let i = 0; i < str.length; i++) {
-		const char = str[i]
-		if (!(char >= '0' && char <= '9') && char !== '-' && char !== '.') {
+	for (const char of str) {
+		const isInNibbleRange = char >= '0' && char <= '9'
+		if (!isInNibbleRange && char !== '-' && char !== '.') {
 			return false
 		}
 	}
@@ -208,9 +213,9 @@ const isHex = (str: string, packedMax: number): boolean => {
 		return false
 	}
 
-	for (let i = 0; i < str.length; i++) {
-		const char = str[i]
-		if (!(char >= '0' && char <= '9') && !(char >= 'A' && char <= 'F')) {
+	for (const char of str) {
+		const isInNibbleRange = char >= '0' && char <= '9'
+		if (!isInNibbleRange && !(char >= 'A' && char <= 'F')) {
 			return false
 		}
 	}
