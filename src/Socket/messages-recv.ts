@@ -1194,6 +1194,10 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 						})
 					}
 				} else {
+					if (msg.key.id) {
+						failedMsgIdCache.del(msg.key.id)
+					}
+
 					const isNewsletter = isJidNewsletter(msg.key.remoteJid!)
 
 					if (isNewsletter) {
