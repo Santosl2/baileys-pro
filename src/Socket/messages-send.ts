@@ -640,12 +640,6 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 								getUSyncDevices(participantsList, !!useUserDevicesCache, false)
 							)
 
-							if (performance.now() - startFetchDevicesTime > 2000) {
-								logger.warn(
-									`Fetching devices for group ${destinationJid} took longer than expected: ${performance.now() - startFetchDevicesTime}ms - ${additionalDevices.length} devices fetched for ${participantsList.length} participants, consider optimizing this function if you have many participants or devices`
-								)
-							}
-
 							devices.push(...additionalDevices)
 						}
 
