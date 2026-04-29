@@ -138,6 +138,13 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 			maxKeys: DEFAULT_CACHE_MAX_KEYS.PLACEHOLDER_RESEND
 		})
 
+	/** Cache of message IDs that failed to decrypt — expires after 5 minutes */
+	const failedMsgIdCache = new NodeCache({
+		stdTTL: 300, // 5 minutes
+		useClones: false,
+		maxKeys: 1000
+	})
+
 	let sendActiveReceipts = false
 
 	const sendMessageAck = async ({ tag, attrs }: BinaryNode, errorCode?: number) => {
@@ -1054,6 +1061,10 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 				await decrypt()
 				// message failed to decrypt
 				if (msg.messageStubType === proto.WebMessageInfo.StubType.CIPHERTEXT && msg.category !== 'peer') {
+					if (msg.key.id) {
+						failedMsgIdCache.set(msg.key.id, true)
+					}
+
 					if (msg?.messageStubParameters?.[0] === MISSING_KEYS_ERROR_TEXT) {
 						acked = true
 						return sendMessageAck(node, NACK_REASONS.ParsingError)
@@ -1478,7 +1489,9 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 	) => {
 		if (type !== 'call') {
 			const from = node.attrs.from
-			const shouldIgnore = await shouldIgnoreJid(from)
+			const msgId = node.attrs.id
+			const isFailedMsg = msgId && failedMsgIdCache.has(msgId)
+			const shouldIgnore = !isFailedMsg && (await shouldIgnoreJid(from))
 
 			if (from && from !== S_WHATSAPP_NET && shouldIgnore) {
 				await sendMessageAck(node, type === 'message' ? NACK_REASONS.UnhandledError : undefined).catch(ackErr =>
