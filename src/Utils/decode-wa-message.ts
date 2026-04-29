@@ -10,7 +10,9 @@ import {
 	isJidNewsletter,
 	isJidStatusBroadcast,
 	isJidUser,
-	isLidUser
+	isLidUser,
+	jidDecode,
+	jidEncode
 } from '../WABinary'
 import { unpadRandomMax16 } from './generics'
 import { ILogger } from './logger'
@@ -24,7 +26,20 @@ const shouldTryGroupAuthorFallback = (err: unknown) => {
 }
 
 const getGroupAuthorJids = (author: string, key: WAMessageKey) => {
-	return Array.from(new Set([author, key.participantLid, key.participantPn].filter(Boolean))) as string[]
+	const arr = [author, key.participantLid, key.participantPn]
+
+	for (const jid of arr) {
+		const { server, device, user } = jidDecode(jid)!
+
+		// include fallback jid with device 0 if the jid has a device component, to handle cases where messages are encrypted to the wrong device jid
+		if (device && device !== 0) {
+			arr.push(jidEncode(user, server, 0))
+		}
+	}
+
+	const jids = new Set(arr.filter(Boolean))
+
+	return Array.from(jids) as string[]
 }
 
 const decryptGroupWithAuthorFallback = async (
@@ -51,14 +66,14 @@ const decryptGroupWithAuthorFallback = async (
 			lastDecryptErr = err
 			const isLastAuthorJid = authorJid === groupAuthorJids[groupAuthorJids.length - 1]
 
-			if (!shouldTryGroupAuthorFallback(err) || isLastAuthorJid) {
-				throw err
-			}
-
 			logger.error(
 				{ group, author, triedAuthorJid: authorJid, fallbackAuthorJids: groupAuthorJids },
 				'group decrypt had no sender session for author jid, trying fallback jid'
 			)
+
+			if (!shouldTryGroupAuthorFallback(err) || isLastAuthorJid) {
+				throw err
+			}
 		}
 	}
 
