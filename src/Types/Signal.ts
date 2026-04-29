@@ -49,6 +49,11 @@ type E2ESessionOpts = {
 	session: E2ESession
 }
 
+type GetSenderKeyDistributionMessageOpts = {
+	group: string
+	meId: string
+}
+
 export type SignalRepository = {
 	decryptGroupMessage(opts: DecryptGroupSignalOpts): Promise<Uint8Array>
 	processSenderKeyDistributionMessage(opts: ProcessSenderKeyDistributionMessageOpts): Promise<void>
@@ -62,6 +67,7 @@ export type SignalRepository = {
 		senderKeyDistributionMessage: Uint8Array
 		ciphertext: Uint8Array
 	}>
+	hasSenderKey(opts: GetSenderKeyDistributionMessageOpts): Promise<boolean>
 	/** Returns the serialized SenderKeyDistributionMessage for the given group without encrypting any message. */
 	createSenderKeyDistributionMessage(opts: { group: string; meId: string }): Promise<Uint8Array>
 	injectE2ESession(opts: E2ESessionOpts): Promise<void>

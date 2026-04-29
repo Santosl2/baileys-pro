@@ -167,6 +167,11 @@ export function makeLibSignalRepository(auth: SignalAuthState): SignalRepository
 				throw error
 			}
 		},
+		async hasSenderKey({ group, meId }) {
+			const senderName = jidToSignalSenderKeyName(group, meId).toString()
+			const { [senderName]: key } = await auth.keys.get('sender-key', [senderName])
+			return !!key
+		},
 		async createSenderKeyDistributionMessage({ group, meId }) {
 			const senderName = jidToSignalSenderKeyName(group, meId)
 			const builder = new GroupSessionBuilder(storage)
