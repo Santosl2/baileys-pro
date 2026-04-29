@@ -890,7 +890,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 							? encodeWAMessage({
 									deviceSentMessage: {
 										destinationJid,
-										message
+										message: messageToSend
 									}
 								})
 							: encodeWAMessage(messageToSend)
