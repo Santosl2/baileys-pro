@@ -1492,7 +1492,18 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		exec: (node: BinaryNode) => Promise<void>
 	) => {
 		if (type !== 'call') {
-			const from = node.attrs.from
+			let from = node.attrs.from
+
+			if (type === 'receipt' && from) {
+				const attrs = node.attrs
+				const isLid = from.includes('lid')
+				const isNodeFromMe = areJidsSameUser(
+					attrs.participant || from,
+					isLid ? authState.creds.me?.lid : authState.creds.me?.id
+				)
+				from = !isNodeFromMe || isJidGroup(from) ? from : attrs.recipient
+			}
+
 			const msgId = node.attrs.id
 			const isFailedMsg = msgId && failedMsgIdCache.has(msgId)
 			const shouldIgnore = !isFailedMsg && (await shouldIgnoreJid(from))
