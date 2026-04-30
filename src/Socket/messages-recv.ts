@@ -13,7 +13,6 @@ import {
 	STATUS_EXPIRY_SECONDS
 } from '../Defaults'
 import {
-	CacheStore,
 	MessageReceiptType,
 	MessageRelayOptions,
 	MessageUserReceipt,
@@ -53,6 +52,7 @@ import {
 	xmppSignedPreKey
 } from '../Utils'
 import { handleIdentityChange } from '../Utils/identity-change-handler'
+import { createLruWithInterface } from '../Utils/lru'
 import { makeMutex } from '../Utils/make-mutex'
 import {
 	areJidsSameUser,
@@ -119,7 +119,14 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 
 	const msgRetryCache =
 		config.msgRetryCounterCache ||
-		new LRUCache({
+		createLruWithInterface({
+			ttl: DEFAULT_CACHE_TTLS.MSG_RETRY, // 10 minutes
+			max: DEFAULT_CACHE_MAX_KEYS.MSG_RETRY
+		})
+
+	const msgRetryResendCache =
+		config.msgRetryResendCache ||
+		createLruWithInterface({
 			ttl: DEFAULT_CACHE_TTLS.MSG_RETRY, // 10 minutes
 			max: DEFAULT_CACHE_MAX_KEYS.MSG_RETRY
 		})
@@ -211,14 +218,14 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		const msgId = msgKey.id!
 		const fromJid = node.attrs.from
 
-		const retryCacheKey = `${fromJid}:${msgId}`
+		const retryCacheKey = msgId
 		let retryCount = Number(msgRetryCache.get(retryCacheKey) || 0) || 0
 
 		// After a restart the cache is empty (retryCount === 0), but the sender may already
 		// be on a higher retry cycle. Read the count embedded in the enc node to catch up,
 		// so we don't loop unnecessary retries. Mirrors whatsmeow sendRetryReceipt logic.
 		if (retryCount === 0) {
-			const children = Array.isArray(node.content) ? (node.content as BinaryNode[]) : []
+			const children = Array.isArray(node.content) ? node.content : []
 			const encChild = children.find(c => c.tag === 'enc')
 			const msgRetryCountInNode = encChild ? Number(encChild.attrs?.count || 0) : 0
 			if (msgRetryCountInNode > 0) {
@@ -232,8 +239,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 			const placeholderRequest = await requestPlaceholderResend(msgKey)
 			logger.debug(`sendRetryRequest: requested placeholder resend for message ${placeholderRequest}`)
 			logger.debug({ retryCount, msgId }, 'reached retry limit, clearing')
-			;(msgRetryCache as any).delete?.(retryCacheKey)
-			;(msgRetryCache as CacheStore).del?.(retryCacheKey)
+			msgRetryCache.del(retryCacheKey)
 
 			return
 		}
@@ -750,14 +756,14 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 
 	const willSendMessageAgain = (id: string, participant: string) => {
 		const key = `${id}:${participant}`
-		const retryCount = Number(msgRetryCache.get(key)) || 0
+		const retryCount = Number(msgRetryResendCache.get(key)) || 0
 		return retryCount < maxMsgRetryCount
 	}
 
 	const updateSendMessageAgainCount = (id: string, participant: string) => {
 		const key = `${id}:${participant}`
-		const newValue = (Number(msgRetryCache.get(key)) || 0) + 1
-		msgRetryCache.set(key, newValue)
+		const newValue = (Number(msgRetryResendCache.get(key)) || 0) + 1
+		msgRetryResendCache.set(key, newValue)
 	}
 
 	const getMessageForRetry = async (key: proto.IMessageKey) => {
@@ -1199,6 +1205,9 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 					}
 				} else {
 					if (msg.key.id) {
+						const cacheKey = msg.key.id
+						msgRetryCache.del(cacheKey)
+
 						failedMsgIdCache.delete(msg.key.id)
 					}
 

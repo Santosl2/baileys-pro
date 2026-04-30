@@ -2,12 +2,12 @@ import { AxiosRequestConfig } from 'axios'
 import type { Agent } from 'https'
 import type { URL } from 'url'
 import { proto } from '../../WAProto'
+import { LoadOgImageProps } from '../Utils'
 import { ILogger } from '../Utils/logger'
 import { AuthenticationState, SignalAuthState, TransactionCapabilityOptions } from './Auth'
 import { GroupMetadata } from './GroupMetadata'
 import { MediaConnInfo } from './Message'
 import { SignalRepository } from './Signal'
-import { LoadOgImageProps } from '../Utils'
 
 export type WAVersion = [number, number, number]
 export type WABrowserDescription = [string, string, string]
@@ -100,6 +100,11 @@ export type SocketConfig = {
 	countryCode: string
 	/** provide a cache to store media, so does not have to be re-uploaded */
 	mediaCache?: CacheStore
+
+	/**
+	 *  cache to store the messages that failed to send, so they can be retried without having to fetch them from the database again
+	 */
+	msgRetryResendCache?: CacheStore
 	/**
 	 * map to store the retry counts for failed messages;
 	 * used to determine whether to retry a message or not */
