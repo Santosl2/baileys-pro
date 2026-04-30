@@ -240,7 +240,7 @@ class ByteDecoder {
 		const size = this.readListSize(tag)
 		const items: BinaryNode[] = new Array(size)
 		for (let i = 0; i < size; i++) {
-			items[i] = this.decodeNode()
+			items.push(this.decodeNode())
 		}
 
 		return items
