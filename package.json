@@ -38,7 +38,8 @@
     "prepare": "tsc",
     "preinstall": "node ./engine-requirements.js",
     "release": "release-it",
-    "test": "jest"
+    "test": "jest",
+    "bench": "node --expose-gc -r ts-node/register src/Tests/bench.encode-decode.ts"
   },
   "dependencies": {
     "@cacheable/node-cache": "^1.4.0",
