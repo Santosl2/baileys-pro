@@ -2,6 +2,7 @@ import NodeCache from '@cacheable/node-cache'
 import { Boom } from '@hapi/boom'
 import { randomBytes } from 'crypto'
 import Long from 'long'
+import { LRUCache } from 'lru-cache'
 import { proto } from '../../WAProto'
 import {
 	DEFAULT_CACHE_MAX_KEYS,
@@ -12,6 +13,7 @@ import {
 	STATUS_EXPIRY_SECONDS
 } from '../Defaults'
 import {
+	CacheStore,
 	MessageReceiptType,
 	MessageRelayOptions,
 	MessageUserReceipt,
@@ -117,11 +119,12 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 
 	const msgRetryCache =
 		config.msgRetryCounterCache ||
-		new NodeCache({
-			stdTTL: DEFAULT_CACHE_TTLS.MSG_RETRY, // 1 hour
-			useClones: false,
-			maxKeys: DEFAULT_CACHE_MAX_KEYS.MSG_RETRY
+		new LRUCache({
+			ttl: DEFAULT_CACHE_TTLS.MSG_RETRY, // 10 minutes
+			ttlAutopurge: true,
+			max: DEFAULT_CACHE_MAX_KEYS.MSG_RETRY
 		})
+
 	const callOfferCache =
 		config.callOfferCache ||
 		new NodeCache({
@@ -133,16 +136,16 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 	const placeholderResendCache =
 		config.placeholderResendCache ||
 		new NodeCache({
-			stdTTL: DEFAULT_CACHE_TTLS.MSG_RETRY, // 1 hour
+			stdTTL: DEFAULT_CACHE_TTLS.MSG_RETRY, // 10 minutes
 			useClones: false,
 			maxKeys: DEFAULT_CACHE_MAX_KEYS.PLACEHOLDER_RESEND
 		})
 
 	/** Cache of message IDs that failed to decrypt — expires after 5 minutes */
-	const failedMsgIdCache = new NodeCache({
-		stdTTL: 300, // 5 minutes
-		useClones: false,
-		maxKeys: 1000
+	const failedMsgIdCache = new LRUCache<string, boolean>({
+		ttl: 300 * 1000, // 5 minutes
+		ttlAutopurge: true,
+		max: 1000
 	})
 
 	let sendActiveReceipts = false
@@ -210,7 +213,8 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		const msgId = msgKey.id!
 		const fromJid = node.attrs.from
 
-		let retryCount = Number(msgRetryCache.get(msgId) || 0) || 0
+		const retryCacheKey = `${fromJid}:${msgId}`
+		let retryCount = Number(msgRetryCache.get(retryCacheKey) || 0) || 0
 
 		// After a restart the cache is empty (retryCount === 0), but the sender may already
 		// be on a higher retry cycle. Read the count embedded in the enc node to catch up,
@@ -221,7 +225,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 			const msgRetryCountInNode = encChild ? Number(encChild.attrs?.count || 0) : 0
 			if (msgRetryCountInNode > 0) {
 				retryCount = msgRetryCountInNode
-				msgRetryCache.set(msgId, retryCount)
+				msgRetryCache.set(retryCacheKey, retryCount)
 				logger.debug({ msgId, retryCount }, 'recovered retry count from enc node after restart')
 			}
 		}
@@ -230,12 +234,14 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 			const placeholderRequest = await requestPlaceholderResend(msgKey)
 			logger.debug(`sendRetryRequest: requested placeholder resend for message ${placeholderRequest}`)
 			logger.debug({ retryCount, msgId }, 'reached retry limit, clearing')
-			msgRetryCache.del(msgId)
+			;(msgRetryCache as any).delete?.(retryCacheKey)
+			;(msgRetryCache as CacheStore).del?.(retryCacheKey)
+
 			return
 		}
 
 		retryCount += 1
-		msgRetryCache.set(msgId, retryCount)
+		msgRetryCache.set(retryCacheKey, retryCount)
 
 		const { account, signedPreKey, signedIdentityKey: identityKey } = authState.creds
 
@@ -962,7 +968,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 								await sendMessagesAgain(key, ids, retryNode, node)
 							} catch (error: unknown) {
 								logger.error(
-									{ key, ids, trace: error instanceof Error ? error.stack : 'Unknown error' },
+									{ key, ids, retryNode, node, trace: error instanceof Error ? error.stack : 'Unknown error' },
 									'error in sending message again'
 								)
 							}
@@ -1195,7 +1201,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 					}
 				} else {
 					if (msg.key.id) {
-						failedMsgIdCache.del(msg.key.id)
+						failedMsgIdCache.delete(msg.key.id)
 					}
 
 					const isNewsletter = isJidNewsletter(msg.key.remoteJid!)
@@ -1506,6 +1512,11 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 
 			const msgId = node.attrs.id
 			const isFailedMsg = msgId && failedMsgIdCache.has(msgId)
+
+			if (isFailedMsg) {
+				logger.warn({ msgId, from }, 'processing node for message with known decryption failure')
+			}
+
 			const shouldIgnore = !isFailedMsg && (await shouldIgnoreJid(from))
 
 			if (from && from !== S_WHATSAPP_NET && shouldIgnore) {
