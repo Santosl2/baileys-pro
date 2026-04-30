@@ -121,7 +121,6 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		config.msgRetryCounterCache ||
 		new LRUCache({
 			ttl: DEFAULT_CACHE_TTLS.MSG_RETRY, // 10 minutes
-			ttlAutopurge: true,
 			max: DEFAULT_CACHE_MAX_KEYS.MSG_RETRY
 		})
 
@@ -144,7 +143,6 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 	/** Cache of message IDs that failed to decrypt — expires after 5 minutes */
 	const failedMsgIdCache = new LRUCache<string, boolean>({
 		ttl: 300 * 1000, // 5 minutes
-		ttlAutopurge: true,
 		max: 1000
 	})
 
