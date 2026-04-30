@@ -9,14 +9,14 @@ import { version } from './baileys-version.json'
 
 export const DEFAULT_CACHE_TTLS = {
 	SIGNAL_STORE: 5 * 60, // 5 minutes
-	MSG_RETRY: 60 * 60, // 1 hour
+	MSG_RETRY: 10 * 60, // 10 minutes
 	CALL_OFFER: 5 * 60, // 5 minutes
 	USER_DEVICES: 25 * 60, // 25 minutes
 	GROUP_METADATA: 15 * 60 // 15 minutes
 }
 
 export const DEFAULT_CACHE_MAX_KEYS = {
-	MSG_RETRY: 1000,
+	MSG_RETRY: 2000,
 	CALL_OFFER: 200,
 	IDENTITY_ASSERT: 500,
 	PLACEHOLDER_RESEND: 500
