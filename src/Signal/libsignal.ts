@@ -56,6 +56,10 @@ export function makeLibSignalRepository(auth: SignalAuthState): SignalRepository
 				return { exists: false, reason: 'validation error' }
 			}
 		},
+		deleteSession(jid: string) {
+			const addr = jidToSignalProtocolAddress(jid)
+			return storage.deleteSession(addr.toString())
+		},
 		decryptGroupMessage({ group, authorJid, msg }) {
 			const senderName = jidToSignalSenderKeyName(group, authorJid)
 			const cipher = new GroupCipher(storage, senderName)
@@ -242,6 +246,9 @@ function signalStorage({ creds, keys }: SignalAuthState): SenderKeyStore & Recor
 			}
 
 			return false
+		},
+		deleteSession: async (id: string) => {
+			await keys.set({ session: { [id]: null } })
 		},
 		loadSession: async (id: string) => {
 			const { [id]: sess } = await keys.get('session', [id])

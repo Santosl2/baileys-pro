@@ -410,6 +410,10 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 					break
 				case 'remove':
 					logger.info({ deviceHash }, 'device removed')
+
+					// DELETE DEVICE
+					signalRepository.deleteSession(deviceJid)
+
 					updatedDevices = existingCache.filter(d => d.device !== device) || []
 					break
 				default:
