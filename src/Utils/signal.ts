@@ -23,6 +23,7 @@ import {
 import { DeviceListData, ParsedDeviceInfo, USyncQueryResultList } from '../WAUSync'
 import { Curve, generateSignalPubKey } from './crypto'
 import { encodeBigEndian } from './generics'
+import { ILogger } from './logger'
 
 export const createSignalIdentity = (wid: string, accountSignatureKey: Uint8Array): SignalIdentity => {
 	return {
@@ -77,7 +78,7 @@ export const xmppPreKey = (pair: KeyPair, id: number): BinaryNode => ({
 	]
 })
 
-export const parseAndInjectE2ESessions = async (node: BinaryNode, repository: SignalRepository) => {
+export const parseAndInjectE2ESessions = async (node: BinaryNode, repository: SignalRepository, logger?: ILogger) => {
 	const extractKey = (key: BinaryNode) =>
 		key
 			? {
@@ -90,6 +91,8 @@ export const parseAndInjectE2ESessions = async (node: BinaryNode, repository: Si
 	for (const node of nodes) {
 		assertNodeErrorFree(node)
 	}
+
+	const startTime = Date.now()
 
 	// Most of the work in repository.injectE2ESession is CPU intensive, not IO
 	// So Promise.all doesn't really help here,
@@ -116,7 +119,12 @@ export const parseAndInjectE2ESessions = async (node: BinaryNode, repository: Si
 				}
 			})
 		}
+
+		await new Promise<void>(resolve => setImmediate(resolve))
 	}
+
+	const elapsed = Date.now() - startTime
+	logger?.warn(`Injected E2E sessions for ${nodes.length} users in ${elapsed}ms`)
 }
 
 export const extractDeviceJids = (

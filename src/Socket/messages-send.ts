@@ -322,7 +322,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 					}
 				]
 			})
-			await parseAndInjectE2ESessions(result, signalRepository)
+			await parseAndInjectE2ESessions(result, signalRepository, logger)
 
 			didFetchNewSession = true
 		}
