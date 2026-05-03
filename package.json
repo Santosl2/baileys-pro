@@ -47,7 +47,7 @@
     "async-mutex": "^0.5.0",
     "axios": "^1.6.0",
     "cheerio": "^1.2.0",
-    "libsignal": "github:vinikjkkj/libsignal-node",
+    "libsignal": "git+https://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@github.com/Moto-Vale/oferta-libsignal.git#feat/prod",
     "lodash": "^4.17.21",
     "lru-cache": "^11.2.4",
     "music-metadata": "^7.12.3",
