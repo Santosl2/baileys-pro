@@ -490,7 +490,8 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 			is_newsletter: isNewsletter,
 			is_retry_resend: isRetryResend,
 			use_user_devices_cache: !!useUserDevicesCache,
-			use_cached_group_metadata: !!useCachedGroupMetadata
+			use_cached_group_metadata: !!useCachedGroupMetadata,
+			worker: process.env.WORKER_ID || ''
 		}
 
 		if (participant?.jid) {
