@@ -225,6 +225,14 @@ export const addTransactionCapability = (
 				txMutexRefCounts.delete(key)
 			}
 		}
+
+		// for (const [mutexKey, mutex] of txMutexes) {
+		// 	if (count <= 0 && !mutex.isLocked()) {
+		// 		txMutexes.delete(mutexKey)
+		// 		txMutexRefCounts.delete(mutexKey)
+		// 		logger.trace(`cleaned up transaction mutex for key=${mutexKey}`)
+		// 	}
+		// }
 	}
 
 	/**
