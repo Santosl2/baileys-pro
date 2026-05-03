@@ -554,6 +554,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 
 		addNewRelicAttributes(relayBaseAttrs)
 
+		const transactionId = `relayMessage-${isGroupOrStatus ? '_group' : '_direct'}-${isRetryResend ? '_retry' : ''}-${jid}`
 		try {
 			await trackRelayStep('keys_transaction', async () =>
 				authState.keys.transaction(async () => {
@@ -964,7 +965,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 							return Promise.allSettled(promises)
 						})
 					}
-				}, jid)
+				}, transactionId)
 			)
 
 			recordNewRelicCustomEvent('BaileysRelayMessage', {

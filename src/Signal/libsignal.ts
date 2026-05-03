@@ -67,7 +67,7 @@ export function makeLibSignalRepository(auth: SignalAuthState): SignalRepository
 			// Use transaction to ensure atomicity
 			return (auth.keys as SignalKeyStoreWithTransaction).transaction(async () => {
 				return cipher.decrypt(msg)
-			}, senderName.toString())
+			}, 'decrypt-group-' + senderName.toString())
 		},
 
 		async processSenderKeyDistributionMessage({ item, authorJid }) {
@@ -94,7 +94,7 @@ export function makeLibSignalRepository(auth: SignalAuthState): SignalRepository
 				}
 
 				await builder.process(senderName, senderMsg)
-			}, senderNameStr)
+			}, 'process-sender-key-distribution-' + senderNameStr)
 		},
 		async decryptMessage({ jid, type, ciphertext }) {
 			const addr = jidToSignalProtocolAddress(jid)
@@ -128,7 +128,7 @@ export function makeLibSignalRepository(auth: SignalAuthState): SignalRepository
 				}
 
 				return result
-			}, jid)
+			}, 'decrypt-' + jid)
 		},
 		async encryptMessage({ jid, data }) {
 			const addr = jidToSignalProtocolAddress(jid)
@@ -144,7 +144,7 @@ export function makeLibSignalRepository(auth: SignalAuthState): SignalRepository
 					logger.info(`Encryption failed ${error}`)
 					throw error
 				}
-			}, jid)
+			}, 'encrypt-' + jid)
 		},
 		async encryptGroupMessage({ group, meId, data }) {
 			const senderName = jidToSignalSenderKeyName(group, meId)
@@ -189,7 +189,7 @@ export function makeLibSignalRepository(auth: SignalAuthState): SignalRepository
 
 				const skdm = await builder.create(senderName)
 				return skdm.serialize()
-			}, senderNameStr)
+			}, 'create-sender-key-distribution-' + senderNameStr)
 		},
 		async injectE2ESession({ jid, session }) {
 			const cipher = new libsignal.SessionBuilder(storage, jidToSignalProtocolAddress(jid))
@@ -197,7 +197,7 @@ export function makeLibSignalRepository(auth: SignalAuthState): SignalRepository
 			// Use transaction to ensure atomicity
 			return (auth.keys as SignalKeyStoreWithTransaction).transaction(async () => {
 				await cipher.initOutgoing(session)
-			}, jid)
+			}, 'inject-e2e-session-' + jid)
 		},
 		jidToSignalProtocolAddress(jid) {
 			return jidToSignalProtocolAddress(jid).toString()
