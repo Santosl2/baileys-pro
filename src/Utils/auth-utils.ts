@@ -336,6 +336,7 @@ async function commitWithRetry(
 				await state.set(mutations)
 				logger.trace('committed transaction')
 			})
+			break
 		} catch (error) {
 			logger.error(`failed to commit ${Object.keys(mutations).length} mutations, tries left=${tries}`, error)
 
