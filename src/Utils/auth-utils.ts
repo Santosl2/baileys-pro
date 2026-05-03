@@ -2,7 +2,6 @@ import NodeCache from '@cacheable/node-cache'
 import { AsyncLocalStorage } from 'async_hooks'
 import { Mutex } from 'async-mutex'
 import { randomBytes } from 'crypto'
-import PQueue from 'p-queue'
 import { DEFAULT_CACHE_TTLS } from '../Defaults'
 import type {
 	AuthenticationCreds,
@@ -170,7 +169,7 @@ export const addTransactionCapability = (
 	const txStorage = new AsyncLocalStorage<TransactionContext>()
 
 	// Queues for concurrency control (keyed by signal data type - bounded set)
-	const keyQueues = new Map<string, PQueue>()
+	const keyQueues = new Map<string, Mutex>()
 
 	// Transaction mutexes with reference counting for cleanup
 	const txMutexes = new Map<string, Mutex>()
@@ -182,9 +181,9 @@ export const addTransactionCapability = (
 	/**
 	 * Get or create a queue for a specific key type
 	 */
-	function getQueue(key: string): PQueue {
+	function getQueue(key: string): Mutex {
 		if (!keyQueues.has(key)) {
-			keyQueues.set(key, new PQueue({ concurrency: 1 }))
+			keyQueues.set(key, new Mutex())
 		}
 
 		return keyQueues.get(key)!
@@ -325,12 +324,13 @@ export const addTransactionCapability = (
 				// Write all data in parallel
 				await Promise.all(
 					types.map(type =>
-						getQueue(type).add(async () => {
+						getQueue(type).runExclusive(async () => {
 							const typeData = { [type]: data[type as keyof SignalDataTypeMap] } as SignalDataSet
 							await state.set(typeData)
 						})
 					)
 				)
+
 				return
 			}
 

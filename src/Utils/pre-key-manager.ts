@@ -1,4 +1,4 @@
-import PQueue from 'p-queue'
+import { Mutex } from 'async-mutex'
 import type { SignalDataSet, SignalDataTypeMap, SignalKeyStore } from '../Types'
 import type { ILogger } from './logger'
 
@@ -6,7 +6,7 @@ import type { ILogger } from './logger'
  * Manages pre-key operations with proper concurrency control
  */
 export class PreKeyManager {
-	private readonly queues = new Map<string, PQueue>()
+	private readonly queues = new Map<string, Mutex>()
 
 	constructor(
 		private readonly store: SignalKeyStore,
@@ -16,9 +16,9 @@ export class PreKeyManager {
 	/**
 	 * Get or create a queue for a specific key type
 	 */
-	private getQueue(keyType: string): PQueue {
+	private getQueue(keyType: string): Mutex {
 		if (!this.queues.has(keyType)) {
-			this.queues.set(keyType, new PQueue({ concurrency: 1 }))
+			this.queues.set(keyType, new Mutex())
 		}
 
 		return this.queues.get(keyType)!
@@ -37,7 +37,7 @@ export class PreKeyManager {
 		const keyData = data[keyType]
 		if (!keyData) return
 
-		return this.getQueue(keyType).add(async () => {
+		return this.getQueue(keyType).runExclusive(async () => {
 			// Ensure structures exist
 			transactionCache[keyType] = transactionCache[keyType] || ({} as any)
 			mutations[keyType] = mutations[keyType] || ({} as any)
@@ -108,7 +108,7 @@ export class PreKeyManager {
 		const keyData = data[keyType]
 		if (!keyData) return
 
-		return this.getQueue(keyType).add(async () => {
+		return this.getQueue(keyType).runExclusive(async () => {
 			// Find all deletion requests
 			const deletionIds = Object.keys(keyData).filter(id => keyData[id] === null)
 			if (deletionIds.length === 0) return
