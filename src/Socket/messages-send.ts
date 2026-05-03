@@ -314,7 +314,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 					}
 				]
 			})
-			await parseAndInjectE2ESessions(result, signalRepository)
+			await parseAndInjectE2ESessions(result, signalRepository, logger)
 
 			didFetchNewSession = true
 		}
@@ -698,7 +698,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 							await trackRelayStep('group_assert_sessions', async () => assertSessions(senderKeyJids, false))
 							const assertDuration = performance.now() - assertTime
 
-							if (assertDuration > 1000) {
+							if (assertDuration > 5000) {
 								logger.warn(
 									{ duration: assertDuration, count: senderKeyJids.length },
 									`asserting sessions for sender key distribution took ${assertDuration}ms, consider optimizing this function if you have many participants`
