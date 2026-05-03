@@ -16,6 +16,7 @@ import type {
 import { Curve, signedKeyPair } from './crypto'
 import { delay, generateRegistrationId } from './generics'
 import { ILogger } from './logger'
+import { PreKeyManager } from './pre-key-manager'
 
 /**
  * Adds caching capability to a SignalKeyStore

@@ -24,7 +24,7 @@ describe('Key Store w Transaction Tests', () => {
 
 			const { [key]: stored } = await store.get('session', [key])
 			expect(stored).toEqual(new Uint8Array(1))
-		})
+		}, 'session')
 
 		rawStore.get = ogGet
 	})
@@ -35,7 +35,7 @@ describe('Key Store w Transaction Tests', () => {
 			store.transaction(async () => {
 				await store.set({ session: { [key]: new Uint8Array(1) } })
 				throw new Error('fail')
-			})
+			}, 'session')
 		).rejects.toThrowError('fail')
 
 		const { [key]: stored } = await store.get('session', [key])
@@ -60,14 +60,14 @@ describe('Key Store w Transaction Tests', () => {
 			await delay(5)
 			// reolve the promise to let the other transaction continue
 			promiseResolve()
-		})
+		}, 'session')
 
 		await store.transaction(async () => {
 			await promise
 			await delay(5)
 
 			expect(store.isInTransaction()).toBe(true)
-		})
+		}, 'session')
 
 		expect(store.isInTransaction()).toBe(false)
 		// ensure that the transaction were committed

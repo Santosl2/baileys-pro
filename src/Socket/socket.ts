@@ -297,7 +297,7 @@ export const makeSocket = (config: SocketConfig) => {
 			ev.emit('creds.update', update)
 
 			logger.info({ count }, 'uploaded pre-keys')
-		})
+		}, 'pre-key')
 	}
 
 	const digestKeyBundle = async (): Promise<void> => {

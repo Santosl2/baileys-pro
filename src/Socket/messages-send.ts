@@ -964,7 +964,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 							return Promise.allSettled(promises)
 						})
 					}
-				})
+				}, jid)
 			)
 
 			recordNewRelicCustomEvent('BaileysRelayMessage', {
