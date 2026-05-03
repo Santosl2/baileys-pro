@@ -67,6 +67,7 @@ export type SignalRepository = {
 		senderKeyDistributionMessage: Uint8Array
 		ciphertext: Uint8Array
 	}>
+	deleteSession(jid: string): Promise<void>
 	hasSenderKey(opts: GetSenderKeyDistributionMessageOpts): Promise<boolean>
 	/** Returns the serialized SenderKeyDistributionMessage for the given group without encrypting any message. */
 	createSenderKeyDistributionMessage(opts: { group: string; meId: string }): Promise<Uint8Array>

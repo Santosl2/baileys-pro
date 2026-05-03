@@ -7,6 +7,7 @@ import { SenderKeyState } from './sender-key-state'
 export interface SenderKeyStore {
 	loadSenderKey(senderKeyName: SenderKeyName): Promise<SenderKeyRecord>
 	loadSession(id: string): Promise<any>
+	deleteSession(id: string): Promise<void>
 	storeSenderKey(senderKeyName: SenderKeyName, record: SenderKeyRecord): Promise<void>
 	loadIdentityKey(id: string): Promise<Uint8Array | undefined>
 	saveIdentity(id: string, identityKey: Uint8Array): Promise<boolean>
