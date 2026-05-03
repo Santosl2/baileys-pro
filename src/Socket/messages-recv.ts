@@ -376,72 +376,79 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 			logger.info({ deviceJids }, 'got my own devices')
 		}
 
-		const deviceJid = devices[0].attrs.jid
-		const { user, device, server } = jidDecode(deviceJid)!
-		const tag = child.tag as 'add' | 'remove' | 'update'
+		for (const d of devices) {
+			const deviceJid = d.attrs.jid
+			const { user, device, server } = jidDecode(deviceJid)!
+			const tag = child.tag as 'add' | 'remove' | 'update'
 
-		if (!deviceJid) {
-			logger.debug({ tag }, 'no device jid in notification, skipping')
-			return
-		}
-
-		await devicesMutex.mutex(async () => {
-			if (tag === 'update') {
-				logger.debug({ user }, `${user}'s device list updated, dropping cached devices`)
-				await userDevicesCache?.del(user)
+			if (!deviceJid) {
+				logger.debug({ tag }, 'no device jid in notification, skipping')
 				return
 			}
 
-			const existingCache: JidWithDevice[] = (await userDevicesCache?.get(user)) || ([] as JidWithDevice[])
-
-			if (!existingCache.length) {
-				logger.debug({ user, tag }, 'device list not cached, skipping cache update')
-				return
-			}
-
-			const deviceHash = child.attrs.device_hash
-
-			let updatedDevices: JidWithDevice[] = []
-
-			switch (tag) {
-				case 'add':
-					logger.info({ deviceHash }, 'device added')
-					updatedDevices = [...existingCache.filter(d => d.device !== device), { user, device, server }]
-					break
-				case 'remove':
-					logger.info({ deviceHash }, 'device removed')
-					updatedDevices = existingCache.filter(d => d.device !== device) || []
-					break
-				default:
-					logger.debug({ tag }, 'Unknown device list change tag')
+			await devicesMutex.mutex(async () => {
+				if (tag === 'update') {
+					logger.debug({ user }, `${user}'s device list updated, dropping cached devices`)
+					await userDevicesCache?.del(user)
 					return
-			}
+				}
 
-			if (!updatedDevices.find(d => d.device === 0)) {
-				updatedDevices = [...updatedDevices, { user, device: 0 }]
-			}
+				if (tag === 'remove') {
+					signalRepository.deleteSession(deviceJid)
+				}
 
-			if (updatedDevices.length > 0) {
-				await userDevicesCache?.set(user, updatedDevices)
-			}
+				const existingCache: JidWithDevice[] = (await userDevicesCache?.get(user)) || ([] as JidWithDevice[])
 
-			const lidHash = generateParticipantHashV2(updatedDevices.map(d => `${d.user}.0:${d.device}@lid`))
+				if (!existingCache.length) {
+					logger.debug({ user, tag }, 'device list not cached, skipping cache update')
+					return
+				}
 
-			if (lidHash === deviceHash) {
-				logger.debug({ from, deviceHash, lidHash }, 'device hash matches lid hash, skipping cache update')
-				return
-			}
+				const deviceHash = child.attrs.device_hash
 
-			const phoneHash = generateParticipantHashV2(updatedDevices.map(d => `${d.user}.0:${d.device}@s.whatsapp.net`))
+				let updatedDevices: JidWithDevice[] = []
 
-			if (phoneHash === deviceHash) {
-				logger.debug({ from, deviceHash, phoneHash }, 'device hash mismatch, skipping cache update')
-				return
-			}
+				switch (tag) {
+					case 'add':
+						logger.info({ deviceHash }, 'device added')
+						updatedDevices = [...existingCache.filter(d => d.device !== device), { user, device, server }]
+						break
+					case 'remove':
+						logger.info({ deviceHash }, 'device removed')
 
-			// Delete cache if the hash doesn't match to prevent potential issues with outdated cache, as we can't be sure which device was added/removed
-			await userDevicesCache?.del(user)
-		})
+						updatedDevices = existingCache.filter(d => d.device !== device) || []
+						break
+					default:
+						logger.debug({ tag }, 'Unknown device list change tag')
+						return
+				}
+
+				if (!updatedDevices.find(d => d.device === 0)) {
+					updatedDevices = [...updatedDevices, { user, device: 0 }]
+				}
+
+				if (updatedDevices.length > 0) {
+					await userDevicesCache?.set(user, updatedDevices)
+				}
+
+				const lidHash = generateParticipantHashV2(updatedDevices.map(d => `${d.user}.0:${d.device}@lid`))
+
+				if (lidHash === deviceHash) {
+					logger.debug({ from, deviceHash, lidHash }, 'device hash matches lid hash, skipping cache update')
+					return
+				}
+
+				const phoneHash = generateParticipantHashV2(updatedDevices.map(d => `${d.user}.0:${d.device}@s.whatsapp.net`))
+
+				if (phoneHash === deviceHash) {
+					logger.debug({ from, deviceHash, phoneHash }, 'device hash mismatch, skipping cache update')
+					return
+				}
+
+				// Delete cache if the hash doesn't match to prevent potential issues with outdated cache, as we can't be sure which device was added/removed
+				await userDevicesCache?.del(user)
+			})
+		}
 	}
 
 	const handleGroupNotification = (participant: string, child: BinaryNode, msg: Partial<proto.IWebMessageInfo>) => {
