@@ -197,7 +197,7 @@ export function makeLibSignalRepository(auth: SignalAuthState): SignalRepository
 			// Use transaction to ensure atomicity
 			return (auth.keys as SignalKeyStoreWithTransaction).transaction(async () => {
 				await cipher.initOutgoing(session)
-			}, 'inject-e2e-session-' + jid)
+			}, 'inject-e2e-session')
 		},
 		jidToSignalProtocolAddress(jid) {
 			return jidToSignalProtocolAddress(jid).toString()
