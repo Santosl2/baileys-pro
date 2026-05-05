@@ -257,7 +257,6 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		if (enableAutoSessionRecreation && messageRetryManager && retryCount > 1) {
 			try {
 				// Check if we have a session with this JID
-				const sessionId = signalRepository.jidToSignalProtocolAddress(fromJid)
 				const hasSession = await signalRepository.validateSession(fromJid)
 				const result = messageRetryManager.shouldRecreateSession(fromJid, hasSession.exists)
 				shouldRecreateSession = result.recreate
@@ -266,7 +265,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 				if (shouldRecreateSession) {
 					logger.debug({ fromJid, retryCount, reason: recreateReason }, 'recreating session for retry')
 					// Delete existing session to force recreation
-					await authState.keys.set({ session: { [sessionId]: null } })
+					await signalRepository.deleteSession(fromJid)
 					forceIncludeKeys = true
 				}
 			} catch (error) {
@@ -857,8 +856,6 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 
 		if (enableAutoSessionRecreation && messageRetryManager && retryCount > 1) {
 			try {
-				const sessionId = signalRepository.jidToSignalProtocolAddress(participant)
-
 				const hasSession = await signalRepository.validateSession(participant)
 				const result = messageRetryManager.shouldRecreateSession(participant, hasSession.exists)
 				shouldRecreateSession = result.recreate
@@ -866,7 +863,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 
 				if (shouldRecreateSession) {
 					logger.debug({ participant, retryCount, reason: recreateReason }, 'recreating session for outgoing retry')
-					await authState.keys.set({ session: { [sessionId]: null } })
+					await signalRepository.deleteSession(participant)
 				}
 			} catch (error) {
 				logger.warn({ error, participant }, 'failed to check session recreation for outgoing retry')
