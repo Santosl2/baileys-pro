@@ -80,7 +80,8 @@ export function makeCacheableSignalKeyStore(
 
 			const items = await cacheGet(type, ids)
 			if (items) {
-				for (const id of ids) {
+				for (let i = 0; i < ids.length; i++) {
+					const id = ids[i]
 					const item = items[getUniqueId(type, id)]
 					if (typeof item !== 'undefined') {
 						data[id] = item
@@ -182,23 +183,27 @@ export const addTransactionCapability = (
 	 * Get or create a queue for a specific key type
 	 */
 	function getQueue(key: string): Mutex {
-		if (!keyQueues.has(key)) {
-			keyQueues.set(key, new Mutex())
+		let mutex = keyQueues.get(key)
+		if (!mutex) {
+			mutex = new Mutex()
+			keyQueues.set(key, mutex)
 		}
 
-		return keyQueues.get(key)!
+		return mutex
 	}
 
 	/**
 	 * Get or create a transaction mutex
 	 */
 	function getTxMutex(key: string): Mutex {
-		if (!txMutexes.has(key)) {
-			txMutexes.set(key, new Mutex())
+		let mutex = txMutexes.get(key)
+		if (!mutex) {
+			mutex = new Mutex()
+			txMutexes.set(key, mutex)
 			txMutexRefCounts.set(key, 0)
 		}
 
-		return txMutexes.get(key)!
+		return mutex
 	}
 
 	/**
@@ -245,7 +250,8 @@ export const addTransactionCapability = (
 	 * Commit transaction with retries
 	 */
 	async function commitWithRetry(mutations: SignalDataSet): Promise<void> {
-		if (Object.keys(mutations).length === 0) {
+		const keys = Object.keys(mutations)
+		if (keys.length === 0) {
 			logger.trace('no mutations in transaction')
 			return
 		}
@@ -255,7 +261,7 @@ export const addTransactionCapability = (
 		for (let attempt = 0; attempt < maxCommitRetries; attempt++) {
 			try {
 				await state.set(mutations)
-				logger.trace({ mutationCount: Object.keys(mutations).length }, 'committed transaction')
+				logger.trace({ mutationCount: keys.length }, 'committed transaction')
 				return
 			} catch (error) {
 				const retriesLeft = maxCommitRetries - attempt - 1
@@ -281,23 +287,34 @@ export const addTransactionCapability = (
 
 			// In transaction - check cache first
 			const cached = ctx.cache[type] || {}
-			const missing = ids.filter(id => !(id in cached))
+
+			if (!ctx.cache[type]) {
+				ctx.cache[type] = {}
+			}
+
+			const missing: string[] = []
+
+			for (let i = 0; i < ids.length; i++) {
+				const id = ids[i]
+				if (cached[id] === undefined) missing.push(id)
+			}
 
 			if (missing.length > 0) {
 				ctx.dbQueries++
 				logger.trace({ type, count: missing.length }, 'fetching missing keys in transaction')
 
-				const fetched = await getTxMutex(type).runExclusive(() => state.get(type, missing))
+				const fetched = await state.get(type, missing)
 
 				// Update cache
-				ctx.cache[type] = ctx.cache[type] || ({} as any)
-				Object.assign(ctx.cache[type]!, fetched)
+				for (const k in fetched) cached[k] = fetched[k]
 			}
 
 			// Return requested ids from cache
 			const result: { [key: string]: any } = {}
-			for (const id of ids) {
-				const value = ctx.cache[type]?.[id]
+
+			for (let i = 0; i < ids.length; i++) {
+				const id = ids[i]
+				const value = cached[id]
 				if (value !== undefined && value !== null) {
 					result[id] = value
 				}
@@ -313,21 +330,36 @@ export const addTransactionCapability = (
 				// No transaction - direct write with queue protection
 				const types = Object.keys(data)
 
-				// Process pre-keys with validation
-				for (const type_ of types) {
-					const type = type_ as keyof SignalDataTypeMap
-					if (type === 'pre-key') {
-						await preKeyManager.validateDeletions(data, type)
-					}
+				if (types.length === 1) {
+					const type = types[0]
+					if (type === 'pre-key') await preKeyManager.validateDeletions(data, type)
+					return getQueue(type).runExclusive(() => state.set(data))
 				}
 
-				// Write all data in parallel
-				await Promise.all(
+				await Promise.allSettled(
 					types.map(type =>
-						getQueue(type).runExclusive(async () => {
-							const typeData = { [type]: data[type as keyof SignalDataTypeMap] } as SignalDataSet
-							await state.set(typeData)
-						})
+						getQueue(type)
+							.runExclusive(async () => {
+								if (type === 'pre-key') {
+									await preKeyManager.validateDeletions(data, type)
+								}
+
+								return state.set({ [type]: data[type] })
+							})
+							.catch(error => {
+								logger.error({ error, type }, 'failed to set data for type')
+								throw error
+							})
+							.finally(() => {
+								const isInUse = keyQueues.get(type)?.isLocked() ?? false
+
+								if (!isInUse) {
+									keyQueues.delete(type)
+									logger.trace(`cleaned up queue for type=${type}`)
+								}
+
+								logger.trace({ type }, 'updated store outside of transaction')
+							})
 					)
 				)
 
