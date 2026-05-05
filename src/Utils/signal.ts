@@ -120,6 +120,8 @@ export const parseAndInjectE2ESessions = async (node: BinaryNode, repository: Si
 				}
 			})
 		}
+
+		await new Promise<void>(resolve => setImmediate(resolve))
 	}
 
 	const elapsed = Date.now() - startTime
