@@ -1,5 +1,6 @@
 import * as libsignal from 'libsignal'
 import { PreKeyWhisperMessage } from 'libsignal/src/protobufs'
+import { LRUCache } from 'lru-cache'
 import { SignalAuthState, SignalKeyStoreWithTransaction } from '../Types'
 import { SignalRepository } from '../Types/Signal'
 import { generateSignalPubKey } from '../Utils'
@@ -215,6 +216,8 @@ const jidToSignalSenderKeyName = (group: string, user: string): SenderKeyName =>
 }
 
 function signalStorage({ creds, keys }: SignalAuthState): SenderKeyStore & Record<string, any> {
+	const sessionCache = new LRUCache<string, libsignal.SessionRecord>({ max: 500, ttl: 1000 * 60 * 30 })
+
 	return {
 		loadIdentityKey: async (id: string) => {
 			const wireJid = id
@@ -236,6 +239,8 @@ function signalStorage({ creds, keys }: SignalAuthState): SenderKeyStore & Recor
 					session: { [wireJid]: null },
 					'identity-key': { [wireJid]: identityKey }
 				})
+
+				sessionCache.delete(wireJid)
 				return true
 			}
 
@@ -248,15 +253,23 @@ function signalStorage({ creds, keys }: SignalAuthState): SenderKeyStore & Recor
 			return false
 		},
 		deleteSession: async (id: string) => {
+			sessionCache.delete(id)
 			await keys.set({ session: { [id]: null } })
 		},
 		loadSession: async (id: string) => {
+			if (sessionCache.has(id)) {
+				return sessionCache.get(id)
+			}
+
 			const { [id]: sess } = await keys.get('session', [id])
 			if (sess) {
-				return libsignal.SessionRecord.deserialize(sess)
+				const record = libsignal.SessionRecord.deserialize(sess)
+				sessionCache.set(id, record)
+				return record
 			}
 		},
 		storeSession: async (id: string, session: libsignal.SessionRecord) => {
+			sessionCache.set(id, session)
 			await keys.set({ session: { [id]: session.serialize() } })
 		},
 		isTrustedIdentity: () => {
