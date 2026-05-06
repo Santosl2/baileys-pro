@@ -10,11 +10,8 @@ import type {
 	Contact,
 	WAMessage
 } from '../Types'
-import { WAMessageStatus } from '../Types'
 import { trimUndefined } from './generics'
 import type { ILogger } from './logger'
-import { updateMessageWithReaction, updateMessageWithReceipt } from './messages'
-import { isRealMessage, shouldIncrementChatUnread } from './process-message'
 
 const BUFFERABLE_EVENT = [
 	'messaging-history.set',
@@ -22,12 +19,12 @@ const BUFFERABLE_EVENT = [
 	'chats.update',
 	'chats.delete',
 	'contacts.upsert',
-	'contacts.update',
+	'contacts.update'
 	// 'messages.upsert',
-	'messages.update',
-	'messages.delete',
-	'messages.reaction',
-	'message-receipt.update'
+	// 'messages.update',
+	// 'messages.delete',
+	// 'messages.reaction',
+	// 'message-receipt.update'
 	// 'groups.update'
 ] as const
 
@@ -367,64 +364,7 @@ function append<E extends BufferableEvent>(
 			}
 
 			break
-		case 'messages.update':
-			const msgUpdates = eventData as BaileysEventMap['messages.update']
-			for (const { key, update } of msgUpdates) {
-				const keyStr = stringifyMessageKey(key)
-				const existing = data.historySets.messages[keyStr]
-				if (existing) {
-					Object.assign(existing, update)
-					// if the message was received & read by us
-					// the chat counter must have been incremented
-					// so we need to decrement it
-					if (update.status === WAMessageStatus.READ && !key.fromMe) {
-						decrementChatReadCounterIfMsgDidUnread(existing)
-					}
-				} else {
-					const msgUpdate = data.messageUpdates[keyStr] || { key, update: {} }
-					Object.assign(msgUpdate.update, update)
-					data.messageUpdates[keyStr] = msgUpdate
-				}
-			}
 
-			break
-		case 'messages.delete':
-			const deleteData = eventData as BaileysEventMap['messages.delete']
-			if ('keys' in deleteData) {
-				const { keys } = deleteData
-				for (const key of keys) {
-					const keyStr = stringifyMessageKey(key)
-					if (!data.messageDeletes[keyStr]) {
-						data.messageDeletes[keyStr] = key
-					}
-
-					if (data.messageUpdates[keyStr]) {
-						delete data.messageUpdates[keyStr]
-					}
-				}
-			} else {
-				// TODO: add support
-			}
-
-			break
-		case 'messages.reaction':
-			const reactions = eventData as BaileysEventMap['messages.reaction']
-			for (const { key, reaction } of reactions) {
-				const keyStr = stringifyMessageKey(key)
-				data.messageReactions[keyStr] = data.messageReactions[keyStr] || { key, reactions: [] }
-				updateMessageWithReaction(data.messageReactions[keyStr], reaction)
-			}
-
-			break
-		case 'message-receipt.update':
-			const receipts = eventData as BaileysEventMap['message-receipt.update']
-			for (const { key, receipt } of receipts) {
-				const keyStr = stringifyMessageKey(key)
-				data.messageReceipts[keyStr] = data.messageReceipts[keyStr] || { key, userReceipt: [] }
-				updateMessageWithReceipt(data.messageReceipts[keyStr], receipt)
-			}
-
-			break
 		default:
 			throw new Error(`"${event}" cannot be buffered`)
 	}
@@ -442,25 +382,6 @@ function append<E extends BufferableEvent>(
 			} else if (conditionMatches === false) {
 				logger.debug({ chatId }, 'chat update condition fail, removing')
 				delete data.chatUpdates[chatId]
-			}
-		}
-	}
-
-	function decrementChatReadCounterIfMsgDidUnread(message: WAMessage) {
-		// decrement chat unread counter
-		// if the message has already been marked read by us
-		const chatId = message.key.remoteJid!
-		const chat = data.chatUpdates[chatId] || data.chatUpserts[chatId]
-		if (
-			isRealMessage(message, '') &&
-			shouldIncrementChatUnread(message) &&
-			typeof chat?.unreadCount === 'number' &&
-			chat.unreadCount > 0
-		) {
-			logger.debug({ chatId: chat.id }, 'decrementing chat counter')
-			chat.unreadCount -= 1
-			if (chat.unreadCount === 0) {
-				delete chat.unreadCount
 			}
 		}
 	}
