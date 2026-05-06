@@ -108,7 +108,7 @@ export const makeSocket = (config: SocketConfig) => {
 	const { creds } = authState
 	// add transaction capability
 	const keys = addTransactionCapability(authState.keys, logger, transactionOpts)
-	const signalRepository = makeSignalRepository({ creds, keys })
+	const signalRepository = makeSignalRepository({ creds, keys }, logger)
 
 	let lastDateRecv: Date
 	let epoch = 1

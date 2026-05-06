@@ -170,7 +170,7 @@ export type SocketConfig = {
 
 	linkPreviewCache?: CacheStoreWithGeneric<LoadOgImageProps | undefined>
 
-	makeSignalRepository: (auth: SignalAuthState) => SignalRepository
+	makeSignalRepository: (auth: SignalAuthState, logger: ILogger) => SignalRepository
 
 	sendReportingTag?: boolean
 
