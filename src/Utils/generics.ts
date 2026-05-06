@@ -108,8 +108,9 @@ export const encodeBigEndian = (e: number, t = 4) => {
 	return a
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const toNumber = (t: Long | number | null | undefined): number =>
-	typeof t === 'object' && t ? ('toNumber' in t ? t.toNumber() : (t as Long).low) : t || 0
+	typeof t === 'object' && t ? ('toNumber' in t ? t.toNumber() : (t as any).low) : (t as any) || 0
 
 /** unix timestamp of a date in seconds */
 export const unixTimestampSeconds = (date: Date = new Date()) => Math.floor(date.getTime() / 1000)

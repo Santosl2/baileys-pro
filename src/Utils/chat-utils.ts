@@ -47,9 +47,9 @@ const mutationKeys = async (keydata: Uint8Array) => {
 
 const generateMac = (
 	operation: proto.SyncdMutation.SyncdOperation,
-	data: Buffer,
+	data: Buffer | Uint8Array,
 	keyId: Uint8Array | string,
-	key: Buffer
+	key: Buffer | Uint8Array
 ) => {
 	const getKeyData = () => {
 		let r: number
@@ -125,7 +125,7 @@ const makeLtHashGenerator = ({ indexValueMap, hash }: Pick<LTHashState, 'hash' |
 	}
 }
 
-const generateSnapshotMac = (lthash: Uint8Array, version: number, name: WAPatchName, key: Buffer) => {
+const generateSnapshotMac = (lthash: Uint8Array, version: number, name: WAPatchName, key: Buffer | Uint8Array) => {
 	const total = Buffer.concat([lthash, to64BitNetworkOrder(version), Buffer.from(name, 'utf-8')])
 	return hmacSign(total, key, 'sha256')
 }
@@ -135,7 +135,7 @@ const generatePatchMac = (
 	valueMacs: Uint8Array[],
 	version: number,
 	type: WAPatchName,
-	key: Buffer
+	key: Buffer | Uint8Array
 ) => {
 	const total = Buffer.concat([snapshotMac, ...valueMacs, to64BitNetworkOrder(version), Buffer.from(type, 'utf-8')])
 	return hmacSign(total, key)

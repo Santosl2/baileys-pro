@@ -123,16 +123,16 @@ export const makeNoiseHandler = ({
 
 	const mixIntoKey = async (data: Uint8Array) => {
 		const [write, read] = await localHKDF(data)
-		salt = write!
-		encKey = read!
-		decKey = read!
+		salt = Buffer.from(write!)
+		encKey = Buffer.from(read!)
+		decKey = Buffer.from(read!)
 		counter = 0
 	}
 
 	const finishInit = async () => {
 		isWaitingForTransport = true
 		const [write, read] = await localHKDF(new Uint8Array(0))
-		transport = new TransportState(write!, read!)
+		transport = new TransportState(Buffer.from(write!), Buffer.from(read!))
 		isWaitingForTransport = false
 
 		logger.trace('Noise handler transitioned to Transport state')

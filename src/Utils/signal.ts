@@ -1,4 +1,5 @@
-import { chunk } from 'lodash'
+import lodash from 'lodash'
+const { chunk } = lodash
 import { KEY_BUNDLE_TYPE } from '../Defaults'
 import { SignalRepository } from '../Types'
 import {

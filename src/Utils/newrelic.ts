@@ -1,3 +1,6 @@
+import { createRequire } from 'module'
+const _require = createRequire(import.meta.url)
+
 type NewRelicAttributes = Record<string, string | number | boolean | null | undefined>
 
 type NewRelicAgent = {
@@ -15,7 +18,7 @@ const getNewRelicAgent = () => {
 	}
 
 	try {
-		const loaded = require('newrelic') as NewRelicAgent
+		const loaded = _require('newrelic') as NewRelicAgent
 		cachedNewRelicAgent = loaded
 	} catch {
 		cachedNewRelicAgent = null
