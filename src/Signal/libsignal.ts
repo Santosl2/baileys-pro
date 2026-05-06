@@ -270,7 +270,7 @@ function signalStorage({ creds, keys }: SignalAuthState): SenderKeyStore & Recor
 		},
 		storeSession: async (id: string, session: libsignal.SessionRecord) => {
 			// Delete from cache first to ensure we don't have stale data if the session is deleted in the middle of an update
-			sessionCache.delete(id)
+			sessionCache.set(id, session)
 			await keys.set({ session: { [id]: session.serialize() } })
 		},
 		isTrustedIdentity: () => {
