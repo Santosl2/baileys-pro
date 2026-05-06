@@ -12,6 +12,7 @@ import {
 	MiscMessageGenerationOptions,
 	SocketConfig,
 	WAInteractiveMessagesNativeFlowName,
+	WAMessage,
 	WAMessageKey,
 	WANativeFlowButtonEnum
 } from '../Types'
@@ -1369,7 +1370,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				})
 				if (config.emitOwnEvents) {
 					process.nextTick(() => {
-						messageMutex.mutex(() => upsertMessage(fullMsg, 'append'))
+						messageMutex.mutex(() => upsertMessage(fullMsg as WAMessage, 'append'))
 					})
 				}
 

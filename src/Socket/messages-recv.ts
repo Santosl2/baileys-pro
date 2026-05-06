@@ -1015,7 +1015,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 						msg.participant ??= node.attrs.participant
 						msg.messageTimestamp = +node.attrs.t
 
-						const fullMsg = proto.WebMessageInfo.fromObject(msg)
+						const fullMsg = proto.WebMessageInfo.fromObject(msg) as WAMessage
 						await upsertMessage(fullMsg, 'append')
 					}
 				})
@@ -1628,7 +1628,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 								},
 								message: messageProto,
 								messageTimestamp: +child.attrs.t
-							})
+							}) as WAMessage
 							await upsertMessage(fullMessage, 'append')
 							logger.info('Processed plaintext newsletter message')
 						} catch (error) {
@@ -1886,7 +1886,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 				msg.message = { call: { callKey: Buffer.from(call.id) } }
 			}
 
-			const protoMsg = proto.WebMessageInfo.fromObject(msg)
+			const protoMsg = proto.WebMessageInfo.fromObject(msg) as WAMessage
 			upsertMessage(protoMsg, call.offline ? 'append' : 'notify')
 		}
 	})

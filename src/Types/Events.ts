@@ -21,9 +21,12 @@ export type BaileysEventMap = {
 		chats: Chat[]
 		contacts: Contact[]
 		messages: WAMessage[]
+		// lidPnMappings?: LIDMapping[]
 		isLatest?: boolean
 		progress?: number | null
-		syncType?: proto.HistorySync.HistorySyncType
+		syncType?: proto.HistorySync.HistorySyncType | null
+		pastParticipants?: proto.IPastParticipants[] | null
+		chunkOrder?: number | null
 		peerDataRequestSessionId?: string | null
 	}
 	/** upsert chats */
