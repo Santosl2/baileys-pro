@@ -5,7 +5,6 @@ import { makeLibSignalRepository } from '../Signal/libsignal'
 import type { AuthenticationState, CacheStore, MediaType, SocketConfig, WAVersion } from '../Types'
 import { Browsers } from '../Utils'
 import logger from '../Utils/logger'
-import { version } from './baileys-version.json'
 
 export const DEFAULT_CACHE_TTLS = {
 	SIGNAL_STORE: 5 * 60, // 5 minutes
@@ -79,6 +78,8 @@ const mediaCacheFactory = (): CacheStore => {
 		flushAll: () => mediaCache.clear()
 	}
 }
+
+const version = [2, 3000, 1035194821]
 
 export const DEFAULT_CONNECTION_CONFIG: SocketConfig = {
 	version: version as WAVersion,

@@ -4,7 +4,6 @@ import { createHash, randomBytes } from 'crypto'
 import type Long from 'long'
 import { platform, release } from 'os'
 import { proto } from '../../WAProto/index.js'
-import { version as baileysVersion } from '../Defaults/baileys-version.json'
 import {
 	BaileysEventEmitter,
 	BaileysEventMap,
@@ -235,6 +234,8 @@ export function bindWaitForEvent<T extends keyof BaileysEventMap>(ev: BaileysEve
 }
 
 export const bindWaitForConnectionUpdate = (ev: BaileysEventEmitter) => bindWaitForEvent(ev, 'connection.update')
+
+const baileysVersion = [2, 3000, 1035194821]
 
 /**
  * utility that fetches latest baileys version from the master branch.
