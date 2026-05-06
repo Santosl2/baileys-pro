@@ -1,6 +1,6 @@
 import NodeCache from '@cacheable/node-cache'
 import { LRUCache } from 'lru-cache'
-import { proto } from '../../WAProto'
+import { proto } from '../../WAProto/index.js'
 import { makeLibSignalRepository } from '../Signal/libsignal'
 import type { AuthenticationState, CacheStore, MediaType, SocketConfig, WAVersion } from '../Types'
 import { Browsers } from '../Utils'

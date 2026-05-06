@@ -1,6 +1,6 @@
 import { Boom } from '@hapi/boom'
 import { LRUCache } from 'lru-cache'
-import { proto } from '../../WAProto'
+import { proto } from '../../WAProto/index.js'
 import { BinaryNode } from './types'
 
 // some extra useful utilities

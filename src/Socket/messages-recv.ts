@@ -3,7 +3,7 @@ import { Boom } from '@hapi/boom'
 import { randomBytes } from 'crypto'
 import Long from 'long'
 import { LRUCache } from 'lru-cache'
-import { proto } from '../../WAProto'
+import { proto } from '../../WAProto/index.js'
 import {
 	DEFAULT_CACHE_MAX_KEYS,
 	DEFAULT_CACHE_TTLS,

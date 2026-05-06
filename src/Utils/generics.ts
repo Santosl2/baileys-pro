@@ -3,7 +3,7 @@ import axios, { AxiosRequestConfig } from 'axios'
 import { createHash, randomBytes } from 'crypto'
 import type Long from 'long'
 import { platform, release } from 'os'
-import { proto } from '../../WAProto'
+import { proto } from '../../WAProto/index.js'
 import { version as baileysVersion } from '../Defaults/baileys-version.json'
 import {
 	BaileysEventEmitter,
