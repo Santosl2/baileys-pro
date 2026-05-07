@@ -5263,7 +5263,7 @@ levn@~0.3.0:
 
 "libsignal@git+https://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@github.com/Moto-Vale/oferta-libsignal.git#feat/prod":
   version "2.0.1"
-  resolved "git+https://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@github.com/Moto-Vale/oferta-libsignal.git#0666f1542ce87b915b94d8e5466ee76d5776f993"
+  resolved "git+https://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@github.com/Moto-Vale/oferta-libsignal.git#3d195112717d3a5ee2f7e7f682d90eb5058efba5"
   dependencies:
     node-addon-api "^7.1.0"
     protobufjs "6.8.8"
