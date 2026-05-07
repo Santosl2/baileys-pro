@@ -228,9 +228,9 @@ const jidToSignalProtocolAddress = (jid: string): ProtocolAddress => {
 	const signalUser = domainType !== WAJIDDomains.WHATSAPP ? `${user}_${domainType}` : user
 	const finalDevice = device || 0
 
-	if (device === 99 && decoded.server !== 'hosted' && decoded.server !== 'hosted.lid') {
-		throw new Error('Unexpected non-hosted device JID with device 99. This ID seems invalid. ID:' + jid)
-	}
+	// if (device === 99 && decoded.server !== 'hosted' && decoded.server !== 'hosted.lid') {
+	// 	throw new Error('Unexpected non-hosted device JID with device 99. This ID seems invalid. ID:' + jid)
+	// }
 
 	return new ProtocolAddress(signalUser, finalDevice)
 }
