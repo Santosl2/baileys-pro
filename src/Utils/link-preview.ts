@@ -44,6 +44,7 @@ async function loadOgImage(
 			axios.get(link, {
 				maxRedirects: 21,
 				headers: {
+					...headers,
 					// https://github.com/jhy/jsoup/issues/976
 					'User-Agent':
 						headers?.['User-Agent'] ||
