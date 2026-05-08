@@ -36,7 +36,10 @@ export type LoadOgImageProps = {
 }
 
 const getTag = ($: CheerioAPI, name: string) =>
-	$(`meta[property="og:${name}"]`).attr('content') || $(`meta[name="${name}"]`).attr('content') || null
+	$(`meta[property="og:${name}"]`).attr('content') ||
+	$(`meta[name="og:${name}"]`).attr('content') ||
+	$(`meta[name="${name}"]`).attr('content') ||
+	null
 
 let cheerio: typeof import('cheerio') | undefined = undefined
 async function loadOgImage(
