@@ -1,4 +1,5 @@
 import axios, { AxiosRequestConfig } from 'axios'
+import { type CheerioAPI } from 'cheerio'
 import { CacheStoreWithGeneric, WAMediaUploadFunction, WAUrlInfo } from '../Types'
 import { ILogger } from './logger'
 import { prepareWAMessageMedia } from './messages'
@@ -34,6 +35,9 @@ export type LoadOgImageProps = {
 	url: string
 }
 
+const getTag = ($: CheerioAPI, name: string) =>
+	$(`meta[property="og:${name}"]`).attr('content') || $(`meta[name="${name}"]`).attr('content') || null
+
 async function loadOgImage(
 	url: string,
 	headers?: AxiosRequestConfig<{}>['headers'],
@@ -60,17 +64,14 @@ async function loadOgImage(
 			data = await request(data.request.res.responseUrl.replace('opaanlp', 'product'))
 		}
 
-		const cheerio = await import('cheerio')
+		const cheerio = await import('cheerio/slim')
 		const $ = cheerio.load(data.data)
 
-		const get = (name: string) =>
-			$(`meta[property="og:${name}"]`).attr('content') || $(`meta[name="${name}"]`).attr('content') || null
-
 		return {
-			title: get('title') || $('title').text() || null,
-			description: get('description'),
-			images: [get('image') || null].filter(Boolean) as string[],
-			url: get('url') || url,
+			title: getTag($, 'title') || $('title').text() || null,
+			description: getTag($, 'description'),
+			images: [getTag($, 'image') || null].filter(Boolean) as string[],
+			url: getTag($, 'url') || url,
 			favicon: $('link[rel="icon"]').attr('href') || $('link[rel="shortcut icon"]').attr('href') || null
 		}
 	} catch (error) {
