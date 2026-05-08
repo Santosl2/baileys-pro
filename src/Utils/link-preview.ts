@@ -38,6 +38,7 @@ export type LoadOgImageProps = {
 const getTag = ($: CheerioAPI, name: string) =>
 	$(`meta[property="og:${name}"]`).attr('content') || $(`meta[name="${name}"]`).attr('content') || null
 
+let cheerio: typeof import('cheerio') | undefined = undefined
 async function loadOgImage(
 	url: string,
 	headers?: AxiosRequestConfig<{}>['headers'],
@@ -64,7 +65,10 @@ async function loadOgImage(
 			data = await request(data.request.res.responseUrl.replace('opaanlp', 'product'))
 		}
 
-		const cheerio = await import('cheerio/slim')
+		if (!cheerio) {
+			cheerio = await import('cheerio')
+		}
+
 		const $ = cheerio.load(data.data)
 
 		return {
