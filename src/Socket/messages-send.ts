@@ -724,6 +724,8 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 							shouldIncludeDeviceIdentity = shouldIncludeDeviceIdentity || result.shouldIncludeDeviceIdentity
 
 							participants.push(...result.nodes)
+
+							promises.push(authState.keys.set({ 'sender-key-memory': { [jid]: senderKeyMap } }) as any)
 						}
 
 						binaryNodeContent.push({
@@ -731,8 +733,6 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 							attrs: { v: '2', type: 'skmsg' },
 							content: ciphertext
 						})
-
-						promises.push(authState.keys.set({ 'sender-key-memory': { [jid]: senderKeyMap } }) as any)
 					} else if (!isRetryResend) {
 						const { user: meUser } = jidDecode(meId)!
 
