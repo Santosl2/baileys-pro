@@ -1,4 +1,3 @@
-import { LRUCache } from 'lru-cache'
 import type { SignalStorage } from 'whatsapp-rust-bridge'
 import {
 	GroupCipher,
@@ -243,22 +242,11 @@ function signalStorage({ creds, keys }: SignalAuthState): SignalStorage & {
 	loadIdentityKey(id: string): Promise<Uint8Array | undefined>
 	saveIdentity(id: string, identityKey: Uint8Array): Promise<boolean>
 } {
-	// Session cache to reduce redundant storage reads
-	const sessionCache = new LRUCache<string, Uint8Array>({
-		max: 500,
-		ttl: 1000 * 60 * 30
-	})
-
 	return {
 		loadSession: async (id: string) => {
 			try {
-				if (sessionCache.has(id)) {
-					return sessionCache.get(id)!
-				}
-
 				const { [id]: sess } = await keys.get('session', [id])
 				if (sess) {
-					sessionCache.set(id, sess)
 					return sess
 				}
 
@@ -269,7 +257,6 @@ function signalStorage({ creds, keys }: SignalAuthState): SignalStorage & {
 		},
 		storeSession: async (id: string, session: SessionRecord) => {
 			const serialized = session.serialize()
-			sessionCache.delete(id) // Invalidate cache to ensure consistency
 			await keys.set({ session: { [id]: serialized } })
 		},
 		isTrustedIdentity: () => {
@@ -289,7 +276,6 @@ function signalStorage({ creds, keys }: SignalAuthState): SignalStorage & {
 
 			if (existingKey && !keysMatch) {
 				// Identity changed - clear session and update key
-				sessionCache.delete(id)
 				await keys.set({
 					session: { [id]: null },
 					'identity-key': { [id]: identityKey }
