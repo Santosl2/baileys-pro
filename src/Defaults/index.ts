@@ -8,7 +8,7 @@ import logger from '../Utils/logger'
 import { version } from './baileys-version.json'
 
 export const DEFAULT_CACHE_TTLS = {
-	SIGNAL_STORE: 5 * 60, // 5 minutes
+	SIGNAL_STORE: 10 * 60, // 10 minutes
 	MSG_RETRY: 10 * 60, // 10 minutes
 	CALL_OFFER: 5 * 60, // 5 minutes
 	USER_DEVICES: 25 * 60, // 25 minutes
