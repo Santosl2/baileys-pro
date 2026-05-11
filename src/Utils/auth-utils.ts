@@ -135,10 +135,8 @@ export function makeCacheableSignalKeyStore(
 					}
 				}
 
-				await cacheMset(toSave)
-
 				logger?.trace({ keys }, 'updated cache')
-				await store.set(data)
+				await Promise.allSettled([cacheMset(toSave), store.set(data)])
 			})
 		},
 		async clear() {
