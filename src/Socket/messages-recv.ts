@@ -155,8 +155,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 
 	let sendActiveReceipts = false
 
-	const sendMessageAck = async ({ tag, attrs }: BinaryNode, errorCode?: number) => {
-		const meId = authState.creds.me?.id
+	const sendMessageAck = async ({ tag, attrs, ...rest }: BinaryNode, errorCode?: number) => {
 		const stanza: BinaryNode = {
 			tag: 'ack',
 			attrs: {
@@ -178,16 +177,28 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 			stanza.attrs.recipient = attrs.recipient
 		}
 
-		if (!!attrs.type) {
+		if (!!attrs.type && tag !== 'message') {
 			stanza.attrs.type = attrs.type
 		}
 
-		if (tag === 'message' && meId) {
-			stanza.attrs.from = meId
-		}
-
 		logger.debug({ recv: { tag, attrs }, sent: stanza.attrs }, 'sent ack')
-		await sendNode(stanza)
+
+		try {
+			await sendNode(stanza)
+		} catch (error) {
+			logger.error({ error, stanza }, 'failed to send ack')
+			ev.emit('messages-ack.error', {
+				stanza,
+				error,
+				node: {
+					tag,
+					attrs,
+					...rest
+				}
+			})
+
+			throw error
+		}
 	}
 
 	const rejectCall = async (callId: string, callFrom: string) => {
@@ -1167,39 +1178,25 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 
 						logger.debug(`[handleMessage] Attempting retry request for failed decryption`)
 
-						// Handle both pre-key and normal retries in single mutex
 						await retryMutex.mutex(async () => {
-							try {
-								if (!ws.isOpen) {
-									logger.debug({ node }, 'Connection closed, skipping retry')
-									return
-								}
+							const maxRetryAttempts = 3
 
-								// Handle pre-key errors with upload and delay
-								if (isPreKeyError) {
-									logger.info({ error: errorMessage }, 'PreKey error detected, uploading and retrying')
-
-									try {
-										logger.debug('Uploading pre-keys for error recovery')
-										await uploadPreKeys(5)
-										logger.debug('Waiting for server to process new pre-keys')
-										await delay(1000)
-									} catch (uploadErr) {
-										logger.error({ uploadErr }, 'Pre-key upload failed, proceeding with retry anyway')
-									}
-								}
-
-								await sendRetryRequest(node, !encNode || isNoSenderKeyError)
-								if (retryRequestDelayMs) {
-									await delay(retryRequestDelayMs)
-								}
-							} catch (err) {
-								logger.error({ err, isPreKeyError }, 'Failed to handle retry, attempting basic retry')
-								// Still attempt retry even if pre-key upload failed
+							for (let attempt = 1; attempt <= maxRetryAttempts; attempt++) {
 								try {
+									if (!ws.isOpen) {
+										logger.debug({ node }, 'Connection closed, skipping retry')
+										return
+									}
+
 									await sendRetryRequest(node, !encNode || isNoSenderKeyError)
-								} catch (retryErr) {
-									logger.error({ retryErr }, 'Failed to send retry after error handling')
+
+									return
+								} catch (err) {
+									logger.error({ err, isPreKeyError }, 'Failed to handle retry, attempting basic retry')
+								} finally {
+									if (retryRequestDelayMs) {
+										await delay(retryRequestDelayMs)
+									}
 								}
 							}
 
