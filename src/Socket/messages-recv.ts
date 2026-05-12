@@ -177,8 +177,13 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 			stanza.attrs.recipient = attrs.recipient
 		}
 
-		if (!!attrs.type && tag !== 'message') {
+		if (attrs.type) {
 			stanza.attrs.type = attrs.type
+		}
+
+		const meId = authState.creds.me?.id
+		if (tag === 'message' && meId) {
+			stanza.attrs.from = meId
 		}
 
 		logger.debug({ recv: { tag, attrs }, sent: stanza.attrs }, 'sent ack')
