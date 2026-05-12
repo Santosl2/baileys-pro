@@ -1,5 +1,6 @@
 import type { Boom } from '@hapi/boom'
 import { proto } from '../../WAProto'
+import { BinaryNode } from '../WABinary'
 import { AuthenticationCreds } from './Auth'
 import { WACallEvent } from './Call'
 import { Chat, ChatUpdate, PresenceData } from './Chat'
@@ -39,6 +40,7 @@ export type BaileysEventMap = {
 	'contacts.upsert': Contact[]
 	'contacts.update': Partial<Contact>[]
 
+	'messages-ack.error': { stanza: BinaryNode; error: any; node: BinaryNode }
 	'messages.delete': { keys: WAMessageKey[] } | { jid: string; all: true }
 	'messages.update': WAMessageUpdate[]
 	'messages.media-update': { key: WAMessageKey; media?: { ciphertext: Uint8Array; iv: Uint8Array }; error?: Boom }[]
