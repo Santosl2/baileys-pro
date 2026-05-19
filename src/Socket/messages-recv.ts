@@ -202,7 +202,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 				}
 			})
 
-			throw error
+			onUnexpectedError(error, 'send ack')
 		}
 	}
 
