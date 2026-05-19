@@ -244,13 +244,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		}
 
 		if (!toFetch.length) {
-			return deviceResults.filter(({ device }) => {
-				if (ignoreZeroDevices) {
-					return device !== 0
-				}
-
-				return true
-			})
+			return ignoreZeroDevices ? deviceResults.filter(({ device }) => device !== 0) : deviceResults
 		}
 
 		const query = new USyncQuery().withContext('message').withDeviceProtocol()
@@ -275,7 +269,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 			}
 		}
 
-		return deviceResults
+		return ignoreZeroDevices ? deviceResults.filter(({ device }) => device !== 0) : deviceResults
 	}
 
 	const assertSessions = async (jids: string[], force: boolean) => {
