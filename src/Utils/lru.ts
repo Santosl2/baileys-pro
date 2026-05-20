@@ -11,6 +11,7 @@ export function createLruWithInterface(data: { max?: number; ttl?: number } = {}
 		get: <T>(key: string) => cache.get(key) as T | undefined,
 		set: <T>(key: string, value: T) => cache.set(key, value),
 		del: (key: string) => cache.delete(key),
-		flushAll: () => cache.clear()
+		flushAll: () => cache.clear(),
+		close: () => cache.clear()
 	}
 }

@@ -25,6 +25,7 @@ export type CacheStore = {
 	mset?<T>(values: { key: string; value: T }[]): boolean | Promise<void>
 	/** get multiple values at once */
 	mget?<T>(keys: string[]): Record<string, unknown> | (T | undefined)[]
+	close?: () => void
 }
 
 export type CacheStoreWithGeneric<T> = {
