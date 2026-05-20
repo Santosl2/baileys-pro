@@ -83,7 +83,8 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		fetchPrivacySettings,
 		sendNode,
 		groupMetadata,
-		groupToggleEphemeral
+		groupToggleEphemeral,
+		registerSocketEndHandler
 	} = sock
 
 	const userDevicesCache =
@@ -1173,6 +1174,16 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 	const waUploadToServer = getWAUploadToServer(config, refreshMediaConn)
 
 	const waitForMsgMediaUpdate = bindWaitForEvent(ev, 'messages.media-update')
+
+	registerSocketEndHandler(async () => {
+		if (!config.userDevicesCache && userDevicesCache.close) {
+			userDevicesCache.close()
+		}
+
+		if (messageRetryManager) {
+			messageRetryManager.clear()
+		}
+	})
 
 	return {
 		...sock,

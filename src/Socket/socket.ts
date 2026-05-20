@@ -116,6 +116,8 @@ export const makeSocket = (config: SocketConfig) => {
 	let qrTimer: NodeJS.Timeout
 	let closed = false
 
+	const socketEndHandlers: Array<(error: Error | undefined) => Promise<void>> = []
+
 	const uqTagId = generateMdTagPrefix()
 	const generateMessageTag = () => `${uqTagId}${epoch++}`
 
@@ -397,6 +399,16 @@ export const makeSocket = (config: SocketConfig) => {
 			}
 		}
 
+		for (const handler of socketEndHandlers) {
+			try {
+				handler(error).catch(err => {
+					logger.error({ err }, 'error in socket end handler')
+				})
+			} catch (err) {
+				logger.error({ err }, 'error in socket end handler')
+			}
+		}
+
 		ev.emit('connection.update', {
 			connection: 'close',
 			lastDisconnect: {
@@ -431,6 +443,10 @@ export const makeSocket = (config: SocketConfig) => {
 			ws.off('close', onClose)
 			ws.off('error', onClose)
 		})
+	}
+
+	const registerSocketEndHandler = (handler: (error: Error | undefined) => Promise<void>) => {
+		socketEndHandlers.push(handler)
 	}
 
 	const startKeepAliveRequest = () => {
@@ -869,6 +885,7 @@ export const makeSocket = (config: SocketConfig) => {
 		uploadPreKeys,
 		uploadPreKeysToServerIfRequired,
 		requestPairingCode,
+		registerSocketEndHandler,
 		/** Waits for the connection to WA to reach a state */
 		waitForConnectionUpdate: bindWaitForConnectionUpdate(ev),
 		sendWAMBuffer
