@@ -102,10 +102,6 @@ export const makeChatsSocket = (config: SocketConfig) => {
 			maxKeys: DEFAULT_CACHE_MAX_KEYS.PLACEHOLDER_RESEND
 		})
 
-	if (!config.placeholderResendCache) {
-		config.placeholderResendCache = placeholderResendCache
-	}
-
 	/** helper function to fetch the given app state sync key */
 	const getAppStateSyncKey = async (keyId: string) => {
 		const { [keyId]: key } = await authState.keys.get('app-state-sync-key', [keyId])
@@ -839,7 +835,7 @@ export const makeChatsSocket = (config: SocketConfig) => {
 	}
 
 	/** sending non-abt props may fix QR scan fail if server expects */
-		const fetchProps = async () => {
+	const fetchProps = async () => {
 		const resultNode = await query({
 			tag: 'iq',
 			attrs: {
