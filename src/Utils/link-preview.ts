@@ -11,13 +11,9 @@ const getCompressedJpegThumbnailAndResizeIfNecessary = async (
 	url: string,
 	{ thumbnailWidth = 1024, fetchOpts }: URLGenerationOptions
 ) => {
-	try {
-		const stream = await getHttpStream(url, fetchOpts)
-		const result = await extractImageThumbResized(stream, Math.max(1024, thumbnailWidth))
-		return result
-	} catch {
-		return undefined
-	}
+	const stream = await getHttpStream(url, fetchOpts)
+	const result = await extractImageThumbResized(stream, Math.max(1024, thumbnailWidth))
+	return result
 }
 
 export type URLGenerationOptions = {
