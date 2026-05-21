@@ -1,17 +1,24 @@
+/* eslint-disable max-depth */
 import axios, { AxiosRequestConfig } from 'axios'
 import { type CheerioAPI } from 'cheerio'
 import { CacheStoreWithGeneric, WAMediaUploadFunction, WAUrlInfo } from '../Types'
 import { ILogger } from './logger'
 import { prepareWAMessageMedia } from './messages'
-import { extractImageThumb, getHttpStream } from './messages-media'
+import { extractImageThumbResized, getHttpStream } from './messages-media'
 
-const THUMBNAIL_WIDTH_PX = 192
+const THUMBNAIL_WIDTH_PX = 1024
 
-/** Fetches an image and generates a thumbnail for it */
-const getCompressedJpegThumbnail = async (url: string, { thumbnailWidth, fetchOpts }: URLGenerationOptions) => {
-	const stream = await getHttpStream(url, fetchOpts)
-	const result = await extractImageThumb(stream, thumbnailWidth)
-	return result
+const getCompressedJpegThumbnailAndResizeIfNecessary = async (
+	url: string,
+	{ thumbnailWidth = 1024, fetchOpts }: URLGenerationOptions
+) => {
+	try {
+		const stream = await getHttpStream(url, fetchOpts)
+		const result = await extractImageThumbResized(stream, Math.max(1024, thumbnailWidth))
+		return result
+	} catch {
+		return undefined
+	}
 }
 
 export type URLGenerationOptions = {
@@ -87,21 +94,6 @@ async function loadOgImage(
 	}
 }
 
-async function loadOgImageSize(
-	url: string,
-	headers?: AxiosRequestConfig<{}>['headers'],
-	logger?: ILogger
-): Promise<{ width: number; height: number } | undefined> {
-	try {
-		const stream = await getHttpStream(url, { headers })
-		const result = await extractImageThumb(stream, THUMBNAIL_WIDTH_PX)
-		return result.original
-	} catch (error) {
-		logger?.debug({ err: error.stack, url }, 'error in fetching og image size')
-		return undefined
-	}
-}
-
 /**
  * Given a piece of text, checks for any URL present, generates link preview for the same and returns it
  * Return undefined if the fetch failed or no URL was found
@@ -153,27 +145,47 @@ export const getUrlInfo = async (
 			}
 
 			if (opts.uploadImage) {
-				const ogImageSize = await loadOgImageSize(image, opts.fetchOpts?.headers, opts.logger).catch(() => undefined)
+				const imageNeedsUpload = await getCompressedJpegThumbnailAndResizeIfNecessary(image, opts)
+				const hasPreviousUploaded = 'original' in imageNeedsUpload
 
 				const { imageMessage } = await prepareWAMessageMedia(
-					{ image: { url: image } },
+					{ image: hasPreviousUploaded ? imageNeedsUpload.buffer : { url: image } },
 					{
 						upload: opts.uploadImage,
 						mediaTypeOverride: 'thumbnail-link',
 						options: opts.fetchOpts
 					}
 				)
+
+				let imageWidth = imageMessage?.width
+				let imageHeight = imageMessage?.height
+				let compressedThumbnail: Buffer | undefined = hasPreviousUploaded ? imageNeedsUpload.buffer : undefined
+
+				if (!imageWidth || !imageHeight) {
+					const ogImageSize = hasPreviousUploaded
+						? imageNeedsUpload
+						: await getCompressedJpegThumbnailAndResizeIfNecessary(image, opts)
+					imageWidth = ogImageSize?.original.width
+					imageHeight = ogImageSize?.original.height
+
+					compressedThumbnail = ogImageSize.buffer
+				}
+
+				if (!imageMessage?.jpegThumbnail && !compressedThumbnail) {
+					compressedThumbnail = (await getCompressedJpegThumbnailAndResizeIfNecessary(image, opts)).buffer
+				}
+
 				urlInfo.jpegThumbnail = imageMessage?.jpegThumbnail
 					? Buffer.from(imageMessage.jpegThumbnail)
-					: (await getCompressedJpegThumbnail(image, opts)).buffer
+					: compressedThumbnail
 				urlInfo.highQualityThumbnail = imageMessage || undefined
-				urlInfo.thumbnailWidth = imageMessage?.width || ogImageSize?.width || undefined
-				urlInfo.thumbnailHeight = imageMessage?.height || ogImageSize?.height || undefined
+				urlInfo.thumbnailWidth = imageWidth
+				urlInfo.thumbnailHeight = imageHeight
 			} else {
 				try {
 					// eslint-disable-next-line max-depth
 					if (image) {
-						const thumb = await getCompressedJpegThumbnail(image, opts)
+						const thumb = await getCompressedJpegThumbnailAndResizeIfNecessary(image, opts)
 						urlInfo.jpegThumbnail = thumb.buffer
 						urlInfo.thumbnailWidth = opts.thumbnailWidth
 						urlInfo.thumbnailHeight =
