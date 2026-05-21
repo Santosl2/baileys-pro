@@ -32,14 +32,10 @@ import { ILogger } from './logger'
 const getTmpFilesDirectory = () => tmpdir()
 
 const getImageProcessingLibrary = async () => {
-	const [jimp, sharp] = await Promise.all([import('jimp').catch(() => {}), import('sharp').catch(() => {})])
+	const sharp = await import('sharp').catch(() => {})
 
 	if (sharp) {
 		return { sharp }
-	}
-
-	if (jimp) {
-		return { jimp }
 	}
 
 	throw new Boom('No image processing library available')
@@ -135,9 +131,13 @@ const extractVideoThumb = async (
 		})
 	})
 
+const assertSharpLoaded = (lib: Awaited<ReturnType<typeof getImageProcessingLibrary>>) => {
+	if (!('sharp' in lib) || typeof lib.sharp?.default !== 'function') {
+		throw new Boom('No image processing library available')
+	}
+}
+
 export const extractImageThumb = async (bufferOrFilePath: Readable | Buffer | string, width = 32) => {
-	// TODO: Move entirely to sharp, removing jimp as it supports readable streams
-	// This will have positive speed and performance impacts as well as minimizing RAM usage.
 	if (bufferOrFilePath instanceof Readable) {
 		bufferOrFilePath = await toBuffer(bufferOrFilePath)
 	}
@@ -147,7 +147,7 @@ export const extractImageThumb = async (bufferOrFilePath: Readable | Buffer | st
 		const img = lib.sharp.default(bufferOrFilePath)
 		const dimensions = await img.metadata()
 
-		const buffer = await img.resize(width).jpeg({ quality: 50 }).toBuffer()
+		const buffer = await img.resize(width).jpeg({ quality: 90 }).toBuffer()
 		return {
 			buffer,
 			original: {
@@ -155,21 +155,47 @@ export const extractImageThumb = async (bufferOrFilePath: Readable | Buffer | st
 				height: dimensions.height
 			}
 		}
-	} else if ('jimp' in lib && typeof lib.jimp?.Jimp === 'object') {
-		const jimp = await (lib.jimp.Jimp as any).read(bufferOrFilePath)
-		const dimensions = {
-			width: jimp.width,
-			height: jimp.height
-		}
-		const buffer = await jimp
-			.resize({ w: width, mode: lib.jimp.ResizeStrategy.BILINEAR })
-			.getBuffer('image/jpeg', { quality: 50 })
-		return {
-			buffer,
-			original: dimensions
-		}
 	} else {
 		throw new Boom('No image processing library available')
+	}
+}
+
+export const extractImageThumbResized = async (bufferOrFilePath: Readable | Buffer, resizeWidth = 1024) => {
+	if (bufferOrFilePath instanceof Readable) {
+		bufferOrFilePath = await toBuffer(bufferOrFilePath)
+	}
+
+	const lib = await getImageProcessingLibrary()
+	assertSharpLoaded(lib)
+
+	const img = lib.sharp.default(bufferOrFilePath)
+	const dimensions = await img.metadata()
+
+	const isPortrait = dimensions.height > dimensions.width
+	const needsResize = dimensions.height < 500 || dimensions.width < 500
+
+	if (!isPortrait && !needsResize)
+		return {
+			buffer: bufferOrFilePath,
+			original: {
+				width: dimensions.width,
+				height: dimensions.height
+			}
+		}
+
+	const resized = await img
+		.resize(resizeWidth, resizeWidth, {
+			fit: 'contain', // mantém proporção
+			background: { r: 255, g: 255, b: 255, alpha: 1 } // fundo (branco ou transparente)
+		})
+		.toBuffer()
+
+	return {
+		buffer: resized,
+		original: {
+			width: 1024,
+			height: 1024
+		}
 	}
 }
 
@@ -203,12 +229,6 @@ export const generateProfilePicture = async (
 				quality: 50
 			})
 			.toBuffer()
-	} else if ('jimp' in lib && typeof lib.jimp?.Jimp === 'function') {
-		const jimp = await (lib.jimp.Jimp as any).read(buffer)
-		const min = Math.min(jimp.width, jimp.height)
-		const cropped = jimp.crop({ x: 0, y: 0, w: min, h: min })
-
-		img = cropped.resize({ w, h, mode: lib.jimp.ResizeStrategy.BILINEAR }).getBuffer('image/jpeg', { quality: 50 })
 	} else {
 		throw new Boom('No image processing library available')
 	}
