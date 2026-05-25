@@ -29,6 +29,8 @@ import { aesDecryptGCM, aesEncryptGCM, hkdf } from './crypto'
 import { generateMessageIDV2 } from './generics'
 import { ILogger } from './logger'
 
+export const DEF_MEDIA_HOST = 'mmg.whatsapp.net'
+
 const getTmpFilesDirectory = () => tmpdir()
 
 const getImageProcessingLibrary = async () => {
