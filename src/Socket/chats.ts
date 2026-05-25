@@ -1046,7 +1046,7 @@ export const makeChatsSocket = (config: SocketConfig) => {
 		const doAppStateSync = async () => {
 			if (syncState === SyncState.Syncing) {
 				logger.info('Doing app state sync')
-				await resyncAppState(ALL_WA_PATCH_NAMES, true)
+				await appStatePatchMutex.mutex(() => resyncAppState(ALL_WA_PATCH_NAMES, false))
 
 				// Sync is complete, go online and flush everything
 				syncState = SyncState.Online
@@ -1171,7 +1171,7 @@ export const makeChatsSocket = (config: SocketConfig) => {
 			)
 
 			try {
-				await resyncAppState(collectionsToRetry, false)
+				await appStatePatchMutex.mutex(() => resyncAppState(collectionsToRetry, false))
 			} catch (error) {
 				logger.warn({ error }, 'failed to resync blocked collections after key arrival')
 			}
