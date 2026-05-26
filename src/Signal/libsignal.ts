@@ -4,6 +4,8 @@ import { SignalAuthState, SignalKeyStoreWithTransaction } from '../Types'
 import { SignalRepository } from '../Types/Signal'
 import { generateSignalPubKey } from '../Utils'
 import logger from '../Utils/logger'
+// FIX 1: import do mutex utilitário (já existe no projeto)
+import { makeKeyedMutex } from '../Utils/make-mutex'
 import { jidDecode } from '../WABinary'
 import type { SenderKeyStore } from './Group/group_cipher'
 import { SenderKeyName } from './Group/sender-key-name'
@@ -37,6 +39,10 @@ function extractIdentityFromPkmsg(ciphertext: Uint8Array): Uint8Array | undefine
 export function makeLibSignalRepository(auth: SignalAuthState): SignalRepository {
 	const storage: SenderKeyStore = signalStorage(auth)
 
+	// FIX 2: mutex por endereço de sessão — impede que encrypt/decrypt
+	// concorrentes para o mesmo par JID corram em paralelo.
+	const sessionMutex = makeKeyedMutex()
+
 	return {
 		async validateSession(jid: string) {
 			try {
@@ -56,18 +62,29 @@ export function makeLibSignalRepository(auth: SignalAuthState): SignalRepository
 				return { exists: false, reason: 'validation error' }
 			}
 		},
+
+		// FIX 3: deleteSession agora passa pelo mutex para não colidir com um
+		// decrypt/encrypt em andamento na mesma sessão.
 		deleteSession(jid: string) {
 			const addr = jidToSignalProtocolAddress(jid)
-			return storage.deleteSession(addr.toString())
+			const sessionKey = addr.toString()
+			return sessionMutex.mutex(sessionKey, () =>
+				(auth.keys as SignalKeyStoreWithTransaction).transaction(async () => {
+					await storage.deleteSession(sessionKey)
+				}, sessionKey)
+			)
 		},
+
 		decryptGroupMessage({ group, authorJid, msg }) {
 			const senderName = jidToSignalSenderKeyName(group, authorJid)
 			const cipher = new GroupCipher(storage, senderName)
 
-			// Use transaction to ensure atomicity
+			// FIX 4: chave da transaction agora é senderNameStr (igual ao
+			// processSenderKeyDistributionMessage), garantindo exclusão mútua
+			// entre as duas operações sobre o mesmo sender key.
 			return (auth.keys as SignalKeyStoreWithTransaction).transaction(async () => {
 				return cipher.decrypt(msg)
-			}, 'decrypt-group-' + senderName.toString())
+			}, senderName.toString())
 		},
 
 		async processSenderKeyDistributionMessage({ item, authorJid }) {
@@ -87,6 +104,7 @@ export function makeLibSignalRepository(auth: SignalAuthState): SignalRepository
 			)
 			const senderNameStr = senderName.toString()
 
+			// chave já era senderNameStr — mantida; agora consistente com decryptGroupMessage
 			return (auth.keys as SignalKeyStoreWithTransaction).transaction(async () => {
 				const { [senderNameStr]: senderKey } = await auth.keys.get('sender-key', [senderNameStr])
 				if (!senderKey) {
@@ -94,70 +112,78 @@ export function makeLibSignalRepository(auth: SignalAuthState): SignalRepository
 				}
 
 				await builder.process(senderName, senderMsg)
-			}, 'process-sender-key-distribution-' + senderNameStr)
+			}, senderNameStr)
 		},
+
 		async decryptMessage({ jid, type, ciphertext }) {
 			const addr = jidToSignalProtocolAddress(jid)
+			const addrStr = addr.toString()
 			const session = new libsignal.SessionCipher(storage, addr)
 
-			// Use transaction to ensure atomicityAdd commentMore actions
-			return (auth.keys as SignalKeyStoreWithTransaction).transaction(async () => {
-				if (type === 'pkmsg') {
-					const identityKey = extractIdentityFromPkmsg(ciphertext)
-					if (identityKey) {
-						const addrStr = addr.toString()
-						const identityChanged = await storage.saveIdentity(addrStr, identityKey)
-						if (identityChanged) {
-							logger.debug(
-								{ jid, addr: addrStr },
-								'identity key changed or new contact, session will be re-established'
-							) // todo: remove later
-							logger.info({ jid, addr: addrStr }, 'identity key changed or new contact, session will be re-established')
+			// FIX 5: sessionMutex + transaction com a mesma chave (addrStr).
+			// saveIdentity pode deletar a sessão — precisa estar sob o mesmo
+			// lock que o decrypt para ser atômico.
+			return sessionMutex.mutex(addrStr, () =>
+				(auth.keys as SignalKeyStoreWithTransaction).transaction(async () => {
+					if (type === 'pkmsg') {
+						const identityKey = extractIdentityFromPkmsg(ciphertext)
+						if (identityKey) {
+							const identityChanged = await storage.saveIdentity(addrStr, identityKey)
+							if (identityChanged) {
+								logger.info(
+									{ jid, addr: addrStr },
+									'identity key changed or new contact, session will be re-established'
+								)
+							}
 						}
 					}
-				}
 
-				let result: Buffer
-				switch (type) {
-					case 'pkmsg':
-						result = await session.decryptPreKeyWhisperMessage(ciphertext)
-						break
-					case 'msg':
-						result = await session.decryptWhisperMessage(ciphertext)
-						break
-				}
-
-				return result
-			}, 'decrypt-' + jid)
+					switch (type) {
+						case 'pkmsg':
+							return session.decryptPreKeyWhisperMessage(ciphertext)
+						case 'msg':
+							return session.decryptWhisperMessage(ciphertext)
+					}
+				}, addrStr)
+			)
 		},
+
 		async encryptMessage({ jid, data }) {
 			const addr = jidToSignalProtocolAddress(jid)
+			const addrStr = addr.toString()
 			const cipher = new libsignal.SessionCipher(storage, addr)
 
-			// Use transaction to ensure atomicityAdd commentMore actions
-			return (auth.keys as SignalKeyStoreWithTransaction).transaction(async () => {
-				try {
-					const { type: sigType, body } = await cipher.encrypt(data)
-					const type = sigType === 3 ? 'pkmsg' : 'msg'
-					return { type, ciphertext: Buffer.from(body, 'binary') }
-				} catch (error) {
-					logger.info(`Encryption failed ${error}`)
-					throw error
-				}
-			}, 'encrypt-' + jid)
+			// FIX 6: mesmo sessionMutex + mesma chave addrStr usada no decrypt,
+			// garantindo exclusão mútua entre encrypt e decrypt da mesma sessão.
+			return sessionMutex.mutex(addrStr, () =>
+				(auth.keys as SignalKeyStoreWithTransaction).transaction(async () => {
+					try {
+						const { type: sigType, body } = await cipher.encrypt(data)
+						const type = sigType === 3 ? 'pkmsg' : 'msg'
+						return { type, ciphertext: Buffer.from(body, 'binary') }
+					} catch (error) {
+						logger.info(`Encryption failed ${error}`)
+						throw error
+					}
+				}, addrStr)
+			)
 		},
+
 		async encryptGroupMessage({ group, meId, data }) {
 			const senderName = jidToSignalSenderKeyName(group, meId)
-			const builder = new GroupSessionBuilder(storage)
-
 			const senderNameStr = senderName.toString()
 
-			try {
+			// FIX 7: estava completamente sem proteção — leitura, escrita e
+			// cifração corriam sem transaction, permitindo que duas chamadas
+			// simultâneas criassem sender keys duplicadas ou cifrassem com
+			// estados inconsistentes.
+			return (auth.keys as SignalKeyStoreWithTransaction).transaction(async () => {
 				const { [senderNameStr]: senderKey } = await auth.keys.get('sender-key', [senderNameStr])
 				if (!senderKey) {
 					await storage.storeSenderKey(senderName, new SenderKeyRecord())
 				}
 
+				const builder = new GroupSessionBuilder(storage)
 				const senderKeyDistributionMessage = await builder.create(senderName)
 				const session = new GroupCipher(storage, senderName)
 				const ciphertext = await session.encrypt(data)
@@ -166,16 +192,15 @@ export function makeLibSignalRepository(auth: SignalAuthState): SignalRepository
 					ciphertext,
 					senderKeyDistributionMessage: senderKeyDistributionMessage.serialize()
 				}
-			} catch (error) {
-				logger.info(`Group message encryption failed ${error}`)
-				throw error
-			}
+			}, senderNameStr)
 		},
+
 		async hasSenderKey({ group, meId }) {
 			const senderName = jidToSignalSenderKeyName(group, meId).toString()
 			const { [senderName]: key } = await auth.keys.get('sender-key', [senderName])
 			return !!key
 		},
+
 		async createSenderKeyDistributionMessage({ group, meId }) {
 			const senderName = jidToSignalSenderKeyName(group, meId)
 			const builder = new GroupSessionBuilder(storage)
@@ -189,16 +214,23 @@ export function makeLibSignalRepository(auth: SignalAuthState): SignalRepository
 
 				const skdm = await builder.create(senderName)
 				return skdm.serialize()
-			}, 'create-sender-key-distribution-' + senderNameStr)
+			}, senderNameStr)
 		},
-		async injectE2ESession({ jid, session }) {
-			const cipher = new libsignal.SessionBuilder(storage, jidToSignalProtocolAddress(jid))
 
-			// Use transaction to ensure atomicity
-			return (auth.keys as SignalKeyStoreWithTransaction).transaction(async () => {
-				await cipher.initOutgoing(session)
-			}, 'inject-e2e-session')
+		async injectE2ESession({ jid, session }) {
+			const addr = jidToSignalProtocolAddress(jid)
+			const addrStr = addr.toString()
+			const cipher = new libsignal.SessionBuilder(storage, addr)
+
+			// FIX 8: passa pelo sessionMutex para não colidir com um decrypt/encrypt
+			// em andamento (initOutgoing escreve a sessão).
+			return sessionMutex.mutex(addrStr, () =>
+				(auth.keys as SignalKeyStoreWithTransaction).transaction(async () => {
+					await cipher.initOutgoing(session)
+				}, addrStr)
+			)
 		},
+
 		jidToSignalProtocolAddress(jid) {
 			return jidToSignalProtocolAddress(jid).toString()
 		}
