@@ -234,7 +234,7 @@ export function makeLibSignalRepository(auth: SignalAuthState, logger: ILogger):
 				[key: string]: null
 			}
 
-			return withSessionLocks(sessionKeys, () => auth.keys.set({ session: sessionUpdates }))
+			return withSessionLocks(sessionKeys, async () => auth.keys.set({ session: sessionUpdates }))
 		}
 	}
 
