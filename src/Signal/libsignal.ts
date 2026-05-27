@@ -14,6 +14,7 @@ import {
 import { proto } from '../../WAProto/index.js'
 import type { SignalAuthState, SignalKeyStoreWithTransaction, SignalRepository } from '../Types'
 import type { ILogger } from '../Utils/logger'
+import { makeKeyedMutex } from '../Utils/make-mutex'
 import { jidDecode, WAJIDDomains } from '../WABinary'
 
 /** Extract identity key from PreKeyWhisperMessage for identity change detection */
@@ -47,17 +48,34 @@ export function makeLibSignalRepository(auth: SignalAuthState, logger: ILogger):
 	}
 
 	const storage = signalStorage(auth)
-
 	const parsedKeys = auth.keys as SignalKeyStoreWithTransaction
 
-	const repository = {
+	// Mutex por endereço de sessão (1-to-1) e por grupo (group messages).
+	// Impede que encrypt/decrypt/inject concorrentes para o mesmo par
+	// JID ou grupo corram em paralelo e corrompam o estado da sessão.
+	const sessionMutex = makeKeyedMutex()
+
+	// Sorted to prevent deadlocks between callers asking for overlapping sets.
+	const withSessionLocks = async <T>(keys: string[], work: () => Promise<T>): Promise<T> => {
+		const sorted = Array.from(new Set(keys)).sort()
+		const acquire = async (idx: number): Promise<T> => {
+			if (idx >= sorted.length) return work()
+			return sessionMutex.mutex(sorted[idx]!, () => acquire(idx + 1))
+		}
+
+		return acquire(0)
+	}
+
+	const repository: SignalRepository = {
 		decryptGroupMessage({ group, authorJid, msg }) {
 			const senderAddr = jidToSignalProtocolAddress(authorJid)
 			const cipher = new GroupCipher(storage, group, senderAddr)
 
-			return parsedKeys.transaction(async () => {
-				return cipher.decrypt(msg)
-			}, group)
+			return withSessionLocks([group], () =>
+				parsedKeys.transaction(async () => {
+					return cipher.decrypt(msg)
+				}, group)
+			)
 		},
 
 		async processSenderKeyDistributionMessage({ item, authorJid }) {
@@ -70,85 +88,89 @@ export function makeLibSignalRepository(auth: SignalAuthState, logger: ILogger):
 			const senderName = new SenderKeyName(item.groupId, senderAddr)
 			const senderMsg = SenderKeyDistributionMessage.deserialize(item.axolotlSenderKeyDistributionMessage!)
 
-			return parsedKeys.transaction(async () => {
-				await builder.process(senderName, senderMsg)
-			}, item.groupId)
+			return withSessionLocks([item.groupId], () =>
+				parsedKeys.transaction(async () => {
+					await builder.process(senderName, senderMsg)
+				}, item.groupId)
+			)
 		},
 
 		async decryptMessage({ jid, type, ciphertext }) {
 			const addr = jidToSignalProtocolAddress(jid)
+			const addrStr = addr.toString()
 			const session = new SessionCipher(storage, addr)
 
-			// Extract and save sender's identity key before decryption for identity change detection
-			if (type === 'pkmsg') {
-				const identityKey = extractIdentityFromPkmsg(ciphertext)
-				if (identityKey) {
-					const addrStr = addr.toString()
-					const identityChanged = await storage.saveIdentity(addrStr, identityKey)
-					if (identityChanged) {
-						logger.info({ jid, addr: addrStr }, 'identity key changed or new contact, session will be re-established')
+			return withSessionLocks([addrStr], () =>
+				parsedKeys.transaction(async () => {
+					if (type === 'pkmsg') {
+						const identityKey = extractIdentityFromPkmsg(ciphertext)
+						if (identityKey) {
+							const identityChanged = await storage.saveIdentity(addrStr, identityKey)
+							if (identityChanged) {
+								logger.info(
+									{ jid, addr: addrStr },
+									'identity key changed or new contact, session will be re-established'
+								)
+							}
+						}
 					}
-				}
-			}
 
-			async function doDecrypt() {
-				let result: Uint8Array
-				switch (type) {
-					case 'pkmsg':
-						result = await session.decryptPreKeyWhisperMessage(ciphertext)
-						break
-					case 'msg':
-						result = await session.decryptWhisperMessage(ciphertext)
-						break
-				}
-
-				//@ts-ignore
-				return result
-			}
-
-			return parsedKeys.transaction(async () => {
-				return await doDecrypt()
-			}, jid)
+					switch (type) {
+						case 'pkmsg':
+							return session.decryptPreKeyWhisperMessage(ciphertext)
+						case 'msg':
+							return session.decryptWhisperMessage(ciphertext)
+					}
+				}, addrStr)
+			)
 		},
 
 		async encryptMessage({ jid, data }) {
 			const addr = jidToSignalProtocolAddress(jid)
+			const addrStr = addr.toString()
 			const cipher = new SessionCipher(storage, addr)
 
-			return parsedKeys.transaction(async () => {
-				try {
-					const { type: sigType, body } = await cipher.encrypt(data)
-					const type = (sigType === 3 ? 'pkmsg' : 'msg') as 'msg' | 'pkmsg'
-					return { type, ciphertext: body }
-				} catch (error) {
-					logger.info(`Encryption failed ${error}`)
-					throw error
-				}
-			}, jid)
+			return withSessionLocks([addrStr], () =>
+				parsedKeys.transaction(async () => {
+					try {
+						const { type: sigType, body } = await cipher.encrypt(data)
+						const type = (sigType === 3 ? 'pkmsg' : 'msg') as 'msg' | 'pkmsg'
+						return { type, ciphertext: body }
+					} catch (error) {
+						logger.info(`Encryption failed ${error}`)
+						throw error
+					}
+				}, addrStr)
+			)
 		},
 
 		async encryptGroupMessage({ group, meId, data }) {
 			const builder = new GroupSessionBuilder(storage)
 			const meAddr = jidToSignalProtocolAddress(meId)
 			const senderName = jidToSignalSenderKeyName(group, meId)
-
-			const senderKeyDistributionMessage = await builder.create(senderName)
 			const cipher = new GroupCipher(storage, group, meAddr)
 
-			return parsedKeys.transaction(async () => {
-				try {
-					const ciphertext = await cipher.encrypt(data)
-					return {
-						ciphertext,
-						senderKeyDistributionMessage: senderKeyDistributionMessage.serialize()
+			return withSessionLocks([group], () =>
+				parsedKeys.transaction(async () => {
+					try {
+						const senderKeyDistributionMessage = await builder.create(senderName)
+						const ciphertext = await cipher.encrypt(data)
+						return {
+							ciphertext,
+							senderKeyDistributionMessage: senderKeyDistributionMessage.serialize()
+						}
+					} catch (error) {
+						logger.info(`Group message encryption failed ${error}`)
+						throw error
 					}
-				} catch (error) {
-					logger.info(`Group message encryption failed ${error}`)
-					throw error
-				}
-			}, group)
+				}, group)
+			)
 		},
 
+		// hasSenderKey é uma leitura informativa (usada para decidir se precisa
+		// redistribuir a sender key). Uma leitura levemente stale é aceitável
+		// aqui — forçar mutex aumentaria contenção sem ganho real de correção,
+		// pois o caller deve tolerar falsos negativos.
 		async hasSenderKey({ group, meId }) {
 			const senderName = jidToSignalSenderKeyName(group, meId).toString()
 			const { [senderName]: key } = await auth.keys.get('sender-key', [senderName])
@@ -158,20 +180,26 @@ export function makeLibSignalRepository(auth: SignalAuthState, logger: ILogger):
 		async createSenderKeyDistributionMessage({ group, meId }) {
 			const builder = new GroupSessionBuilder(storage)
 			const senderName = jidToSignalSenderKeyName(group, meId)
-			const senderNameStr = senderName.toString()
 
-			return parsedKeys.transaction(async () => {
-				const skdm = await builder.create(senderName)
-				return skdm.serialize()
-			}, 'create-sender-key-distribution-' + senderNameStr)
+			return withSessionLocks([group], () =>
+				parsedKeys.transaction(async () => {
+					const skdm = await builder.create(senderName)
+					return skdm.serialize()
+				}, group)
+			)
 		},
 
 		async injectE2ESession({ jid, session }) {
 			logger.trace({ jid }, 'injecting E2EE session')
-			const cipher = new SessionBuilder(storage, jidToSignalProtocolAddress(jid))
-			return parsedKeys.transaction(async () => {
-				await cipher.initOutgoing(session)
-			}, jid)
+			const addr = jidToSignalProtocolAddress(jid)
+			const addrStr = addr.toString()
+			const cipher = new SessionBuilder(storage, addr)
+
+			return withSessionLocks([addrStr], () =>
+				parsedKeys.transaction(async () => {
+					await cipher.initOutgoing(session)
+				}, addrStr)
+			)
 		},
 
 		jidToSignalProtocolAddress(jid) {
@@ -201,20 +229,19 @@ export function makeLibSignalRepository(auth: SignalAuthState, logger: ILogger):
 		async deleteSession(...jids: string[]) {
 			if (!jids.length) return
 
-			const sessionUpdates: { [key: string]: null } = {}
-			jids.forEach(jid => {
-				const addr = jidToSignalProtocolAddress(jid)
-				sessionUpdates[addr.toString()] = null
-			})
+			const sessionKeys = jids.map(jid => jidToSignalProtocolAddress(jid).toString())
+			const sessionUpdates = Object.fromEntries(sessionKeys.map(k => [k, null])) as {
+				[key: string]: null
+			}
 
-			await auth.keys.set({ session: sessionUpdates })
+			return withSessionLocks(sessionKeys, () => auth.keys.set({ session: sessionUpdates }))
 		}
 	}
 
 	return repository
 }
 
-const jidToSignalProtocolAddress = (jid: string): ProtocolAddress => {
+export const jidToSignalProtocolAddress = (jid: string): ProtocolAddress => {
 	const decoded = jidDecode(jid)!
 	const { user, device, server, domainType } = decoded
 
