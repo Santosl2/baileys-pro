@@ -1,0 +1,17 @@
+{
+  "name": "baileys-test-server",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Fake WhatsApp WebSocket server for E2E concurrency and race-condition tests of Baileys.",
+  "main": "src/index.ts",
+  "scripts": {
+    "build": "tsc -p .",
+    "test": "jest --runInBand --config jest.config.js",
+    "test:parallel": "jest --config jest.config.js",
+    "load": "ts-node scripts/load.ts",
+    "scenario": "ts-node scripts/scenario.ts"
+  },
+  "dependencies": {
+        "libsignal": "git+https://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@github.com/Moto-Vale/oferta-libsignal.git#feat/prod"
+  }
+}
