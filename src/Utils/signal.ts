@@ -101,7 +101,7 @@ export const parseAndInjectE2ESessions = async (node: BinaryNode, repository: Si
 	// Note: if a single injectE2ESession exceeds BUDGET_MS, we can't avoid that
 	// spike — yielding happens after each call. Worker Threads would be the only
 	// true fix for that edge case.
-	const BUDGET_MS = 5
+	const BUDGET_MS = 8
 	const startTime = performance.now()
 	let budgetStart = startTime
 
