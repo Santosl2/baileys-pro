@@ -1,4 +1,3 @@
-import { chunk } from 'lodash'
 import { KEY_BUNDLE_TYPE } from '../Defaults'
 import { SignalRepository } from '../Types'
 import {
@@ -87,45 +86,50 @@ export const parseAndInjectE2ESessions = async (node: BinaryNode, repository: Si
 					signature: getBinaryNodeChildBuffer(key, 'signature')!
 				}
 			: undefined
+
 	const nodes = getBinaryNodeChildren(getBinaryNodeChild(node, 'list'), 'user')
 
 	for (const node of nodes) {
 		assertNodeErrorFree(node)
 	}
 
-	// Most of the work in repository.injectE2ESession is CPU intensive, not IO
-	// So Promise.all doesn't really help here,
-	// but blocks even loop if we're using it inside keys.transaction, and it makes it "sync" actually
-	// This way we chunk it in smaller parts and between those parts we can yield to the event loop
-	// It's rare case when you need to E2E sessions for so many users, but it's possible
-	const startTime = Date.now()
+	// repository.injectE2ESession is CPU-bound (WASM crypto), not IO.
+	// A fixed chunk size doesn't adapt to actual execution time — 100 heavy ops
+	// can block the event loop for hundreds of ms.
+	// Instead, use a time-budget: yield via setImmediate whenever >= BUDGET_MS
+	// of CPU time has been consumed, regardless of how many items that took.
+	// Note: if a single injectE2ESession exceeds BUDGET_MS, we can't avoid that
+	// spike — yielding happens after each call. Worker Threads would be the only
+	// true fix for that edge case.
+	const BUDGET_MS = 8
+	const startTime = performance.now()
+	let budgetStart = startTime
 
-	const chunkSize = 100
-	const chunks = chunk(nodes, chunkSize)
-	for (const nodesChunk of chunks) {
-		for (const node of nodesChunk) {
-			const signedKey = getBinaryNodeChild(node, 'skey')!
-			const key = getBinaryNodeChild(node, 'key')!
-			const identity = getBinaryNodeChildBuffer(node, 'identity')!
-			const jid = node.attrs.jid
-			const registrationId = getBinaryNodeChildUInt(node, 'registration', 4)
+	for (const node of nodes) {
+		const signedKey = getBinaryNodeChild(node, 'skey')!
+		const key = getBinaryNodeChild(node, 'key')!
+		const identity = getBinaryNodeChildBuffer(node, 'identity')!
+		const jid = node.attrs.jid
+		const registrationId = getBinaryNodeChildUInt(node, 'registration', 4)
 
-			await repository.injectE2ESession({
-				jid,
-				session: {
-					registrationId: registrationId!,
-					identityKey: generateSignalPubKey(identity),
-					signedPreKey: extractKey(signedKey)!,
-					preKey: extractKey(key)!
-				}
-			})
+		await repository.injectE2ESession({
+			jid,
+			session: {
+				registrationId: registrationId!,
+				identityKey: generateSignalPubKey(identity),
+				signedPreKey: extractKey(signedKey)!,
+				preKey: extractKey(key)!
+			}
+		})
+
+		if (performance.now() - budgetStart >= BUDGET_MS) {
+			await new Promise<void>(resolve => setImmediate(resolve))
+			budgetStart = performance.now()
 		}
-
-		await new Promise<void>(resolve => setImmediate(resolve))
 	}
 
-	const elapsed = Date.now() - startTime
-	logger?.warn(`Injected E2E sessions for ${nodes.length} users in ${elapsed}ms`)
+	const elapsed = performance.now() - startTime
+	logger?.warn(`Injected E2E sessions for ${nodes.length} users in ${elapsed.toFixed(2)}ms`)
 }
 
 export const extractDeviceJids = (
