@@ -20,6 +20,7 @@ export class LIDMappingStore {
 		if (pairs.length === 0) return
 
 		await this.mutex.mutex(async () => {
+			//@ts-ignore
 			await this.keys.transaction(async () => this.keys.set({ 'lid-mapping': pairs }), 'lid-mapping')
 		})
 	}
