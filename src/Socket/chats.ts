@@ -1072,7 +1072,8 @@ export const makeChatsSocket = (config: SocketConfig) => {
 				keyStore: authState.keys,
 				logger,
 				options: config.options,
-				config
+				config,
+				signalRepository: sock.signalRepository
 			})
 		])
 

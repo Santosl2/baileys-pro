@@ -11,6 +11,7 @@ import type { SenderKeyStore } from './Group/group_cipher'
 import { SenderKeyName } from './Group/sender-key-name'
 import { SenderKeyRecord } from './Group/sender-key-record'
 import { GroupCipher, GroupSessionBuilder, SenderKeyDistributionMessage } from './Group'
+import { LIDMappingStore } from './lid'
 
 function extractIdentityFromPkmsg(ciphertext: Uint8Array): Uint8Array | undefined {
 	try {
@@ -37,6 +38,7 @@ function extractIdentityFromPkmsg(ciphertext: Uint8Array): Uint8Array | undefine
 }
 
 export function makeLibSignalRepository(auth: SignalAuthState): SignalRepository {
+	const lidMapping = new LIDMappingStore(auth.keys as SignalKeyStoreWithTransaction, logger)
 	const storage: SenderKeyStore = signalStorage(auth)
 
 	// FIX 2: mutex por endereço de sessão — impede que encrypt/decrypt
@@ -44,6 +46,7 @@ export function makeLibSignalRepository(auth: SignalAuthState): SignalRepository
 	const sessionMutex = makeKeyedMutex()
 
 	return {
+		lidMapping,
 		async validateSession(jid: string) {
 			try {
 				const addr = jidToSignalProtocolAddress(jid)

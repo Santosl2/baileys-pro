@@ -1,4 +1,5 @@
 import { proto } from '../../WAProto'
+import { LIDMappingStore } from '../Signal/lid'
 
 type DecryptGroupSignalOpts = {
 	group: string
@@ -73,4 +74,11 @@ export type SignalRepository = {
 	createSenderKeyDistributionMessage(opts: { group: string; meId: string }): Promise<Uint8Array>
 	injectE2ESession(opts: E2ESessionOpts): Promise<void>
 	jidToSignalProtocolAddress(jid: string): string
+	lidMapping: LIDMappingStore
+}
+
+// Optimized repository with pre-loaded LID mapping store
+export interface SignalRepositoryWithLIDStore extends SignalRepository {
+	lidMapping: LIDMappingStore
+	close?: () => void
 }

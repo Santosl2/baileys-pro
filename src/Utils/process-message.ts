@@ -10,6 +10,7 @@ import {
 	RequestJoinAction,
 	RequestJoinMethod,
 	SignalKeyStoreWithTransaction,
+	SignalRepository,
 	SocketConfig,
 	WAMessage,
 	WAMessageStubType
@@ -30,6 +31,7 @@ type ProcessMessageContext = {
 	logger?: ILogger
 	options: AxiosRequestConfig<{}>
 	config: SocketConfig
+	signalRepository: SignalRepository
 }
 
 const REAL_MSG_STUB_TYPES = new Set([
@@ -194,7 +196,8 @@ const processMessage = async (
 		keyStore,
 		logger,
 		options,
-		config
+		config,
+		signalRepository
 	}: ProcessMessageContext
 ) => {
 	const meId = creds.me!.id
@@ -422,6 +425,24 @@ const processMessage = async (
 						}
 					}
 				])
+				break
+
+			case proto.Message.ProtocolMessage.Type.LID_MIGRATION_MAPPING_SYNC:
+				const encodedPayload = protocolMsg.lidMigrationMappingSyncMessage?.encodedMappingPayload!
+				const { pnToLidMappings, chatDbMigrationTimestamp } =
+					proto.LIDMigrationMappingSyncPayload.decode(encodedPayload)
+				logger?.debug({ pnToLidMappings, chatDbMigrationTimestamp }, 'got lid mappings and chat db migration timestamp')
+				const pairs: { lid: string; pn: string }[] = []
+
+				for (const { pn, latestLid, assignedLid } of pnToLidMappings) {
+					const lid = latestLid || assignedLid
+					pairs.push({ lid: `${lid}@lid`, pn: `${pn}@s.whatsapp.net` })
+				}
+
+				await signalRepository.lidMapping.storeLIDPNMappings(pairs).catch(err => {
+					logger?.error({ err, pnToLidMappings }, 'failed to store lid mappings')
+				})
+
 				break
 			default:
 				logger?.trace({ protocolMsg, type: protocolMsg.type }, 'unknown protocol message type')

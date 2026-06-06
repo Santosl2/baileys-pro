@@ -31,6 +31,10 @@ export const processHistoryMessage = (item: proto.IHistorySync) => {
 	const contacts: Contact[] = []
 	const chats: Chat[] = []
 
+	// item.phoneNumberToLidMappings?.forEach(mapping => {
+	// 	mapping.
+	// })
+
 	switch (item.syncType) {
 		case proto.HistorySync.HistorySyncType.INITIAL_BOOTSTRAP:
 		case proto.HistorySync.HistorySyncType.RECENT:

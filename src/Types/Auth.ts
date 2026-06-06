@@ -65,6 +65,8 @@ export type AuthenticationCreds = SignalCreds & {
 	routingInfo: Buffer | undefined
 }
 
+export type LIDMapping = { lid: string; pn: string }
+
 export type SignalDataTypeMap = {
 	'pre-key': KeyPair
 	session: Uint8Array
@@ -74,6 +76,7 @@ export type SignalDataTypeMap = {
 	'app-state-sync-key': proto.Message.IAppStateSyncKeyData
 	'app-state-sync-version': LTHashState
 	'identity-key': Uint8Array
+	'lid-mapping': LIDMapping[]
 }
 
 export type SignalDataSet = { [T in keyof SignalDataTypeMap]?: { [id: string]: SignalDataTypeMap[T] | null } }
@@ -82,7 +85,7 @@ type Awaitable<T> = T | Promise<T>
 
 export type SignalKeyStore = {
 	get<T extends keyof SignalDataTypeMap>(type: T, ids: string[]): Awaitable<{ [id: string]: SignalDataTypeMap[T] }>
-	set(data: SignalDataSet): Awaitable<void>
+	set(data: SignalDataSet | { 'lid-mapping': LIDMapping[] }): Awaitable<void>
 	/** clear all the data in the store */
 	clear?(): Awaitable<void>
 }
