@@ -69,25 +69,38 @@ export const BufferJSON = {
 export const getKeyAuthor = (key: proto.IMessageKey | undefined | null, meId = 'me') =>
 	(key?.fromMe ? meId : key?.participant || key?.remoteJid) || ''
 
-export const writeRandomPadMax16 = (msg: Uint8Array) => {
-	const pad = randomBytes(1)
-	const padLength = (pad[0] & 0x0f) + 1
+const RANDOM_PAD_MAX_16_MASK = 0x0f
+const PAD_SEED_BATCH_SIZE = 1024
 
-	return Buffer.concat([msg, Buffer.alloc(padLength, padLength)])
+let padSeedBuffer: Uint8Array | null = null
+let padSeedCursor = 0
+
+export function writeRandomPadMax16(message: Uint8Array): Uint8Array {
+	if (!padSeedBuffer || padSeedCursor >= padSeedBuffer.length) {
+		padSeedBuffer = randomBytes(PAD_SEED_BATCH_SIZE)
+		padSeedCursor = 0
+	}
+
+	const padLength = (padSeedBuffer[padSeedCursor++] & RANDOM_PAD_MAX_16_MASK) + 1
+
+	const out = new Uint8Array(message.length + padLength)
+	out.set(message, 0)
+	out.fill(padLength, message.length)
+	return out
 }
 
-export const unpadRandomMax16 = (e: Uint8Array | Buffer) => {
-	const t = new Uint8Array(e)
-	if (0 === t.length) {
+export function unpadRandomMax16(bytes: Uint8Array): Uint8Array {
+	if (bytes.length === 0) {
 		throw new Error('unpadPkcs7 given empty bytes')
 	}
 
-	var r = t[t.length - 1]
-	if (r > t.length) {
-		throw new Error(`unpad given ${t.length} bytes, but pad is ${r}`)
+	const padLength = bytes[bytes.length - 1]
+
+	if (padLength > bytes.length) {
+		throw new Error(`unpadPkcs7 given ${bytes.length} bytes, but pad is ${padLength}`)
 	}
 
-	return new Uint8Array(t.buffer, t.byteOffset, t.length - r)
+	return bytes.subarray(0, bytes.length - padLength)
 }
 
 export const encodeWAMessage = (message: proto.IMessage) => writeRandomPadMax16(proto.Message.encode(message).finish())
