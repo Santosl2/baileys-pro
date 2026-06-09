@@ -119,9 +119,9 @@ const generateMsgSecretKey = async (
 	return hkdf(origMsgSecret, 32, { info: useCaseSecret.toString('latin1') })
 }
 
-type FieldBytes = { num: number; bytes: Buffer }
+type FieldBytes = { num: number; bytes: Uint8Array }
 
-const extractReportingTokenContent = (data: Buffer, cfg: Map<number, CompiledReportingField>): Buffer | null => {
+const extractReportingTokenContent = (data: Uint8Array, cfg: Map<number, CompiledReportingField>): Buffer | null => {
 	const out: FieldBytes[] = []
 	let i = 0
 
@@ -271,7 +271,7 @@ const extractReportingTokenContent = (data: Buffer, cfg: Map<number, CompiledRep
 
 type Varint = { value: number; bytes: number; ok: boolean }
 
-const decodeVarint = (buffer: Buffer, offset: number): Varint => {
+const decodeVarint = (buffer: Uint8Array, offset: number): Varint => {
 	let value = 0
 	let bytes = 0
 	let shift = 0
@@ -295,7 +295,7 @@ const decodeVarint = (buffer: Buffer, offset: number): Varint => {
 	return { value: 0, bytes: 0, ok: false }
 }
 
-const encodeVarint = (value: number): Buffer => {
+const encodeVarint = (value: number): Uint8Array => {
 	const parts: number[] = []
 	let remaining = value >>> 0
 
@@ -309,7 +309,7 @@ const encodeVarint = (value: number): Buffer => {
 }
 
 export const getMessageReportingToken = async (
-	msgProtobuf: Buffer,
+	msgProtobuf: Uint8Array,
 	message: WAMessageContent,
 	key: WAMessageKey
 ): Promise<BinaryNode | null> => {
