@@ -509,7 +509,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 
 		const extraAttrs = {}
 
-		const trackRelayStep = async <T>(step: string, fn: () => Promise<T>) => {
+		const trackRelayStep = async <T>(step: string, fn: () => Promise<T>, customProps?: object) => {
 			const stepStartedAt = Date.now()
 			let stepSuccess = false
 			let stepError: unknown
@@ -522,12 +522,14 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				stepError = error
 				noticeNewRelicError(error, {
 					...relayBaseAttrs,
+					...customProps,
 					step
 				})
 				throw error
 			} finally {
 				recordNewRelicCustomEvent('BaileysRelayMessageStep', {
 					...relayBaseAttrs,
+					...customProps,
 					step,
 					success: stepSuccess,
 					duration_ms: Date.now() - stepStartedAt,
@@ -693,7 +695,9 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 							}
 
 							const assertTime = performance.now()
-							await trackRelayStep('group_assert_sessions', async () => assertSessions(senderKeyJids, false))
+							await trackRelayStep('group_assert_sessions', async () => assertSessions(senderKeyJids, false), {
+								senderKeyJidsCount: senderKeyJids.length
+							})
 							const assertDuration = performance.now() - assertTime
 
 							if (assertDuration > 5000) {
@@ -703,18 +707,13 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 								)
 							}
 
-							const generateNodesTime = performance.now()
-							const result = await trackRelayStep('group_create_participant_nodes', async () =>
-								createParticipantNodes(senderKeyJids, senderKeyMsg, extraAttrs)
+							const result = await trackRelayStep(
+								'group_create_participant_nodes',
+								async () => createParticipantNodes(senderKeyJids, senderKeyMsg, extraAttrs),
+								{
+									senderKeyJidsCount: senderKeyJids.length
+								}
 							)
-							const generateNodesDuration = performance.now() - generateNodesTime
-
-							if (generateNodesDuration > 1000) {
-								logger.warn(
-									{ duration: generateNodesDuration, count: senderKeyJids.length },
-									`generating participant nodes for sender key distribution took ${generateNodesDuration}ms, consider optimizing this function if you have many participants`
-								)
-							}
 
 							shouldIncludeDeviceIdentity = shouldIncludeDeviceIdentity || result.shouldIncludeDeviceIdentity
 
@@ -764,16 +763,21 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 							allJids.push(jid)
 						}
 
-						await trackRelayStep('direct_assert_sessions', async () => assertSessions(allJids, false))
+						await trackRelayStep('direct_assert_sessions', async () => assertSessions(allJids, false), {
+							allJidsCount: allJids.length
+						})
 
 						const [
 							{ nodes: meNodes, shouldIncludeDeviceIdentity: s1 },
 							{ nodes: otherNodes, shouldIncludeDeviceIdentity: s2 }
-						] = await trackRelayStep('direct_create_participant_nodes', async () =>
-							Promise.all([
-								createParticipantNodes(meJids, meMsg, extraAttrs),
-								createParticipantNodes(otherJids, message, extraAttrs)
-							])
+						] = await trackRelayStep(
+							'direct_create_participant_nodes',
+							async () =>
+								Promise.all([
+									createParticipantNodes(meJids, meMsg, extraAttrs),
+									createParticipantNodes(otherJids, message, extraAttrs)
+								]),
+							{ meJidsCount: meJids.length, otherJidsCount: otherJids.length }
 						)
 						participants.push(...meNodes)
 						participants.push(...otherNodes)
