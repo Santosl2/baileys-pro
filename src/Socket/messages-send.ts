@@ -669,14 +669,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 							senderKeyJidsCount: senderKeyJids.length
 						})
 
-						const result = await trackRelayStep(
-							'group_create_participant_nodes',
-							async () => createParticipantNodes(senderKeyJids, senderKeyMsg, extraAttrs),
-							{
-								...relayBaseAttrs,
-								senderKeyJidsCount: senderKeyJids.length
-							}
-						)
+						const result = await createParticipantNodes(senderKeyJids, senderKeyMsg, extraAttrs)
 
 						shouldIncludeDeviceIdentity = shouldIncludeDeviceIdentity || result.shouldIncludeDeviceIdentity
 
