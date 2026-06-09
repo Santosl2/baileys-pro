@@ -40,7 +40,7 @@ import {
 } from '../Utils'
 import { getUrlInfo } from '../Utils/link-preview'
 import { MessageRetryManager } from '../Utils/message-retry-manager'
-import { trackRelayStep } from '../Utils/new-relic-relay.js'
+import { trackRelayStep } from '../Utils/new-relic-relay'
 import { getMessageReportingToken, shouldIncludeReportingToken } from '../Utils/reporting-utils'
 import {
 	areJidsSameUser,
