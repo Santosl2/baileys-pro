@@ -694,18 +694,9 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 								}
 							}
 
-							const assertTime = performance.now()
 							await trackRelayStep('group_assert_sessions', async () => assertSessions(senderKeyJids, false), {
 								senderKeyJidsCount: senderKeyJids.length
 							})
-							const assertDuration = performance.now() - assertTime
-
-							if (assertDuration > 5000) {
-								logger.warn(
-									{ duration: assertDuration, count: senderKeyJids.length },
-									`asserting sessions for sender key distribution took ${assertDuration}ms, consider optimizing this function if you have many participants`
-								)
-							}
 
 							const result = await trackRelayStep(
 								'group_create_participant_nodes',
