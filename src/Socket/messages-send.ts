@@ -369,7 +369,6 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 	}
 
 	const createParticipantNodes = async (jids: string[], message: proto.IMessage, extraAttrs?: BinaryNode['attrs']) => {
-		const startedTime = performance.now()
 		let patched = await patchMessageBeforeSending(message, jids)
 
 		if (!Array.isArray(patched)) {
@@ -384,6 +383,8 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		let shouldIncludeDeviceIdentity = false
 
 		const generateNode = async (jid: string) => {
+			await new Promise(resolve => setImmediate(resolve))
+
 			const { type, ciphertext } = await signalRepository.encryptMessage({ jid, data: encodedMessage })
 			if (type === 'pkmsg') {
 				shouldIncludeDeviceIdentity = true
@@ -417,36 +418,25 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 			}
 		}
 
-		const encPromises = patched.map(async patchedMessageWithJid => {
+		const nodes: BinaryNode[] = []
+
+		for (const patchedMessageWithJid of patched) {
 			const { recipientJid: jid } = patchedMessageWithJid
 
-			if (!jid) {
-				return null
-			}
+			if (!jid) continue
 
 			try {
-				return await generateNode(jid)
+				const node = await generateNode(jid)
+				nodes.push(node)
 			} catch (error) {
 				logger.error({ jid, trace: error?.stack }, 'failed to encrypt message for participant')
 
 				if (error?.message?.includes('No session') || error?.stack?.includes('No session')) {
 					logger.warn({ jid }, 'fetching new session for participant and retrying encryption')
-					return await assertSessionWithNodeRetry(jid)
+					const node = await assertSessionWithNodeRetry(jid)
+					if (node !== null) nodes.push(node)
 				}
-
-				return null
 			}
-		})
-
-		const nodes = (await Promise.all(encPromises)).filter(node => node !== null)
-
-		const endTime = performance.now()
-
-		if (endTime - startedTime > 2000) {
-			logger.warn(
-				{ duration: endTime - startedTime },
-				`encryption took too long for all participants, consider optimizing this function if you have many participants. ${encPromises.length} - ${endTime - startedTime} participants were being encrypted`
-			)
 		}
 
 		if (jids.length > 0 && nodes.length === 0) {
