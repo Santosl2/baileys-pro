@@ -400,7 +400,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		}
 
 		// Process 50 encryptions at a time to avoid overloading the system when there are many participants - this can be optimized further by grouping participants with same devices and encrypting once per group of devices instead of once per participant
-		const limit = patched.length > 150 ? pLimit(50) : (fn: () => Promise<BinaryNode | null>) => fn()
+		const limit = pLimit(15)
 
 		const encPromises = patched.map(async patchedMessageWithJid =>
 			limit(async () => {
@@ -424,12 +424,6 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				}
 			})
 		)
-
-		if (encPromises.length > 15) {
-			logger.warn(
-				`attempting to encrypt message for a large number of participants, this may take a while ${encPromises.length} participants`
-			)
-		}
 
 		const nodes = (await Promise.all(encPromises)).filter(node => node !== null)
 
