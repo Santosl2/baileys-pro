@@ -144,7 +144,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 	const placeholderResendCache =
 		config.placeholderResendCache ||
 		new NodeCache({
-			stdTTL: DEFAULT_CACHE_TTLS.MSG_RETRY, // 10 minutes
+			stdTTL: DEFAULT_CACHE_TTLS.MSG_RETRY,
 			useClones: false,
 			maxKeys: DEFAULT_CACHE_MAX_KEYS.PLACEHOLDER_RESEND
 		})
@@ -898,28 +898,8 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		// just re-send the message to everyone
 		// prevents the first message decryption failure
 		const sendToAll = !jidDecode(participant)?.device
-		const retryCount = +retryNode.attrs.count
 
 		injectSessionFromReceiptKeys(receiptNode, participant)
-
-		let shouldRecreateSession = false
-		let recreateReason = ''
-
-		if (enableAutoSessionRecreation && messageRetryManager && retryCount > 1) {
-			try {
-				const hasSession = await signalRepository.validateSession(participant)
-				const result = messageRetryManager.shouldRecreateSession(participant, hasSession.exists)
-				shouldRecreateSession = result.recreate
-				recreateReason = result.reason
-
-				if (shouldRecreateSession) {
-					logger.debug({ participant, retryCount, reason: recreateReason }, 'recreating session for outgoing retry')
-					await signalRepository.deleteSession(participant)
-				}
-			} catch (error) {
-				logger.warn({ error, participant }, 'failed to check session recreation for outgoing retry')
-			}
-		}
 
 		await assertSessions([participant], true)
 
