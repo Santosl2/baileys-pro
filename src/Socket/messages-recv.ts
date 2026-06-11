@@ -297,7 +297,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 
 		const { account, signedPreKey, signedIdentityKey: identityKey } = authState.creds
 
-		const fromJidCorrect = isJidGroup(fromJid) ? node.attrs.participant : fromJid
+		const fromJidCorrect = fromJid
 
 		let shouldRecreateSession = false
 		let recreateReason = ''
