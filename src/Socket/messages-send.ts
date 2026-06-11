@@ -258,7 +258,12 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 
 		// Caller — itera o Map diretamente, sem Object.entries()
 		if (result) {
-			const { deviceMap } = extractDeviceJids(result.list, authState.creds.me.id, ignoreZeroDevices, deviceResults)
+			const { deviceMap } = await extractDeviceJids(
+				result.list,
+				authState.creds.me!.id,
+				ignoreZeroDevices,
+				deviceResults
+			)
 
 			if (userDevicesCache.mset) {
 				userDevicesCache.mset(Array.from(deviceMap, ([key, value]) => ({ key, value })))
