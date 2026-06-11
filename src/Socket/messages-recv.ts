@@ -144,7 +144,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 	const placeholderResendCache =
 		config.placeholderResendCache ||
 		new NodeCache({
-			stdTTL: DEFAULT_CACHE_TTLS.MSG_RETRY, // 10 minutes
+			stdTTL: DEFAULT_CACHE_TTLS.MSG_RETRY,
 			useClones: false,
 			maxKeys: DEFAULT_CACHE_MAX_KEYS.PLACEHOLDER_RESEND
 		})

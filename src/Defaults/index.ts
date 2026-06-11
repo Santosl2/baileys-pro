@@ -8,9 +8,9 @@ import logger from '../Utils/logger'
 import { version } from './baileys-version.json'
 
 export const DEFAULT_CACHE_TTLS = {
-	SIGNAL_STORE: 10 * 60, // 10 minutes
-	MSG_RETRY: 10 * 60, // 10 minutes
-	CALL_OFFER: 5 * 60, // 5 minutes
+	SIGNAL_STORE: 5 * 60, // 5 minutes
+	MSG_RETRY: 30, // 30 seconds
+	CALL_OFFER: 30, // 30 seconds
 	USER_DEVICES: 5 * 60, // 5 minutes
 	GROUP_METADATA: 15 * 60 // 15 minutes
 }
@@ -117,7 +117,7 @@ export const DEFAULT_CONNECTION_CONFIG: SocketConfig = {
 	mediaCache: mediaCacheFactory(),
 	linkPreviewCache: new NodeCache({
 		useClones: false,
-		stdTTL: DEFAULT_CACHE_TTLS.GROUP_METADATA
+		stdTTL: 1 * 60
 	}) as any,
 	groupMetadataCache: new NodeCache({
 		useClones: false,

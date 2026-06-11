@@ -77,7 +77,7 @@ export class MessageRetryManager {
 	})
 	private messageKeyIndex = new Map<string, string>()
 	private sessionRecreateHistory = new LRUCache<string, number>({
-		ttl: RECREATE_SESSION_TIMEOUT * 2,
+		ttl: RECREATE_SESSION_TIMEOUT * 1,
 		ttlAutopurge: true
 	})
 	private retryCounters = new LRUCache<string, number>({
@@ -141,7 +141,7 @@ export class MessageRetryManager {
 		// If we don't have a session, always recreate
 		if (!hasSession) {
 			this.sessionRecreateHistory.set(jid, Date.now())
-			this.statistics.sessionRecreations++
+
 			return {
 				reason: "we don't have a Signal session with them",
 				recreate: true
@@ -150,8 +150,6 @@ export class MessageRetryManager {
 
 		// IMMEDIATE recreation for MAC errors - session is definitely out of sync
 		if (errorCode !== undefined && MAC_ERROR_CODES.has(errorCode)) {
-			this.sessionRecreateHistory.set(jid, Date.now())
-			this.statistics.sessionRecreations++
 			this.logger.warn(
 				{ jid, errorCode: RetryReason[errorCode] },
 				'MAC error detected, forcing immediate session recreation'
@@ -165,10 +163,9 @@ export class MessageRetryManager {
 		const now = Date.now()
 		const prevTime = this.sessionRecreateHistory.get(jid)
 
-		// If no previous recreation or it's been more than an hour
 		if (!prevTime || now - prevTime > RECREATE_SESSION_TIMEOUT) {
 			this.sessionRecreateHistory.set(jid, now)
-			this.statistics.sessionRecreations++
+
 			return {
 				reason: 'retry count > 1 and over an hour since last recreation',
 				recreate: true
