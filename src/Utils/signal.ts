@@ -23,7 +23,7 @@ import { DeviceListData, ParsedDeviceInfo, USyncQueryResultList } from '../WAUSy
 import { Curve, generateSignalPubKey } from './crypto'
 import { encodeBigEndian } from './generics'
 import { ILogger } from './logger'
-import { yieldEventLoop } from './yieldEventLoop'
+import { yieldEventLoop } from './yield-event-loop'
 
 export const createSignalIdentity = (wid: string, accountSignatureKey: Uint8Array): SignalIdentity => {
 	return {
