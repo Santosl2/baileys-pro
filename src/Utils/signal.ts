@@ -23,6 +23,7 @@ import { DeviceListData, ParsedDeviceInfo, USyncQueryResultList } from '../WAUSy
 import { Curve, generateSignalPubKey } from './crypto'
 import { encodeBigEndian } from './generics'
 import { ILogger } from './logger'
+import { yieldEventLoop } from './yieldEventLoop'
 
 export const createSignalIdentity = (wid: string, accountSignatureKey: Uint8Array): SignalIdentity => {
 	return {
@@ -132,7 +133,7 @@ export const parseAndInjectE2ESessions = async (node: BinaryNode, repository: Si
 	logger?.warn(`Injected E2E sessions for ${nodes.length} users in ${elapsed.toFixed(2)}ms`)
 }
 
-export const extractDeviceJids = (
+export const extractDeviceJids = async (
 	result: USyncQueryResultList[],
 	myJid: string,
 	excludeZeroDevices: boolean,
@@ -143,30 +144,42 @@ export const extractDeviceJids = (
 	// Map em vez de plain object: sem prototype chain, lookup O(1) real
 	const deviceMap = new Map<string, JidWithDevice[]>()
 
+	const YIELD_BUDGET_MS = 8
+	let deadline = performance.now() + YIELD_BUDGET_MS
+
 	for (const userResult of result) {
-		const { devices, id } = userResult as { devices: ParsedDeviceInfo; id: string }
+		const { devices, id } = userResult as {
+			devices: ParsedDeviceInfo
+			id: string
+		}
+
 		const { user, server } = jidDecode(id)!
 		const deviceList = devices?.deviceList as DeviceListData[]
 
-		if (Array.isArray(deviceList)) {
-			for (const { id: device, keyIndex } of deviceList) {
-				if (
-					(!excludeZeroDevices || device !== 0) &&
-					(myUser !== user || myDevice !== device) &&
-					(device === 0 || !!keyIndex)
-				) {
-					const item: JidWithDevice = { user, device, server }
+		if (!Array.isArray(deviceList)) continue
 
-					let userDevices = deviceMap.get(user)
-					// eslint-disable-next-line max-depth
-					if (!userDevices) {
-						userDevices = []
-						deviceMap.set(user, userDevices)
-					}
+		for (const { id: device, keyIndex } of deviceList) {
+			if (performance.now() >= deadline) {
+				await yieldEventLoop()
+				deadline = performance.now() + YIELD_BUDGET_MS
+			}
 
-					userDevices.push(item)
-					deviceResults.push(item) // mesmo objeto, sem cópia
+			if (
+				(!excludeZeroDevices || device !== 0) &&
+				(myUser !== user || myDevice !== device) &&
+				(device === 0 || !!keyIndex)
+			) {
+				const item: JidWithDevice = { user, device, server }
+
+				let userDevices = deviceMap.get(user)
+
+				if (!userDevices) {
+					userDevices = []
+					deviceMap.set(user, userDevices)
 				}
+
+				userDevices.push(item)
+				deviceResults.push(item)
 			}
 		}
 	}
