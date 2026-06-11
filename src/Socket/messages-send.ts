@@ -1,6 +1,5 @@
 import NodeCache from '@cacheable/node-cache'
 import { Boom } from '@hapi/boom'
-import pLimit from 'p-limit'
 import { proto } from '../../WAProto'
 import { DEFAULT_CACHE_TTLS, WA_DEFAULT_EPHEMERAL } from '../Defaults'
 import {
@@ -366,6 +365,8 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		let shouldIncludeDeviceIdentity = false
 
 		const generateNode = async (jid: string) => {
+			await new Promise(resolve => setImmediate(resolve))
+
 			const { type, ciphertext } = await signalRepository.encryptMessage({ jid, data: encodedMessage })
 			if (type === 'pkmsg') {
 				shouldIncludeDeviceIdentity = true
@@ -399,33 +400,26 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 			}
 		}
 
-		// Process 50 encryptions at a time to avoid overloading the system when there are many participants - this can be optimized further by grouping participants with same devices and encrypting once per group of devices instead of once per participant
-		const limit = pLimit(15)
+		const nodes: BinaryNode[] = []
 
-		const encPromises = patched.map(async patchedMessageWithJid =>
-			limit(async () => {
-				const { recipientJid: jid } = patchedMessageWithJid
+		for (const patchedMessageWithJid of patched) {
+			const { recipientJid: jid } = patchedMessageWithJid
 
-				if (!jid) {
-					return null
+			if (!jid) continue
+
+			try {
+				const node = await generateNode(jid)
+				nodes.push(node)
+			} catch (error) {
+				logger.error({ jid, trace: error?.stack }, 'failed to encrypt message for participant')
+
+				if (error?.message?.includes('No session') || error?.stack?.includes('No session')) {
+					logger.warn({ jid }, 'fetching new session for participant and retrying encryption')
+					const node = await assertSessionWithNodeRetry(jid)
+					if (node !== null) nodes.push(node)
 				}
-
-				try {
-					return await generateNode(jid)
-				} catch (error) {
-					logger.error({ jid, trace: error?.stack }, 'failed to encrypt message for participant')
-
-					if (error?.message?.includes('No session') || error?.stack?.includes('No session')) {
-						logger.warn({ jid }, 'fetching new session for participant and retrying encryption')
-						return await assertSessionWithNodeRetry(jid)
-					}
-
-					return null
-				}
-			})
-		)
-
-		const nodes = (await Promise.all(encPromises)).filter(node => node !== null)
+			}
+		}
 
 		if (jids.length > 0 && nodes.length === 0) {
 			logger.error({ jids }, 'failed to encrypt message for all participants')
