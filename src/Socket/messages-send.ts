@@ -93,18 +93,16 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 
 	const messageRetryManager = new MessageRetryManager(logger)
 
-	let mediaConn: Promise<MediaConnInfo>
-	const refreshMediaConn = async (forceGet = false) => {
-		const media = await mediaConn
+	let mediaConn: Promise<MediaConnInfo> | undefined
+
+	const refreshMediaConn = async (forceGet = false): Promise<MediaConnInfo> => {
+		const media = await mediaConn?.catch(() => undefined)
+
 		if (!media || forceGet || new Date().getTime() - media.fetchDate.getTime() > media.ttl * 1000) {
 			mediaConn = (async () => {
 				const result = await query({
 					tag: 'iq',
-					attrs: {
-						type: 'set',
-						xmlns: 'w:m',
-						to: S_WHATSAPP_NET
-					},
+					attrs: { type: 'set', xmlns: 'w:m', to: S_WHATSAPP_NET },
 					content: [{ tag: 'media_conn', attrs: {} }]
 				})
 				const mediaConnNode = getBinaryNodeChild(result, 'media_conn')
@@ -122,7 +120,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 			})()
 		}
 
-		return mediaConn
+		return await mediaConn!
 	}
 
 	/**
