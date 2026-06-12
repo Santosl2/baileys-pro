@@ -422,10 +422,6 @@ export const addTransactionCapability = (
 					} catch (error) {
 						logger.error({ error }, 'transaction failed, rolling back')
 						throw error
-					} finally {
-						ctx.mutations = {}
-						ctx.cache = {}
-						ctx.dbQueries = 0
 					}
 				})
 			} finally {

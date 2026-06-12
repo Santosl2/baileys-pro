@@ -7,7 +7,7 @@ import {
 	WAMessageKey,
 	WAMessageStubType
 } from '../Types'
-import { delay, generateMessageIDV2, unixTimestampSeconds } from '../Utils'
+import { generateMessageIDV2, unixTimestampSeconds } from '../Utils'
 import {
 	BinaryNode,
 	getBinaryNodeChild,
@@ -36,26 +36,8 @@ export const makeGroupsSocket = (config: SocketConfig) => {
 		})
 
 	const groupMetadata = async (jid: string): Promise<GroupMetadata> => {
-		const MAX_RETRIES = 3
-		let lastError: unknown
-
-		for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-			try {
-				const result = await groupQuery(jid, 'get', [{ tag: 'query', attrs: { request: 'interactive' } }])
-				return extractGroupMetadata(result)
-			} catch (error) {
-				lastError = error
-
-				if (attempt === MAX_RETRIES) break
-
-				config.logger?.warn?.({ error, jid, attempt }, 'retrying group metadata fetch')
-				// 1s, 2s, 4s + random jitter
-				await delay(1000 * 2 ** (attempt - 1) + Math.random() * 250)
-			}
-		}
-
-		config.logger?.error?.({ error: lastError, jid }, 'failed to fetch group metadata')
-		throw new Error(`Failed to fetch group metadata for ${jid} after ${MAX_RETRIES} attempts`)
+		const result = await groupQuery(jid, 'get', [{ tag: 'query', attrs: { request: 'interactive' } }])
+		return extractGroupMetadata(result)
 	}
 
 	const groupFetchAllParticipating = async () => {
