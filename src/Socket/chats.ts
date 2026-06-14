@@ -72,7 +72,17 @@ export const makeChatsSocket = (config: SocketConfig) => {
 		shouldSyncHistoryMessage
 	} = config
 	const sock = makeUSyncSocket(config)
-	const { ev, ws, authState, generateMessageTag, sendNode, query, onUnexpectedError, sendUnifiedSession } = sock
+	const {
+		ev,
+		ws,
+		authState,
+		generateMessageTag,
+		sendNode,
+		query,
+		onUnexpectedError,
+		sendUnifiedSession,
+		registerSocketEndHandler
+	} = sock
 
 	let privacySettings: { [_: string]: string } | undefined
 	let syncState: SyncState = SyncState.Connecting
@@ -1176,6 +1186,12 @@ export const makeChatsSocket = (config: SocketConfig) => {
 			} catch (error) {
 				logger.warn({ error }, 'failed to resync blocked collections after key arrival')
 			}
+		}
+	})
+
+	registerSocketEndHandler(async () => {
+		if (!config.placeholderResendCache && placeholderResendCache.close) {
+			placeholderResendCache.close()
 		}
 	})
 

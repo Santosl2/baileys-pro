@@ -1916,8 +1916,16 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 			msgRetryCache.close()
 		}
 
+		if (!config.msgRetryResendCache && msgRetryResendCache.close) {
+			msgRetryResendCache.close()
+		}
+
 		if (!config.callOfferCache && callOfferCache.close) {
 			callOfferCache.close()
+		}
+
+		if (!config.placeholderResendCache && placeholderResendCache.close) {
+			placeholderResendCache.close()
 		}
 
 		identityAssertDebounce.close()
