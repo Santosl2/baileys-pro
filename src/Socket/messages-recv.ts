@@ -1928,6 +1928,8 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 			placeholderResendCache.close()
 		}
 
+		failedMsgIdCache.clear()
+
 		identityAssertDebounce.close()
 		sendActiveReceipts = false
 	})
