@@ -117,6 +117,8 @@ export const makeSocket = (config: SocketConfig) => {
 	let closed = false
 
 	const socketEndHandlers: Array<(error: Error | undefined) => Promise<void>> = []
+	/** tracks reject functions for all in-flight query() calls so end() can reject them immediately */
+	const pendingQueries = new Map<string, (err: Error) => void>()
 
 	const uqTagId = generateMdTagPrefix()
 	const generateMessageTag = () => `${uqTagId}${epoch++}`
@@ -199,6 +201,7 @@ export const makeSocket = (config: SocketConfig) => {
 					reject(err || new Boom('Connection Closed', { statusCode: DisconnectReason.connectionClosed }))
 				}
 
+				pendingQueries.set(msgId, onErr)
 				ws.on(`TAG:${msgId}`, onRecv)
 				ws.on('close', onErr) // if the socket closes, you'll never receive the message
 				ws.on('error', onErr)
@@ -206,6 +209,7 @@ export const makeSocket = (config: SocketConfig) => {
 
 			return result as any
 		} finally {
+			pendingQueries.delete(msgId)
 			ws.off(`TAG:${msgId}`, onRecv!)
 			ws.off('close', onErr!) // if the socket closes, you'll never receive the message
 			ws.off('error', onErr!)
@@ -380,6 +384,16 @@ export const makeSocket = (config: SocketConfig) => {
 
 		closed = true
 		logger.info({ trace: error?.stack }, error ? 'connection errored' : 'connection closed')
+
+		// Reject all in-flight queries immediately so their Promises don't linger until timeout
+		if (pendingQueries.size > 0) {
+			const closedError = error || new Boom('Connection Closed', { statusCode: DisconnectReason.connectionClosed })
+			for (const rejectPending of pendingQueries.values()) {
+				rejectPending(closedError)
+			}
+
+			pendingQueries.clear()
+		}
 
 		clearTimeout(keepAliveReq)
 		clearTimeout(qrTimer)
