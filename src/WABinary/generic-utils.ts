@@ -8,6 +8,10 @@ const indexCache = new LRUCache<BinaryNode, Map<string, BinaryNode[]>>({
 	max: 50
 })
 
+export const clearIndexCache = () => {
+	indexCache.clear()
+}
+
 export const getBinaryNodeChildren = (node: BinaryNode | undefined, childTag: string) => {
 	if (!node || !Array.isArray(node.content)) return []
 

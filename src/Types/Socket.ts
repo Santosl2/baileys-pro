@@ -47,6 +47,7 @@ export type PatchedMessageWithRecipientJID = proto.IMessage & { recipientJid?: s
 
 export type RecentMessageSentHistoryStore = {
 	get: (from: string, messageId: string) => proto.IMessage | undefined
+	close: () => void
 	set: (from: string, messageId: string, message: proto.IMessage) => void
 }
 

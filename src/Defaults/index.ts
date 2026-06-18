@@ -75,6 +75,7 @@ const mediaCacheFactory = (): CacheStore => {
 		get: <T>(key: string) => mediaCache.get(key) as T | undefined,
 		set: <T = Buffer>(key: string, value: T) => mediaCache.set(key, value as any),
 		del: (key: string) => mediaCache.delete(key),
+		close: () => mediaCache.clear(),
 		flushAll: () => mediaCache.clear()
 	}
 }
@@ -130,6 +131,7 @@ export const DEFAULT_CONNECTION_CONFIG: SocketConfig = {
 
 	recentMessageSentHistory: {
 		// TODO: use sqlite and async mutex
+		close: () => recentMessageSentHistory.clear(),
 		get: (from, messageId) => recentMessageSentHistory.get(`${messageId}`),
 		set: (from, messageId, message) => {
 			const key = `${messageId}`

@@ -59,6 +59,7 @@ import {
 	areJidsSameUser,
 	BinaryNode,
 	binaryNodeToString,
+	clearIndexCache,
 	getAllBinaryNodeChildren,
 	getBinaryNodeChild,
 	getBinaryNodeChildBuffer,
@@ -1912,6 +1913,10 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 	})
 
 	registerSocketEndHandler(async () => {
+		if (config.mediaCache?.close && typeof config.mediaCache.close === 'function') {
+			config.mediaCache.close()
+		}
+
 		if (!config.msgRetryCounterCache && msgRetryCache.close) {
 			msgRetryCache.close()
 		}
@@ -1929,7 +1934,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		}
 
 		failedMsgIdCache.clear()
-
+		clearIndexCache()
 		identityAssertDebounce.close()
 		sendActiveReceipts = false
 	})
