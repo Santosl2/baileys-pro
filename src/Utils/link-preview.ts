@@ -54,6 +54,7 @@ async function loadOgImage(
 		const request = async (link = url) =>
 			axios.get(link, {
 				maxRedirects: 21,
+				timeout: 20_000,
 				headers: {
 					...headers,
 					// https://github.com/jhy/jsoup/issues/976
