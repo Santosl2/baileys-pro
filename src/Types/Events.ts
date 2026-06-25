@@ -44,6 +44,8 @@ export type BaileysEventMap = {
 	'contacts.update': Partial<Contact>[]
 
 	'messages-ack.error': { stanza: BinaryNode; error: any; node: BinaryNode }
+	'messages-decrypt.error': { key: WAMessageKey; error: string; node: BinaryNode; attempt: number }
+	'messages-retry.error': { key: WAMessageKey; error: string; node: BinaryNode; attempt: number }
 	'messages.delete': { keys: WAMessageKey[] } | { jid: string; all: true }
 	'messages.update': WAMessageUpdate[]
 	'messages.media-update': { key: WAMessageKey; media?: { ciphertext: Uint8Array; iv: Uint8Array }; error?: Boom }[]
