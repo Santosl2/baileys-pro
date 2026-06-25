@@ -1212,10 +1212,23 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 										return
 									}
 
+									ev.emit('messages-decrypt.error', {
+										key: msg.key,
+										attempt,
+										error: msg.messageStubParameters?.[0],
+										node
+									})
 									await sendRetryRequest(node, !encNode || isNoSenderKeyError)
 
 									return
 								} catch (err) {
+									ev.emit('messages-retry.error', {
+										key: msg.key,
+										attempt,
+										error: err.message || String(err),
+										node
+									})
+
 									logger.error({ err, isPreKeyError }, 'Failed to handle retry, attempting basic retry')
 								} finally {
 									if (retryRequestDelayMs) {
