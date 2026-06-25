@@ -1215,7 +1215,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 									ev.emit('messages-decrypt.error', {
 										key: msg.key,
 										attempt,
-										error: msg.messageStubParameters?.[0],
+										error: msg.messageStubParameters?.[0] || '',
 										node
 									})
 									await sendRetryRequest(node, !encNode || isNoSenderKeyError)
