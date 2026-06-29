@@ -43,7 +43,7 @@ export type BaileysEventMap = {
 	'contacts.upsert': Contact[]
 	'contacts.update': Partial<Contact>[]
 
-	'messages-ack.error': { stanza: BinaryNode; error: any; node: BinaryNode }
+	'messages-ack.error': { stanza?: BinaryNode; error?: any; node: BinaryNode }
 	'messages-decrypt.error': { key: WAMessageKey; error: string; node: BinaryNode; attempt: number }
 	'messages-retry.error': { key: WAMessageKey; error: string; node: BinaryNode; attempt: number }
 	'messages.delete': { keys: WAMessageKey[] } | { jid: string; all: true }
@@ -104,8 +104,6 @@ export type BaileysEventMap = {
 		action: string
 	}
 	'newsletter-settings.update': { id: string; update: any }
-
-	'ack.error': { attrs: { [key: string]: string } }
 }
 
 export type BufferedEventData = {
