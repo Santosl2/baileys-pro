@@ -101,6 +101,8 @@ export type BaileysEventMap = {
 		action: string
 	}
 	'newsletter-settings.update': { id: string; update: any }
+
+	'ack.error': { attrs: { [key: string]: string } }
 }
 
 export type BufferedEventData = {

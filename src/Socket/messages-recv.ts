@@ -1424,20 +1424,23 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		// 	}
 		// }
 
+		if (!attrs.error) return
+
 		// error in acknowledgement,
 		// device could not display the message
-		if (attrs.error) {
-			logger.warn({ attrs }, 'received error in ack')
-			ev.emit('messages.update', [
-				{
-					key,
-					update: {
-						status: WAMessageStatus.ERROR,
-						messageStubParameters: [attrs.error]
-					}
+		logger.warn({ attrs }, 'received error in ack')
+
+		ev.emit('ack.error', { attrs })
+
+		ev.emit('messages.update', [
+			{
+				key,
+				update: {
+					status: WAMessageStatus.ERROR,
+					messageStubParameters: [attrs.error]
 				}
-			])
-		}
+			}
+		])
 	}
 
 	/// processes a node with the given function
