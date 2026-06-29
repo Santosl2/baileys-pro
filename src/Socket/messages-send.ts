@@ -416,7 +416,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				const node = await generateNode(jid)
 				nodes.push(node)
 			} catch (error) {
-				logger.error({ jid, trace: error?.stack }, 'failed to encrypt message for participant')
+				logger.error({ jid, trace: error?.stack, error: error.message }, 'failed to encrypt message for participant')
 
 				if (error?.message?.includes('No session') || error?.stack?.includes('No session')) {
 					logger.warn({ jid }, 'fetching new session for participant and retrying encryption')
