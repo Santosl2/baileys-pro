@@ -1407,7 +1407,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		}
 	}
 
-	const handleBadAck = async ({ attrs }: BinaryNode) => {
+	const handleBadAck = async ({ attrs, ...rest }: BinaryNode) => {
 		const key: WAMessageKey = { remoteJid: attrs.from, fromMe: true, id: attrs.id }
 
 		// WARNING: REFRAIN FROM ENABLING THIS FOR NOW. IT WILL CAUSE A LOOP
@@ -1430,7 +1430,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		// device could not display the message
 		logger.warn({ attrs }, 'received error in ack')
 
-		ev.emit('ack.error', { attrs })
+		ev.emit('messages-ack.error', { node: { attrs, ...rest } })
 
 		ev.emit('messages.update', [
 			{
