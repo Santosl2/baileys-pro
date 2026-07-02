@@ -13,7 +13,13 @@ import {
 	NOISE_WA_HEADER,
 	TimeMs
 } from '../Defaults'
-import { DisconnectReason, SocketConfig } from '../Types'
+import {
+	DisconnectReason,
+	NewChatMessageCapInfo,
+	ReachOutTimeLockEnforcementType,
+	SocketConfig,
+	XWAPaths
+} from '../Types'
 import {
 	addTransactionCapability,
 	aesEncryptCTR,
@@ -44,6 +50,7 @@ import {
 	S_WHATSAPP_NET
 } from '../WABinary'
 import { WebSocketClient } from './Client'
+import { executeWMexQuery } from './mex'
 
 /**
  * Connects to WA servers and performs:
@@ -875,6 +882,32 @@ export const makeSocket = (config: SocketConfig) => {
 		}
 	}
 
+	/**
+	 * Fetches your account's standing when it comes to restrictions.
+	 * @returns Returns the state of the restrictions.
+	 */
+	const fetchAccountReachOutTimeLock = async () => {
+		return executeWMexQuery<{
+			is_active?: boolean
+			time_enforcement_ends?: string
+			enforcement_type: ReachOutTimeLockEnforcementType
+		}>({}, '23983697327930364', XWAPaths.xwa2_fetch_account_reachout_timelock, query, generateMessageTag)
+	}
+
+	/**
+	 * Fetches your account's new chat limits.
+	 * @returns Returns the quota and the usage.
+	 */
+	const fetchNewChatMessageCap = async () => {
+		return executeWMexQuery<NewChatMessageCapInfo>(
+			{ input: { type: 'INDIVIDUAL_NEW_CHAT_MSG' } },
+			'24503548349331633',
+			XWAPaths.xwa2_message_capping_info,
+			query,
+			generateMessageTag
+		)
+	}
+
 	return {
 		type: 'md' as 'md',
 		ws,
@@ -902,7 +935,9 @@ export const makeSocket = (config: SocketConfig) => {
 		registerSocketEndHandler,
 		/** Waits for the connection to WA to reach a state */
 		waitForConnectionUpdate: bindWaitForConnectionUpdate(ev),
-		sendWAMBuffer
+		sendWAMBuffer,
+		fetchAccountReachOutTimeLock,
+		fetchNewChatMessageCap
 	}
 }
 
