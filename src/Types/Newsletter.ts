@@ -1,4 +1,6 @@
 export enum XWAPaths {
+	xwa2_fetch_account_reachout_timelock = 'xwa2_fetch_account_reachout_timelock',
+	xwa2_message_capping_info = 'xwa2_message_capping_info',
 	xwa2_newsletter_create = 'xwa2_newsletter_create',
 	xwa2_newsletter_subscribers = 'xwa2_newsletter_subscribers',
 	xwa2_newsletter_view = 'xwa2_newsletter_view',
