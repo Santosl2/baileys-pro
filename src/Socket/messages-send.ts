@@ -894,8 +894,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 
 				try {
 					const data = await query(stanza)
-					const phash = data.attrs.phash
-					logger.debug({ jid, msgId, phash }, 'sent message')
+					console.log(JSON.stringify({ data }, null, 2), 'message sent')
 				} catch (error) {
 					logger.error({ jid, msgId, trace: error?.stack }, 'failed to send message')
 					throw new Boom('Failed to send message', { statusCode: 500, data: error })
