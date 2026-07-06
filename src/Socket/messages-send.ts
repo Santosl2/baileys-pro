@@ -892,13 +892,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 
 				logger.debug({ msgId }, `sending message to ${participants.length} devices`)
 
-				try {
-					const data = await query(stanza)
-					console.log(JSON.stringify({ data }, null, 2), 'message sent')
-				} catch (error) {
-					logger.error({ jid, msgId, trace: error?.stack }, 'failed to send message')
-					throw new Boom('Failed to send message', { statusCode: 500, data: error })
-				}
+				await sendNode(stanza)
 
 				if (promises.length) {
 					await trackRelayStep('group_store_sender_key_memory', async () => {
