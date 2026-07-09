@@ -1,5 +1,6 @@
 /* eslint-disable max-depth */
 import axios, { AxiosRequestConfig } from 'axios'
+import { type CheerioAPI } from 'cheerio'
 import { CacheStoreWithGeneric, WAMediaUploadFunction, WAUrlInfo } from '../Types'
 import { ILogger } from './logger'
 import { prepareWAMessageMedia } from './messages'
@@ -37,7 +38,13 @@ export type LoadOgImageProps = {
 	url: string
 }
 
-let cheerio: typeof import('cheerio') | undefined
+const getTag = ($: CheerioAPI, name: string) =>
+	$(`meta[property="og:${name}"]`).attr('content') ||
+	$(`meta[name="og:${name}"]`).attr('content') ||
+	$(`meta[name="${name}"]`).attr('content') ||
+	null
+
+let cheerio: typeof import('cheerio') | undefined = undefined
 async function loadOgImage(
 	url: string,
 	headers?: AxiosRequestConfig<{}>['headers'],
@@ -49,6 +56,7 @@ async function loadOgImage(
 				maxRedirects: 21,
 				timeout: 20_000,
 				headers: {
+					...headers,
 					// https://github.com/jhy/jsoup/issues/976
 					'User-Agent':
 						headers?.['User-Agent'] ||
@@ -74,14 +82,11 @@ async function loadOgImage(
 		const headOnly = html.slice(0, html.indexOf(head) + head.length) || html
 		const $ = cheerio.load(headOnly)
 
-		const get = (name: string) =>
-			$(`meta[property="og:${name}"]`).attr('content') || $(`meta[name="${name}"]`).attr('content') || null
-
 		return {
-			title: get('title') || $('title').text() || null,
-			description: get('description'),
-			images: [get('image') || null].filter(Boolean) as string[],
-			url: get('url') || url,
+			title: getTag($, 'title') || $('title').text() || null,
+			description: getTag($, 'description'),
+			images: [getTag($, 'image') || null].filter(Boolean) as string[],
+			url: getTag($, 'url') || url,
 			favicon: $('link[rel="icon"]').attr('href') || $('link[rel="shortcut icon"]').attr('href') || null
 		}
 	} catch (error) {
