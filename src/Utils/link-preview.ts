@@ -69,7 +69,7 @@ async function loadOgImage(
 		const isShopee = new URL(data.request.res.responseUrl).hostname.includes('shopee')
 
 		if (isShopee) {
-			data = await request(data.request.res.responseUrl.replace('opaanlp', 'product'))
+			data = await request(data.request.res.responseUrl.replace('opaanlp', 'product').replace(/\?.*$/, ''))
 		}
 
 		if (!cheerio) {
