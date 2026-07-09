@@ -76,7 +76,11 @@ async function loadOgImage(
 			cheerio = await import('cheerio')
 		}
 
-		const $ = cheerio.load(data.data)
+		// only load the head of the page to avoid loading large images and other resources
+		const html = data.data as string
+		const head = '</head>'
+		const headOnly = html.slice(0, html.indexOf(head) + head.length) || html
+		const $ = cheerio.load(headOnly)
 
 		return {
 			title: getTag($, 'title') || $('title').text() || null,
