@@ -203,16 +203,21 @@ async function axiosWithStreamSupport(url: string, config: AxiosRequestConfig) {
 		responseType: 'stream'
 	})
 
+	const head = '</head>'
+	const overlap = head.length - 1
+
 	return new Promise((resolve, reject) => {
 		let buffer = ''
 
 		response.data.on('data', chunk => {
+			const start = Math.max(0, buffer.length - overlap)
 			buffer += chunk.toString()
 
-			const headEndIndex = buffer.indexOf('</head>')
+			const headEndIndex = buffer.indexOf(head, start)
+
 			if (headEndIndex !== -1) {
 				controller.abort()
-				resolve(buffer.slice(0, headEndIndex + 7))
+				resolve(buffer.slice(0, headEndIndex + head.length))
 			}
 		})
 
@@ -222,7 +227,7 @@ async function axiosWithStreamSupport(url: string, config: AxiosRequestConfig) {
 
 		response.data.on('error', err => {
 			if (axios.isCancel(err) || err.name === 'CanceledError') {
-				resolve(buffer.slice(0, buffer.indexOf('</head>') + 7))
+				resolve(buffer.slice(0, buffer.indexOf(head) + head.length))
 			} else {
 				reject(err)
 			}
