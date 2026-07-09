@@ -23,7 +23,7 @@ export type URLGenerationOptions = {
 	fetchOpts: {
 		/** Timeout in ms */
 		timeout: number
-		proxyUrl?: string
+		axiosConfig?: AxiosRequestConfig<{}>
 		headers?: AxiosRequestConfig<{}>['headers']
 	}
 	uploadImage?: WAMediaUploadFunction
@@ -48,13 +48,15 @@ let cheerio: typeof import('cheerio') | undefined = undefined
 async function loadOgImage(
 	url: string,
 	headers?: AxiosRequestConfig<{}>['headers'],
+	axiosConfig?: AxiosRequestConfig<{}>,
 	logger?: ILogger
 ): Promise<LoadOgImageProps | undefined> {
 	try {
 		const request = async (link = url) =>
 			axios.get(link, {
 				maxRedirects: 21,
-				timeout: 20_000,
+				timeout: 40_000,
+				...axiosConfig,
 				headers: {
 					...headers,
 					// https://github.com/jhy/jsoup/issues/976
@@ -106,7 +108,7 @@ export const getUrlInfo = async (
 	opts: URLGenerationOptions = {
 		cache: undefined,
 		thumbnailWidth: THUMBNAIL_WIDTH_PX,
-		fetchOpts: { timeout: 3000 }
+		fetchOpts: { timeout: 3000, axiosConfig: undefined }
 	}
 ): Promise<WAUrlInfo | undefined> => {
 	try {
@@ -124,7 +126,7 @@ export const getUrlInfo = async (
 		}
 
 		const ogImageFromHttpRequest = !cached
-			? await loadOgImage(previewLink, opts.fetchOpts?.headers, opts.logger)
+			? await loadOgImage(previewLink, opts.fetchOpts?.headers, opts.fetchOpts.axiosConfig, opts.logger)
 			: undefined
 
 		const info: LoadOgImageProps | undefined = cached || ogImageFromHttpRequest || undefined
