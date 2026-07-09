@@ -52,34 +52,18 @@ async function loadOgImage(
 	logger?: ILogger
 ): Promise<LoadOgImageProps | undefined> {
 	try {
-		const request = async (link = url) =>
-			axios.get(link, {
-				maxRedirects: 21,
-				timeout: 40_000,
-				...axiosConfig,
-				headers: {
-					...headers,
-					// https://github.com/jhy/jsoup/issues/976
-					'User-Agent':
-						headers?.['User-Agent'] ||
-						'Mozilla/5.0 (Linux; Android 6.0.1; Nexus 5X Build/MMB29P) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.7093.0 Mobile Safari/537.36 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)'
-				}
-			})
-
-		let data = await request()
-
-		const isShopee = new URL(data.request.res.responseUrl).hostname.includes('shopee')
-
-		if (isShopee) {
-			data = await request(data.request.res.responseUrl.replace('opaanlp', 'product').replace(/\?.*$/, ''))
+		const config = {
+			...axiosConfig,
+			headers
 		}
+
+		const html = await request(url, config)
 
 		if (!cheerio) {
 			cheerio = await import('cheerio')
 		}
 
 		// only load the head of the page to avoid loading large images and other resources
-		const html = data.data as string
 		const head = '</head>'
 		const headOnly = html.slice(0, html.indexOf(head) + head.length) || html
 		const $ = cheerio.load(headOnly)
@@ -208,4 +192,73 @@ export const getUrlInfo = async (
 			throw error
 		}
 	}
+}
+
+async function axiosWithStreamSupport(url: string, config: AxiosRequestConfig) {
+	const controller = new AbortController()
+
+	const response = await axios.get(url, {
+		...config,
+		signal: controller.signal,
+		responseType: 'stream'
+	})
+
+	return new Promise((resolve, reject) => {
+		let buffer = ''
+
+		response.data.on('data', chunk => {
+			buffer += chunk.toString()
+
+			const headEndIndex = buffer.indexOf('</head>')
+			if (headEndIndex !== -1) {
+				controller.abort()
+				resolve(buffer.slice(0, headEndIndex + 7))
+			}
+		})
+
+		response.data.on('end', () => {
+			resolve(buffer)
+		})
+
+		response.data.on('error', err => {
+			if (axios.isCancel(err) || err.name === 'CanceledError') {
+				resolve(buffer.slice(0, buffer.indexOf('</head>') + 7))
+			} else {
+				reject(err)
+			}
+		})
+	})
+}
+
+async function request(url: string, config: AxiosRequestConfig): Promise<string> {
+	const baseConfig = {
+		maxRedirects: 21,
+		timeout: 40_000,
+		...config,
+		headers: {
+			...config.headers,
+			// https://github.com/jhy/jsoup/issues/976
+			'User-Agent':
+				config.headers?.['User-Agent'] ||
+				'Mozilla/5.0 (Linux; Android 6.0.1; Nexus 5X Build/MMB29P) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.7093.0 Mobile Safari/537.36 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)'
+		}
+	}
+
+	for (let retry = 0; retry < 3; retry++) {
+		try {
+			// Use streams only for the first attempt to avoid unnecessary overhead on retries
+			if (retry === 0) {
+				return (await axiosWithStreamSupport(url, baseConfig)) as string
+			}
+
+			// For retries, use a standard axios request to avoid issues with stream handling
+			return (await axios.get(url, baseConfig)).data.toString()
+		} catch (error) {
+			if (retry === 2) {
+				throw error
+			}
+		}
+	}
+
+	throw new Error('Failed to fetch URL after 3 attempts')
 }
