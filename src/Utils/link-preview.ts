@@ -37,6 +37,7 @@ export type LoadOgImageProps = {
 	url: string
 }
 
+let cheerio: typeof import('cheerio') | undefined
 async function loadOgImage(
 	url: string,
 	headers?: AxiosRequestConfig<{}>['headers'],
@@ -63,8 +64,15 @@ async function loadOgImage(
 			data = await request(data.request.res.responseUrl.replace('opaanlp', 'product'))
 		}
 
-		const cheerio = await import('cheerio')
-		const $ = cheerio.load(data.data)
+		if (!cheerio) {
+			cheerio = await import('cheerio')
+		}
+
+		// only load the head of the page to avoid loading large images and other resources
+		const html = data.data as string
+		const head = '</head>'
+		const headOnly = html.slice(0, html.indexOf(head) + head.length) || html
+		const $ = cheerio.load(headOnly)
 
 		const get = (name: string) =>
 			$(`meta[property="og:${name}"]`).attr('content') || $(`meta[name="${name}"]`).attr('content') || null
