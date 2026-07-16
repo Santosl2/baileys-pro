@@ -173,30 +173,36 @@ export const extractImageThumbResized = async (bufferOrFilePath: Readable | Buff
 	const img = lib.sharp.default(bufferOrFilePath)
 	const dimensions = await img.metadata()
 
-	const isPortrait = dimensions.height > dimensions.width
-	const needsResize = dimensions.height < 500 || dimensions.width < 500
+	const originalWidth = dimensions.width
+	const originalHeight = dimensions.height
 
-	if (!isPortrait && !needsResize)
-		return {
-			buffer: bufferOrFilePath,
-			original: {
-				width: dimensions.width,
-				height: dimensions.height
-			}
-		}
+	const isPortrait = !!originalWidth && !!originalHeight && originalHeight > originalWidth
+	const needsResize = !originalWidth || !originalHeight || originalHeight < 500 || originalWidth < 500
 
-	const resized = await img
-		.resize(resizeWidth, resizeWidth, {
-			fit: 'contain', // mantém proporção
-			background: { r: 255, g: 255, b: 255, alpha: 1 } // fundo (branco ou transparente)
-		})
-		.toBuffer()
+	// Always flatten alpha against a solid white background and re-encode as JPEG.
+	// Without this, PNG/WebP sources with transparency produce a fully black JPEG
+	// (sharp defaults to black when dropping the alpha channel) or, when the raw
+	// non-JPEG bytes are placed into WAUrlInfo.jpegThumbnail, a fully white/black
+	// placeholder on the receiving client because the field must contain JPEG bytes.
+	const pipeline =
+		isPortrait || needsResize
+			? img.resize(resizeWidth, resizeWidth, {
+					fit: 'contain',
+					withoutEnlargement: false,
+					background: { r: 255, g: 255, b: 255, alpha: 1 }
+				})
+			: img
+
+	const { data, info } = await pipeline
+		.flatten({ background: { r: 255, g: 255, b: 255 } })
+		.jpeg({ quality: 100, chromaSubsampling: '4:4:4' })
+		.toBuffer({ resolveWithObject: true })
 
 	return {
-		buffer: resized,
+		buffer: data,
 		original: {
-			width: 1024,
-			height: 1024
+			width: originalWidth ?? info.width,
+			height: originalHeight ?? info.height
 		}
 	}
 }
