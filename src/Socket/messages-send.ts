@@ -39,7 +39,6 @@ import {
 } from '../Utils'
 import { getUrlInfo } from '../Utils/link-preview'
 import { MessageRetryManager } from '../Utils/message-retry-manager'
-import { trackRelayStep } from '../Utils/new-relic-relay'
 import { getMessageReportingToken, shouldIncludeReportingToken } from '../Utils/reporting-utils'
 import {
 	areJidsSameUser,
@@ -554,36 +553,34 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				}
 
 				if (isGroupOrStatus && !isRetryResend) {
-					const [groupData, senderKeyMap] = await trackRelayStep('group_context', async () =>
-						Promise.all([
-							(async () => {
-								let groupData =
-									useCachedGroupMetadata && groupMetadataCache ? await groupMetadataCache.get(jid) : undefined
-								if (groupData && Array.isArray(groupData?.participants)) {
-									logger.trace({ jid, participants: groupData.participants.length }, 'using cached group metadata')
-								} else if (!isStatus) {
-									groupData = await groupMetadata(jid)
-									if (groupMetadataCache && groupData?.id) {
-										promises.push(groupMetadataCache?.set(jid, groupData))
-									}
+					const [groupData, senderKeyMap] = await Promise.all([
+						(async () => {
+							let groupData =
+								useCachedGroupMetadata && groupMetadataCache ? await groupMetadataCache.get(jid) : undefined
+							if (groupData && Array.isArray(groupData?.participants)) {
+								logger.trace({ jid, participants: groupData.participants.length }, 'using cached group metadata')
+							} else if (!isStatus) {
+								groupData = await groupMetadata(jid)
+								if (groupMetadataCache && groupData?.id) {
+									promises.push(groupMetadataCache?.set(jid, groupData))
+								}
+							}
+
+							return groupData
+						})(),
+						(async () => {
+							try {
+								if (!participant && !isStatus) {
+									const result = await authState.keys.get('sender-key-memory', [jid])
+									return result[jid] || {}
 								}
 
-								return groupData
-							})(),
-							(async () => {
-								try {
-									if (!participant && !isStatus) {
-										const result = await authState.keys.get('sender-key-memory', [jid])
-										return result[jid] || {}
-									}
-
-									return {}
-								} catch {
-									return {}
-								}
-							})()
-						])
-					)
+								return {}
+							} catch {
+								return {}
+							}
+						})()
+					])
 
 					if (!participant) {
 						const participantsList = groupData && !isStatus ? groupData.participants.map(p => p.id) : []
@@ -598,9 +595,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 							}
 						}
 
-						const additionalDevices = await trackRelayStep('group_fetch_devices', async () =>
-							getUSyncDevices(participantsList, !!useUserDevicesCache, false)
-						)
+						const additionalDevices = await getUSyncDevices(participantsList, !!useUserDevicesCache, false)
 
 						devices.push(...additionalDevices)
 					}
@@ -612,13 +607,11 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 						}
 					}
 
-					const { ciphertext, senderKeyDistributionMessage } = await trackRelayStep('group_encrypt', async () =>
-						signalRepository.encryptGroupMessage({
-							group: destinationJid,
-							data: encodedMessage,
-							meId
-						})
-					)
+					const { ciphertext, senderKeyDistributionMessage } = await signalRepository.encryptGroupMessage({
+						group: destinationJid,
+						data: encodedMessage,
+						meId
+					})
 
 					const senderKeyJids: string[] = []
 					// ensure a connection is established with every device
@@ -656,10 +649,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 							}
 						}
 
-						await trackRelayStep('group_assert_sessions', async () => assertSessions(senderKeyJids, false), {
-							...relayBaseAttrs,
-							senderKeyJidsCount: senderKeyJids.length
-						})
+						await assertSessions(senderKeyJids, false)
 
 						const result = await createParticipantNodes(senderKeyJids, senderKeyMsg, extraAttrs)
 
@@ -895,9 +885,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				await sendNode(stanza)
 
 				if (promises.length) {
-					await trackRelayStep('group_store_sender_key_memory', async () => {
-						return Promise.allSettled(promises)
-					})
+					await Promise.allSettled(promises)
 				}
 			}, transactionId)
 
