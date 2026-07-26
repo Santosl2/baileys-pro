@@ -623,9 +623,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 								}
 							}
 
-							const additionalDevices = await trackRelayStep('group_fetch_devices', async () =>
-								getUSyncDevices(participantsList, !!useUserDevicesCache, false)
-							)
+							const additionalDevices = await getUSyncDevices(participantsList, !!useUserDevicesCache, false)
 
 							devices.push(...additionalDevices)
 						}
