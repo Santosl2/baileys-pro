@@ -30,9 +30,7 @@ import {
 	getUrlFromDirectPath,
 	getWAUploadToServer,
 	normalizeMessageContent,
-	noticeNewRelicError,
 	parseAndInjectE2ESessions,
-	recordNewRelicCustomEvent,
 	unixTimestampSeconds
 } from '../Utils'
 import { getUrlInfo } from '../Utils/link-preview'
@@ -456,7 +454,6 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		const isLid = server === 'lid'
 		const isNewsletter = server === 'newsletter'
 		const isGroupOrStatus = isGroup || isStatus
-		const relayStartedAt = Date.now()
 
 		msgId = msgId || generateMessageIDV2(sock.user?.id)
 		useUserDevicesCache = useUserDevicesCache !== false
@@ -902,21 +899,8 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				}
 			}, transactionId)
 
-			recordNewRelicCustomEvent('BaileysRelayMessage', {
-				...relayBaseAttrs,
-				success: true,
-				duration_ms: Date.now() - relayStartedAt
-			})
-
 			return msgId
 		} catch (error) {
-			noticeNewRelicError(error, relayBaseAttrs)
-			recordNewRelicCustomEvent('BaileysRelayMessage', {
-				...relayBaseAttrs,
-				success: false,
-				duration_ms: Date.now() - relayStartedAt,
-				error_name: error instanceof Error ? error.name : 'unknown'
-			})
 			throw error
 		}
 	}
